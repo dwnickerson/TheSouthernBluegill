@@ -1,0 +1,413 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FishCast - The Southern Bluegill Association</title><meta name="description" content="FishCast Fishing Forecast Location Target Species Largemouth Bass Crappie Bluegill Water Body Type Lake (10-500 acres) Pond (&lt; 10 acres)&hellip;"><meta name="generator" content="Publii Open-Source CMS for Static Site"><link rel="canonical" href="https://thesouthernbluegill.com/fishcast-2/"><link rel="alternate" type="application/atom+xml" href="https://thesouthernbluegill.com/feed.xml" title="The Southern Bluegill Association - RSS"><link rel="alternate" type="application/json" href="https://thesouthernbluegill.com/feed.json" title="The Southern Bluegill Association - JSON"><meta property="og:title" content="FishCast"><meta property="og:image" content="https://thesouthernbluegill.com/media/website/IMG_7114_sm.jpg"><meta property="og:image:width" content="1280"><meta property="og:image:height" content="556"><meta property="og:site_name" content="The Southern Bluegill Association"><meta property="og:description" content="FishCast Fishing Forecast Location Target Species Largemouth Bass Crappie Bluegill Water Body Type Lake (10-500 acres) Pond (&lt; 10 acres)&hellip;"><meta property="og:url" content="https://thesouthernbluegill.com/fishcast-2/"><meta property="og:type" content="article"><link rel="stylesheet" href="https://thesouthernbluegill.com/assets/css/style.css?v=6f8ee97c7d2a55382e2f62ca0c715f64"><script type="application/ld+json">{"@context":"http://schema.org","@type":"Article","mainEntityOfPage":{"@type":"WebPage","@id":"https://thesouthernbluegill.com/fishcast-2/"},"headline":"FishCast","datePublished":"2026-02-07T13:07-06:00","dateModified":"2026-02-07T13:07-06:00","image":{"@type":"ImageObject","url":"https://thesouthernbluegill.com/media/website/IMG_7114_sm.jpg","height":556,"width":1280},"description":"FishCast Fishing Forecast Location Target Species Largemouth Bass Crappie Bluegill Water Body Type Lake (10-500 acres) Pond (&lt; 10 acres)&hellip;","author":{"@type":"Person","name":"D.W.","url":"https://thesouthernbluegill.com/authors/dw/"},"publisher":{"@type":"Organization","name":"D.W.","logo":{"@type":"ImageObject","url":"https://thesouthernbluegill.com/media/website/IMG_7114_sm.jpg","height":556,"width":1280}}}</script><style></style><noscript><style>img[loading] {
+                    opacity: 1;
+                }</style></noscript></head><body class="page-template"><div class="container"><header class="header"><a class="logo" href="https://thesouthernbluegill.com/"><img src="https://thesouthernbluegill.com/media/website/IMG_7114_sm.jpg" alt="The Southern Bluegill Association" width="1280" height="556"></a></header><main class="page"><article class="content wrapper"><header class="hero"><h1>FishCast</h1></header><div class="content__entry"><div class="container"><header><div class="logo-text">FishCast</div><div class="subtitle">Fishing Forecast</div></header><div class="form-card"><form id="forecastForm"><div class="form-group"><label for="location">Location</label> <input type="text" placeholder="City, State (e.g., Tupelo, MS)" required=""></div><div class="form-group"><label for="species">Target Species</label><select id="species" required=""><option value="bass">Largemouth Bass</option><option value="crappie">Crappie</option><option value="bluegill">Bluegill</option></select></div><div class="form-group"><label for="waterType">Water Body Type</label><select id="waterType" required=""><option value="lake">Lake (10-500 acres)</option><option value="pond">Pond (&lt; 10 acres)</option><option value="reservoir">Reservoir (&gt; 500 acres)</option></select></div><div class="form-group"><label for="days">Forecast Days</label><div class="slider-container"><input type="range" id="days" min="3" max="10" value="7" step="1"> <span id="daysValue" class="slider-value">7</span></div></div><button id="submitBtn" type="submit">Generate Forecast</button></form></div><div id="results"></div><footer><p>FishCast | Weather data from Open-Meteo</p></footer></div><p><script>// Update slider
+        const daysSlider = document.getElementById('days');
+        const daysValue = document.getElementById('daysValue');
+        daysSlider.addEventListener('input', (e) => {
+            daysValue.textContent = e.target.value;
+        });
+
+        // Species data - EXACT from species.yaml
+        const SPECIES_DATA = {
+            bass: {
+                name: "Largemouth Bass",
+                phases: {
+                    winter: { temp_range: [35, 48], score_bonus: -10 },
+                    pre_spawn: { temp_range: [48, 58], score_bonus: 20 },
+                    spawn: { temp_range: [58, 70], score_bonus: 30 },
+                    post_spawn: { temp_range: [70, 75], score_bonus: -5 },
+                    early_summer: { temp_range: [75, 80], score_bonus: 18 },
+                    summer: { temp_range: [80, 88], score_bonus: 12 },
+                    fall: { temp_range: [58, 72], score_bonus: 25 }
+                },
+                preferences: {
+                    wind_ideal: [5, 15],
+                    loves_light_rain: true,
+                    overcast_bonus: 8
+                }
+            },
+            crappie: {
+                name: "Crappie",
+                phases: {
+                    winter: { temp_range: [32, 45], score_bonus: -5 },
+                    pre_spawn: { temp_range: [45, 55], score_bonus: 15 },
+                    spawn: { temp_range: [55, 65], score_bonus: 30 },
+                    post_spawn: { temp_range: [65, 70], score_bonus: 5 },
+                    summer: { temp_range: [70, 85], score_bonus: 8 },
+                    fall: { temp_range: [55, 70], score_bonus: 18 }
+                },
+                preferences: {
+                    loves_overcast: true,
+                    loves_calm: true,
+                    pressure_sensitive: 40
+                }
+            },
+            bluegill: {
+                name: "Bluegill",
+                phases: {
+                    inactive: { temp_range: [0, 45], score_bonus: -15 },
+                    cold: { temp_range: [45, 55], score_bonus: 5 },
+                    pre_spawn: { temp_range: [55, 67], score_bonus: 18 },
+                    spawn: { temp_range: [67, 74], score_bonus: 25 },
+                    post_spawn: { temp_range: [74, 80], score_bonus: 12 },
+                    summer: { temp_range: [80, 100], score_bonus: 10 }
+                },
+                preferences: {
+                    spawn_needs_sun: true
+                }
+            }
+        };
+
+        const WATER_BODIES = {
+            pond: { thermal_lag_days: 7, response_factor: 0.95 },
+            lake: { thermal_lag_days: 14, response_factor: 0.92 },
+            reservoir: { thermal_lag_days: 21, response_factor: 0.88 }
+        };
+
+        function cToF(celsius) {
+            return (celsius * 9/5) + 32;
+        }
+
+        function kmhToMph(kmh) {
+            return kmh * 0.621371;
+        }
+
+        async function getLocation(cityState) {
+            const [city, state] = cityState.split(',').map(s => s.trim());
+            const url = `https://nominatim.openstreetmap.org/search?q=${city},${state},US&format=json&limit=1`;
+            
+            const response = await fetch(url, {
+                headers: { 'User-Agent': 'FishCast/1.0' }
+            });
+            
+            const data = await response.json();
+            if (data && data.length > 0) {
+                return {
+                    lat: parseFloat(data[0].lat),
+                    lon: parseFloat(data[0].lon),
+                    name: `${city}, ${state}`
+                };
+            }
+            throw new Error('Location not found');
+        }
+
+        async function getWeather(lat, lon, days) {
+            // Historical data
+            const endDate = new Date().toISOString().split('T')[0];
+            const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            
+            const historicalUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_mean&timezone=auto`;
+            
+            const historicalResponse = await fetch(historicalUrl);
+            const historicalData = await historicalResponse.json();
+            
+            // Forecast data
+            const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code&hourly=temperature_2m,surface_pressure,wind_speed_10m,cloud_cover,weather_code,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=${days}`;
+            
+            const forecastResponse = await fetch(forecastUrl);
+            const forecastData = await forecastResponse.json();
+            
+            return { historical: historicalData, forecast: forecastData };
+        }
+
+        function estimateWaterTemp(airTemps, waterType) {
+            if (!airTemps || airTemps.length === 0) return 50;
+            
+            const body = WATER_BODIES[waterType];
+            const lagDays = body.thermal_lag_days;
+            const relevantTemps = airTemps.slice(-lagDays);
+            
+            let weightedSum = 0;
+            let totalWeight = 0;
+            
+            relevantTemps.forEach((temp, i) => {
+                const age = relevantTemps.length - i - 1;
+                const weight = Math.pow(2, -age / 3);
+                weightedSum += temp * weight;
+                totalWeight += weight;
+            });
+            
+            const weightedAvg = weightedSum / totalWeight;
+            let waterTemp = weightedAvg * body.response_factor + 5.0;
+            
+            return Math.max(32, Math.min(95, waterTemp));
+        }
+
+        function getFishPhase(waterTemp, speciesData) {
+            for (const [phaseName, phaseData] of Object.entries(speciesData.phases)) {
+                const [min, max] = phaseData.temp_range;
+                if (waterTemp >= min && waterTemp < max) {
+                    return { name: phaseName, data: phaseData };
+                }
+            }
+            const firstPhase = Object.keys(speciesData.phases)[0];
+            return { name: firstPhase, data: speciesData.phases[firstPhase] };
+        }
+
+        function getPressureTrend(pressureList) {
+            if (pressureList.length < 2) return 'stable';
+            
+            const change = pressureList[pressureList.length - 1] - pressureList[0];
+            const hours = pressureList.length - 1;
+            const rate = change / hours;
+            
+            if (rate < -2) return 'rapid_fall';
+            if (rate < -0.5) return 'falling';
+            if (rate > 2) return 'rapid_rise';
+            if (rate > 0.5) return 'rising';
+            return 'stable';
+        }
+
+        // EXACT calculation from biology.py
+        function calculateFishingScore(weather, waterTemp, speciesData, speciesKey) {
+            let score = 50;
+            const factors = [];
+            const prefs = speciesData.preferences;
+            
+            // 1. PRESSURE TREND
+            const pressures = weather.hourly.surface_pressure.slice(0, 6);
+            const pTrend = getPressureTrend(pressures);
+            
+            if (pTrend === 'rapid_fall') {
+                const bonus = speciesKey === 'crappie' ? 40 : 35;
+                score += bonus;
+                factors.push({ name: 'Rapid pressure fall', value: bonus });
+            } else if (pTrend === 'falling') {
+                const bonus = speciesKey === 'crappie' ? 30 : 25;
+                score += bonus;
+                factors.push({ name: 'Falling pressure', value: bonus });
+            } else if (pTrend === 'rising') {
+                score -= 5;
+                factors.push({ name: 'Rising pressure', value: -5 });
+            }
+            
+            // 2. FISH PHASE
+            const phase = getFishPhase(waterTemp, speciesData);
+            let phaseBonus = phase.data.score_bonus;
+            
+            if (waterTemp < 50) {
+                phaseBonus -= 20;
+                factors.push({ name: 'Winter cold override', value: -20 });
+            }
+            
+            score += phaseBonus;
+            factors.push({ name: phase.name.replace('_', ' ') + ' phase', value: phaseBonus });
+            
+            // 3. WIND
+            const windSpeed = kmhToMph(weather.current.wind_speed_10m);
+            
+            if (speciesKey === 'bass') {
+                const windIdeal = prefs.wind_ideal || [5, 15];
+                if (windSpeed >= windIdeal[0] && windSpeed <= windIdeal[1]) {
+                    score += 15;
+                } else if (windSpeed > 15) {
+                    score -= 10;
+                } else if (windSpeed < 12) {
+                    score += 10;
+                }
+            } else if (speciesKey === 'crappie') {
+                if (windSpeed < 5) {
+                    score += 15;
+                } else if (windSpeed < 8) {
+                    score += 5;
+                } else if (windSpeed > 10) {
+                    score -= 12;
+                }
+            } else {
+                if (windSpeed < 12) {
+                    score += 10;
+                } else if (windSpeed > 15) {
+                    score -= 10;
+                }
+            }
+            
+            // 4. CLOUDS
+            const clouds = weather.current.cloud_cover;
+            
+            if (clouds >= 30 && clouds <= 70) {
+                score += 10;
+            } else if (clouds > 70) {
+                if (speciesKey === 'crappie') {
+                    score += 15;
+                } else if (speciesKey === 'bass') {
+                    score += 8;
+                } else if (speciesKey === 'bluegill' && prefs.spawn_needs_sun && waterTemp >= 67 && waterTemp <= 74) {
+                    score -= 5;
+                }
+            }
+            
+            // 5. WEATHER CODE
+            const code = weather.current.weather_code;
+            
+            if (code === 51 || code === 53 || code === 61) {
+                if (speciesKey === 'bass' && prefs.loves_light_rain) {
+                    if (pTrend === 'falling' || pTrend === 'rapid_fall') {
+                        score += 20;
+                    } else {
+                        score += 10;
+                    }
+                } else if (speciesKey === 'crappie') {
+                    score += 5;
+                }
+            } else if (code === 45 || code === 48) {
+                const bonus = speciesKey === 'crappie' ? 20 : 15;
+                score += bonus;
+            } else if (code === 95 || code === 96 || code === 99) {
+                score -= 40;
+            } else if (code === 63 || code === 65 || code === 80 || code === 81 || code === 82) {
+                const penalty = speciesKey === 'crappie' ? -15 : -12;
+                score += penalty;
+            }
+            
+            // 6. PRECIP PROB
+            const precipProb = weather.hourly.precipitation_probability[0] || 0;
+            if (precipProb > 70 && code !== 51 && code !== 53 && code !== 61) {
+                score -= 10;
+            }
+            
+            score = Math.max(0, Math.min(100, Math.round(score)));
+            
+            let rating = 'BAD';
+            let colorClass = 'bad';
+            if (score >= 80) { rating = 'EXCELLENT'; colorClass = 'excellent'; }
+            else if (score >= 65) { rating = 'GOOD'; colorClass = 'good'; }
+            else if (score >= 50) { rating = 'FAIR'; colorClass = 'fair'; }
+            else if (score >= 35) { rating = 'POOR'; colorClass = 'poor'; }
+            
+            return { score, rating, colorClass, factors, phase: phase.name };
+        }
+
+        function formatDate(dateStr) {
+            const date = new Date(dateStr + 'T12:00:00');
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+        }
+
+        async function generateForecast(location, speciesKey, waterType, days) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing conditions...</p></div>';
+            
+            try {
+                const coords = await getLocation(location);
+                const { historical, forecast } = await getWeather(coords.lat, coords.lon, days);
+                
+                const historicalTemps = historical.daily.temperature_2m_mean.map(t => cToF(t));
+                const currentWaterTemp = estimateWaterTemp(historicalTemps, waterType);
+                
+                const speciesData = SPECIES_DATA[speciesKey];
+                const currentScore = calculateFishingScore(forecast, currentWaterTemp, speciesData, speciesKey);
+                
+                let html = `
+                    <div class="score-header">
+                        <h2>Today's Forecast</h2>
+                        <div class="score-display ${currentScore.colorClass}">${currentScore.score}</div>
+                        <div class="rating ${currentScore.colorClass}">${currentScore.rating}</div>
+                        <div class="location-info">
+                            ${coords.name} | ${speciesData.name}
+                        </div>
+                        <div class="location-info" style="font-size: 0.9rem; margin-top: 10px;">
+                            Water Temp: ${currentWaterTemp.toFixed(1)}°F | 
+                            Air Temp: ${cToF(forecast.current.temperature_2m).toFixed(1)}°F
+                        </div>
+                    </div>
+                    
+                    <div class="forecast-grid">
+                `;
+                
+                // Daily forecasts - skip index 0 (today already shown)
+                for (let i = 1; i < forecast.daily.time.length; i++) {
+                    const date = forecast.daily.time[i];
+                    
+                    // Build future temps array
+                    const futureAirTemps = [...historicalTemps];
+                    for (let j = 1; j <= i; j++) {
+                        const futureAvg = (cToF(forecast.daily.temperature_2m_max[j]) + cToF(forecast.daily.temperature_2m_min[j])) / 2;
+                        futureAirTemps.push(futureAvg);
+                    }
+                    const dayWaterTemp = estimateWaterTemp(futureAirTemps, waterType);
+                    
+                    const hourIndex = i * 24 + 12;
+                    const safeHourIndex = Math.min(hourIndex, forecast.hourly.cloud_cover.length - 1);
+                    
+                    const dayWeather = {
+                        current: {
+                            temperature_2m: forecast.daily.temperature_2m_max[i],
+                            cloud_cover: forecast.hourly.cloud_cover[safeHourIndex] || 50,
+                            wind_speed_10m: forecast.hourly.wind_speed_10m[safeHourIndex] || 0,
+                            weather_code: forecast.hourly.weather_code[safeHourIndex] || 0
+                        },
+                        hourly: {
+                            surface_pressure: forecast.hourly.surface_pressure.slice(
+                                Math.max(0, safeHourIndex - 6),
+                                safeHourIndex
+                            ),
+                            precipitation_probability: [forecast.hourly.precipitation_probability[safeHourIndex] || 0]
+                        }
+                    };
+                    
+                    const dayScore = calculateFishingScore(dayWeather, dayWaterTemp, speciesData, speciesKey);
+                    const windSpeed = kmhToMph(dayWeather.current.wind_speed_10m);
+                    const precip = forecast.daily.precipitation_probability_max[i] || 0;
+                    
+                    html += `
+                        <div class="day-card">
+                            <div class="day-header">${formatDate(date)}</div>
+                            <div class="day-score ${dayScore.colorClass}">${dayScore.score}</div>
+                            <div class="day-rating ${dayScore.colorClass}">${dayScore.rating}</div>
+                            <div class="weather-detail">
+                                <span class="weather-label">Water Temp</span>
+                                <span class="weather-value">${dayWaterTemp.toFixed(1)}°F</span>
+                            </div>
+                            <div class="weather-detail">
+                                <span class="weather-label">Air Temp</span>
+                                <span class="weather-value">${cToF(forecast.daily.temperature_2m_max[i]).toFixed(0)}° / ${cToF(forecast.daily.temperature_2m_min[i]).toFixed(0)}°F</span>
+                            </div>
+                            <div class="weather-detail">
+                                <span class="weather-label">Wind</span>
+                                <span class="weather-value">${windSpeed.toFixed(1)} mph</span>
+                            </div>
+                            <div class="weather-detail">
+                                <span class="weather-label">Precip</span>
+                                <span class="weather-value">${precip}%</span>
+                            </div>
+                            <div class="weather-detail">
+                                <span class="weather-label">Phase</span>
+                                <span class="weather-value">${dayScore.phase.replace('_', ' ')}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                html += '</div>';
+                resultsDiv.innerHTML = html;
+                resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                
+            } catch (error) {
+                console.error('Error:', error);
+                resultsDiv.innerHTML = `
+                    <div class="error">
+                        <h3>Error</h3>
+                        <p>${error.message || 'Could not generate forecast. Please try again.'}</p>
+                    </div>
+                `;
+            }
+        }
+
+        document.getElementById('forecastForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const location = document.getElementById('location').value;
+            const species = document.getElementById('species').value;
+            const waterType = document.getElementById('waterType').value;
+            const days = parseInt(document.getElementById('days').value);
+            
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Generating...';
+            
+            await generateForecast(location, species, waterType, days);
+            
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Generate Forecast';
+        });</script></p></div></article></main><footer class="footer"><a class="logo" href="https://thesouthernbluegill.com/"><img src="https://thesouthernbluegill.com/media/website/IMG_7114_sm.jpg" alt="The Southern Bluegill Association" width="1280" height="556"></a><div class="footer__copyright">Powered by Publii</div></footer></div><script>window.publiiThemeMenuConfig={mobileMenuMode:'sidebar',animationSpeed:300,submenuWidth:'auto',doubleClickTime:500,mobileMenuExpandableSubmenus:true,relatedContainerForOverlayMenuSelector:'.navbar',};</script><script defer="defer" src="https://thesouthernbluegill.com/assets/js/scripts.min.js?v=b103b2211e74472ffa1a0d35c0918ecc"></script><script>/*<![CDATA[*/var images=document.querySelectorAll("img[loading]");for(var i=0;i<images.length;i++){if(images[i].complete){images[i].classList.add("is-loaded")}else{images[i].addEventListener("load",function(){this.classList.add("is-loaded")},false)}};/*]]>*/</script></body></html>
