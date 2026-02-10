@@ -1,9 +1,6 @@
 // FishCast Service Worker
 const CACHE_NAME = 'fishcast-v1';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json',
   '/fishing-forecast/',                    // ← matches start_url and root navigation for the app
   '/fishing-forecast/index.html',          // ← explicit fallback if server serves index.html directly
   '/fishing-forecast/manifest.json',
