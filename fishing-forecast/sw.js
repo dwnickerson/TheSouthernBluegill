@@ -2,7 +2,7 @@
 const CACHE_NAME = 'fishcast-v1';
 const urlsToCache = [
   '/',
-  '/fishcast.html',
+  '/index.html',
   '/manifest.json',
   'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap'
 ];
