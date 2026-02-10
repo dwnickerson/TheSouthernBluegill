@@ -2391,10 +2391,14 @@
         });
 
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js')
-                .then(reg => console.log('Service Worker registered'))
-                .catch(err => console.log('Service Worker registration failed'));
-        }
+    navigator.serviceWorker.register('/fishing-forecast/sw.js', { scope: '/fishing-forecast/' })
+        .then(reg => {
+            console.log('Service Worker registered with scope:', reg.scope);
+        })
+        .catch(err => {
+            console.error('Service Worker registration failed:', err);
+        });
+}
 
         window.shareF = shareForecast;
 
