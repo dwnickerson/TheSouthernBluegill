@@ -1,6 +1,6 @@
 // FishCast Service Worker
 const CACHE_NAME = 'fishcast-v3';
-const APP_PATH = '/fishing-forecast/';
+const APP_PATH = '/fishcast/';
 
 const urlsToCache = [
   APP_PATH,
