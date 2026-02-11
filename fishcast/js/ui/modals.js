@@ -166,16 +166,23 @@ export function openTempReportModal() {
 }
 
 // ENHANCED: Submit temperature report with stats update
-async function submitTempReport() {
-    const location = document.getElementById('tempReportLocation').value;
-    const waterBody = document.getElementById('tempReportWaterBody').value;
-    const temperature = parseFloat(document.getElementById('tempReportTemp').value);
-    const depth = parseFloat(document.getElementById('tempReportDepth').value);
-    const notes = document.getElementById('tempReportNotes').value;
+export async function submitTempReport(e) {
+    if (e) e.preventDefault();
+    
+    const location = document.getElementById('tempReportLocation').value ||
+                    document.getElementById('reportLocation')?.value;
+    const waterBody = document.getElementById('tempReportWaterBody').value ||
+                     document.getElementById('reportWaterBody')?.value;
+    const temperature = parseFloat(document.getElementById('tempReportTemp').value ||
+                                   document.getElementById('reportTemp')?.value);
+    const depth = parseFloat(document.getElementById('tempReportDepth').value ||
+                            document.getElementById('reportDepth')?.value);
+    const notes = document.getElementById('tempReportNotes').value ||
+                 document.getElementById('reportNotes')?.value || '';
     
     // Validate depth
     if (isNaN(depth) || depth < 0) {
-        window.showNotification('❌ Please enter a valid depth (0 or greater)', 'error');
+        showNotification('❌ Please enter a valid depth (0 or greater)', 'error');
         return;
     }
     
@@ -207,17 +214,17 @@ async function submitTempReport() {
         // For now, just show success
         const updatedStats = updateUserStats();
         
-        window.closeTempReport();
+        closeTempReportModal();
         
         // Show success message with impact
         const impactMsg = updatedStats.totalReports === 1 
             ? 'Thank you for your first report! You\'re helping build the community database.' 
             : `Your ${updatedStats.totalReports} reports have helped ${updatedStats.helpedAnglers} anglers!`;
         
-        window.showNotification(`✅ Report submitted! ${impactMsg}`, 'success');
+        showNotification(`✅ Report submitted! ${impactMsg}`, 'success');
         
     } catch (error) {
-        window.showNotification('❌ Error submitting report. Please try again.', 'error');
+        showNotification('❌ Error submitting report. Please try again.', 'error');
     }
 }
 
@@ -404,10 +411,6 @@ export function saveFavorite(location, speciesKey, waterType) {
     }
 }
 
-// Alias functions to match what app.js expects
-export const openTempReport = openTempReportModal;
-export const closeTempReport = closeTempReportModal;
-
 // Make functions globally available
 window.openTempReport = openTempReportModal;
 window.closeTempReport = closeTempReportModal;
@@ -424,5 +427,24 @@ window.closeAbout = closeAbout;
 window.shareForecast = shareForecast;
 window.saveFavorite = saveFavorite;
 
-// Export for other modules
-export { getUserStats, updateUserStats };
+// Export all functions for module imports
+export const openTempReport = openTempReportModal;
+export const closeTempReport = closeTempReportModal;
+export { 
+    submitTempReport,
+    openCatchLog,
+    closeCatchLog,
+    submitCatchLog,
+    openSettings,
+    closeSettings,
+    saveSettings,
+    exportAllData,
+    clearAllData,
+    openAbout,
+    closeAbout,
+    showNotification,
+    shareForecast,
+    saveFavorite,
+    getUserStats,
+    updateUserStats
+};
