@@ -651,3 +651,77 @@ footer a {
 }
 
 footer a:hover { color: var(--accent); }
+
+/* Badge Notification */
+.badge-notification {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s ease;
+}
+
+.badge-content {
+    background: var(--bg-card);
+    padding: 50px;
+    border-radius: 20px;
+    text-align: center;
+    max-width: 500px;
+    box-shadow: var(--shadow-lg);
+    border: 3px solid var(--accent);
+    animation: scaleIn 0.3s ease;
+}
+
+@keyframes scaleIn {
+    from { transform: scale(0.8); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.badge-content h3 {
+    font-size: 2.5rem;
+    margin-bottom: 20px;
+    background: var(--gradient-success);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.badge-content p {
+    font-size: 1.2rem;
+    margin-bottom: 30px;
+    color: var(--text-secondary);
+}
+
+.badge-content button {
+    padding: 15px 40px;
+    background: var(--gradient-success);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.badge-content button:hover {
+    transform: scale(1.05);
+}
+
+/* Gamification Stats Display */
+.stats-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    background: var(--gradient-primary);
+    color: white;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin: 2px;
+}

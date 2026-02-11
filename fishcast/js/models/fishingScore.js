@@ -1,5 +1,5 @@
-// Fishing Score Calculation Model
-// Analyzes weather conditions and species preferences to generate fishing scores
+// Enhanced Fishing Score Calculation Model
+// Now includes: Moon phase, water clarity, improved pressure rate
 
 import { SPECIES_DATA } from '../config/species.js';
 import { kmhToMph } from '../utils/math.js';
@@ -16,40 +16,88 @@ export function getFishPhase(waterTemp, speciesData) {
     return { name: firstPhase, data: speciesData.phases[firstPhase] };
 }
 
-// Analyze pressure trend
-export function getPressureTrend(pressureList) {
-    if (pressureList.length < 2) return 'stable';
+// NEW: Calculate water clarity based on recent precipitation
+export function calculateWaterClarity(precipLast3Days) {
+    // Sum precipitation from last 3 days
+    const totalPrecip = precipLast3Days.reduce((sum, val) => sum + (val || 0), 0);
     
-    const change = pressureList[pressureList.length - 1] - pressureList[0];
-    const hours = pressureList.length - 1;
-    const rate = change / hours;
-    
-    if (rate < -2) return 'rapid_fall';
-    if (rate < -0.5) return 'falling';
-    if (rate > 2) return 'rapid_rise';
-    if (rate > 0.5) return 'rising';
-    return 'stable';
+    if (totalPrecip > 2.0) return 'murky';      // Heavy rain = murky
+    if (totalPrecip > 0.5) return 'stained';    // Moderate rain = stained
+    if (totalPrecip > 0.1) return 'slightly_stained';  // Light rain
+    return 'clear';  // No recent rain
 }
 
-// Main fishing score calculation
-export function calculateFishingScore(weather, waterTemp, speciesKey) {
+// NEW: Enhanced pressure rate calculation
+export function getPressureRate(pressureList) {
+    if (pressureList.length < 3) return { trend: 'stable', rate: 0 };
+    
+    // Calculate rate per hour
+    const current = pressureList[pressureList.length - 1];
+    const threeHoursAgo = pressureList[Math.max(0, pressureList.length - 4)];
+    const hours = Math.min(3, pressureList.length - 1);
+    const rate = (current - threeHoursAgo) / hours;
+    
+    // Classify trend
+    let trend = 'stable';
+    if (rate < -2) trend = 'rapid_fall';
+    else if (rate < -0.5) trend = 'falling';
+    else if (rate > 2) trend = 'rapid_rise';
+    else if (rate > 0.5) trend = 'rising';
+    
+    return { trend, rate };
+}
+
+// Legacy function for compatibility
+export function getPressureTrend(pressureList) {
+    return getPressureRate(pressureList).trend;
+}
+
+// NEW: Calculate moon phase bonus
+export function getMoonPhaseBonus(moonPhasePercent, speciesKey) {
+    const speciesData = SPECIES_DATA[speciesKey];
+    if (!speciesData.preferences.moon_sensitive) return 0;
+    
+    // Full moon (around 100%) and New moon (around 0%) are best
+    // First/Last quarter (around 25%, 75%) are moderate
+    
+    if (moonPhasePercent >= 95 || moonPhasePercent <= 5) {
+        // Full or New moon - major feeding activity
+        return speciesKey === 'bass' ? 12 : 10;
+    } else if (moonPhasePercent >= 45 && moonPhasePercent <= 55) {
+        // First or Last Quarter
+        return 5;
+    } else if (moonPhasePercent >= 20 && moonPhasePercent <= 30) {
+        // Waxing/Waning Crescent
+        return 3;
+    } else if (moonPhasePercent >= 70 && moonPhasePercent <= 80) {
+        // Waxing/Waning Gibbous
+        return 3;
+    }
+    return 0;
+}
+
+// Main fishing score calculation - ENHANCED
+export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhasePercent = 50) {
     let score = 50;
     const speciesData = SPECIES_DATA[speciesKey];
     const factors = [];
     const prefs = speciesData.preferences;
     
-    // Pressure trend analysis
+    // Pressure analysis - ENHANCED with rate
     const pressures = weather.hourly.surface_pressure.slice(0, 6);
-    const pTrend = getPressureTrend(pressures);
+    const pressureAnalysis = getPressureRate(pressures);
+    const pTrend = pressureAnalysis.trend;
+    const pRate = pressureAnalysis.rate;
     
+    // Pressure trend scoring - enhanced with rate consideration
     if (pTrend === 'rapid_fall') {
         const bonus = speciesKey === 'crappie' ? 40 : 35;
         score += bonus;
-        factors.push({ name: 'Rapid pressure fall', value: bonus });
+        factors.push({ name: `Rapid pressure fall (${pRate.toFixed(1)} mb/hr)`, value: bonus });
     } else if (pTrend === 'falling') {
         const bonus = speciesKey === 'crappie' ? 30 : 25;
         score += bonus;
-        factors.push({ name: 'Falling pressure', value: bonus });
+        factors.push({ name: `Falling pressure (${pRate.toFixed(1)} mb/hr)`, value: bonus });
     } else if (pTrend === 'rising') {
         score -= 5;
         factors.push({ name: 'Rising pressure', value: -5 });
@@ -67,6 +115,25 @@ export function calculateFishingScore(weather, waterTemp, speciesKey) {
     score += phaseBonus;
     factors.push({ name: phase.name.replace('_', ' ') + ' phase', value: phaseBonus });
     
+    // NEW: Moon phase bonus
+    const moonBonus = getMoonPhaseBonus(moonPhasePercent, speciesKey);
+    if (moonBonus > 0) {
+        score += moonBonus;
+        factors.push({ name: 'Moon phase feeding period', value: moonBonus });
+    }
+    
+    // NEW: Water clarity analysis
+    const precipLast3Days = weather.daily.precipitation_sum ? weather.daily.precipitation_sum.slice(-3) : [0, 0, 0];
+    const clarity = calculateWaterClarity(precipLast3Days);
+    
+    if (clarity === 'stained' && prefs.stained_water_bonus) {
+        score += prefs.stained_water_bonus;
+        factors.push({ name: 'Stained water (bass love it!)', value: prefs.stained_water_bonus });
+    } else if (clarity === 'murky' && prefs.murky_water_penalty) {
+        score -= prefs.murky_water_penalty;
+        factors.push({ name: 'Murky water (crappie avoid it)', value: -prefs.murky_water_penalty });
+    }
+    
     // Wind analysis
     const windSpeed = kmhToMph(weather.current.wind_speed_10m);
     
@@ -74,6 +141,7 @@ export function calculateFishingScore(weather, waterTemp, speciesKey) {
         const windIdeal = prefs.wind_ideal || [5, 15];
         if (windSpeed >= windIdeal[0] && windSpeed <= windIdeal[1]) {
             score += 15;
+            factors.push({ name: 'Ideal wind for bass', value: 15 });
         } else if (windSpeed > 20) {
             score -= 10;
         } else if (windSpeed > 15) {
@@ -84,6 +152,7 @@ export function calculateFishingScore(weather, waterTemp, speciesKey) {
     } else if (speciesKey === 'crappie') {
         if (windSpeed < 5) {
             score += 15;
+            factors.push({ name: 'Calm conditions (crappie love it)', value: 15 });
         } else if (windSpeed < 8) {
             score += 5;
         } else if (windSpeed > 10) {
@@ -152,11 +221,11 @@ export function calculateFishingScore(weather, waterTemp, speciesKey) {
     else if (score >= 50) { rating = 'FAIR'; colorClass = 'fair'; }
     else if (score >= 35) { rating = 'POOR'; colorClass = 'poor'; }
     
-    return { score, rating, colorClass, factors, phase: phase.name };
+    return { score, rating, colorClass, factors, phase: phase.name, clarity };
 }
 
-// Generate fishing technique tips
-export function getTechniqueTips(score, waterTemp, windSpeed, weather, speciesKey) {
+// Generate fishing technique tips - ENHANCED
+export function getTechniqueTips(score, waterTemp, windSpeed, weather, speciesKey, clarity = 'clear') {
     const tips = [];
     
     if (waterTemp < 50) {
@@ -165,6 +234,15 @@ export function getTechniqueTips(score, waterTemp, windSpeed, weather, speciesKe
     } else if (waterTemp >= 58 && waterTemp <= 70) {
         tips.push("🎯 Pre-spawn/spawn period - fish are aggressive and shallow");
         tips.push("🏖️ Target shallow flats and spawning areas");
+    }
+    
+    // NEW: Water clarity tips
+    if (clarity === 'stained' && speciesKey === 'bass') {
+        tips.push("💧 Stained water is ideal for bass - use vibrating baits and darker colors");
+    } else if (clarity === 'murky') {
+        tips.push("🌊 Murky water - fish slow down your presentation and use loud rattles");
+    } else if (clarity === 'clear') {
+        tips.push("💎 Clear water - use natural colors and finesse presentations");
     }
     
     if (windSpeed < 5) {
@@ -183,7 +261,6 @@ export function getTechniqueTips(score, waterTemp, windSpeed, weather, speciesKe
     const code = weather.current.weather_code;
     if (code === 51 || code === 53 || code === 61) {
         if (speciesKey === 'bass' && waterTemp >= 58) {
-            // Only recommend topwater when water is warm enough (58°F+)
             tips.push("🌧️ Light rain + warm water - topwater lures can be very effective!");
         } else if (speciesKey === 'bass') {
             tips.push("🌧️ Light rain - fish are active but use subsurface lures in cold water");

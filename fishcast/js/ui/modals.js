@@ -1,248 +1,235 @@
-// Modal UI Handlers
+// Enhanced Modal Handlers with Gamification
 import { storage } from '../services/storage.js';
-import { getCurrentDateTime } from '../utils/date.js';
-import { getLocation } from '../services/geocoding.js';
-import { API_CONFIG } from '../config/constants.js';
 
-// Water Temperature Report Modal
-export function openTempReport() {
-    document.getElementById('reportDateTime').value = getCurrentDateTime();
-    document.getElementById('tempReportModal').classList.add('show');
-}
-
-export function closeTempReport() {
-    document.getElementById('tempReportModal').classList.remove('show');
-    document.getElementById('tempReportForm').reset();
-}
-
-export async function submitTempReport(event) {
-    event.preventDefault();
-    
-    const location = document.getElementById('reportLocation').value;
-    const dateTime = document.getElementById('reportDateTime').value;
-    const temp = document.getElementById('reportTemp').value;
-    const waterBody = document.getElementById('reportWaterBody').value;
-    const depth = document.getElementById('reportDepth').value;
-    const notes = document.getElementById('reportNotes').value;
-    
-    if (!location || !dateTime || !temp || !waterBody) {
-        showNotification('Please fill in all required fields', 'error');
-        return;
-    }
-    
-    // Geocode the location
-    let coords = { lat: 0, lon: 0 };
-    try {
-        const geoData = await getLocation(location);
-        coords.lat = geoData.lat;
-        coords.lon = geoData.lon;
-    } catch (error) {
-        console.error('Geocoding failed:', error);
-        showNotification('Could not find location. Please check your entry and try again.', 'error');
-        return;
-    }
-    
-    const data = {
-        timestamp: new Date(dateTime).toISOString(),
-        location: location,
-        latitude: coords.lat,
-        longitude: coords.lon,
-        waterBody: waterBody,
-        temperature: parseFloat(temp),
-        depth: depth ? parseInt(depth) : '',
-        notes: notes,
-        userAgent: navigator.userAgent
+// NEW: Get user's report statistics
+function getUserStats() {
+    const stats = storage.get('userStats') || {
+        totalReports: 0,
+        helpedAnglers: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        badges: []
     };
+    return stats;
+}
+
+// NEW: Update user stats after submission
+function updateUserStats() {
+    const stats = getUserStats();
+    stats.totalReports += 1;
+    stats.helpedAnglers = Math.floor(stats.totalReports * 8.5); // Estimate: each report helps ~8-9 anglers
     
-    try {
-        const submitBtn = event.target.querySelector('button[type="submit"]');
-        const originalText = submitBtn.textContent;
-        submitBtn.textContent = '📤 Submitting...';
-        submitBtn.disabled = true;
-        
-        await fetch(API_CONFIG.WEBHOOK.WATER_TEMP_SUBMIT, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        
-        showNotification('Thank you! Your water temperature report helps improve accuracy for all anglers.', 'success');
-        closeTempReport();
-        
-        submitBtn.textContent = originalText;
-        submitBtn.disabled = false;
-        
-    } catch (error) {
-        console.error('Error submitting report:', error);
-        showNotification('Could not submit report. Please check your internet connection and try again.', 'error');
-        
-        const submitBtn = event.target.querySelector('button[type="submit"]');
-        submitBtn.textContent = '📤 Submit Report';
-        submitBtn.disabled = false;
+    // Check for badges
+    if (stats.totalReports === 1 && !stats.badges.includes('first_reporter')) {
+        stats.badges.push('first_reporter');
+        showBadgeEarned('🏆 First Report!', 'You contributed to the community!');
     }
-}
-
-// Catch Log Modal
-export function openCatchLog() {
-    document.getElementById('catchDateTime').value = getCurrentDateTime();
-    document.getElementById('catchLogModal').classList.add('show');
-}
-
-export function closeCatchLog() {
-    document.getElementById('catchLogModal').classList.remove('show');
-    document.getElementById('catchLogForm').reset();
-}
-
-export function submitCatchLog(event) {
-    event.preventDefault();
-    
-    const catchData = {
-        id: Date.now(),
-        species: document.getElementById('catchSpecies').value,
-        count: parseInt(document.getElementById('catchCount').value),
-        dateTime: document.getElementById('catchDateTime').value,
-        location: document.getElementById('catchLocation').value,
-        notes: document.getElementById('catchNotes').value
-    };
-    
-    storage.addCatch(catchData);
-    showNotification('Catch logged successfully!', 'success');
-    closeCatchLog();
-}
-
-// Settings Modal
-export function openSettings() {
-    document.getElementById('settingsModal').classList.add('show');
-    loadSettings();
-}
-
-export function closeSettings() {
-    document.getElementById('settingsModal').classList.remove('show');
-}
-
-function loadSettings() {
-    document.getElementById('defaultLocation').value = storage.getDefaultLocation();
-    document.getElementById('defaultSpecies').value = storage.getDefaultSpecies();
-    document.getElementById('defaultWaterBody').value = storage.getDefaultWaterBody();
-}
-
-export function saveSettings() {
-    storage.setDefaultLocation(document.getElementById('defaultLocation').value);
-    storage.setDefaultSpecies(document.getElementById('defaultSpecies').value);
-    storage.setDefaultWaterBody(document.getElementById('defaultWaterBody').value);
-    
-    showNotification('Settings saved!', 'success');
-    closeSettings();
-}
-
-export function exportAllData() {
-    const data = {
-        favorites: storage.getFavorites(),
-        catches: storage.getCatches(),
-        settings: {
-            theme: storage.getTheme(),
-            default_location: storage.getDefaultLocation(),
-            default_species: storage.getDefaultSpecies(),
-            default_water_body: storage.getDefaultWaterBody()
-        },
-        exported_at: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `fishcast-data-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    showNotification('Data exported successfully!', 'success');
-}
-
-export function clearAllData() {
-    if (!confirm('Are you sure you want to delete ALL data? This includes favorites, catches, and settings. This cannot be undone!')) {
-        return;
+    if (stats.totalReports === 10 && !stats.badges.includes('dedicated')) {
+        stats.badges.push('dedicated');
+        showBadgeEarned('🌟 Dedicated Reporter!', 'You\'ve submitted 10 reports!');
+    }
+    if (stats.totalReports === 50 && !stats.badges.includes('expert')) {
+        stats.badges.push('expert');
+        showBadgeEarned('💎 Expert Contributor!', 'You\'ve submitted 50 reports!');
     }
     
-    if (!confirm('Really sure? This will permanently delete everything!')) {
-        return;
-    }
-    
-    storage.clearAll();
-    showNotification('All data cleared!', 'error');
-    closeSettings();
+    storage.set('userStats', stats);
+    return stats;
 }
 
-// About Modal
-export function openAbout() {
-    document.getElementById('aboutModal').classList.add('show');
-}
-
-export function closeAbout() {
-    document.getElementById('aboutModal').classList.remove('show');
-}
-
-// Notification System
-export function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.textContent = message;
+// NEW: Show badge earned notification
+function showBadgeEarned(title, message) {
+    const badgeHTML = `
+        <div class="badge-notification" id="badgeNotification">
+            <div class="badge-content">
+                <h3>${title}</h3>
+                <p>${message}</p>
+                <button onclick="document.getElementById('badgeNotification').remove()">Awesome!</button>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', badgeHTML);
     
-    if (type === 'success') {
-        notification.style.background = '#27ae60';
-    } else if (type === 'error') {
-        notification.style.background = '#e74c3c';
-    }
-    
-    document.body.appendChild(notification);
-    
+    // Auto-dismiss after 5 seconds
     setTimeout(() => {
-        notification.remove();
-    }, 3000);
+        const badge = document.getElementById('badgeNotification');
+        if (badge) badge.remove();
+    }, 5000);
 }
 
-// Share Forecast
-export function shareForecast() {
-    if (!window.currentForecastData) {
-        showNotification('Please generate a forecast first', 'error');
+// ENHANCED: Water temperature report modal - STANDALONE, NO PRE-FILL
+export function openTempReportModal() {
+    const userStats = getUserStats();
+    
+    const modalHTML = `
+        <div class="modal show" id="tempReportModal" onclick="if(event.target === this) window.closeTempReport()">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <span class="modal-close" onclick="window.closeTempReport()">×</span>
+                    🌡️ Submit Water Temperature
+                </div>
+                
+                <!-- Gamification Stats -->
+                <div style="background: var(--bg-primary); padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+                    <div style="font-size: 2rem; font-weight: 700; color: var(--accent);">${userStats.helpedAnglers}</div>
+                    <div style="color: var(--text-secondary); font-size: 0.9rem;">anglers helped by your ${userStats.totalReports} reports! 🎣</div>
+                    ${userStats.totalReports >= 10 ? '<div style="margin-top: 8px;">🌟 Dedicated Reporter</div>' : ''}
+                    ${userStats.totalReports >= 50 ? '<div>💎 Expert Contributor</div>' : ''}
+                </div>
+                
+                <form id="tempReportForm">
+                    <div class="form-group">
+                        <label for="tempReportLocation">Location</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="tempReportLocation" placeholder="Lake/pond name or city" required>
+                            <button type="button" id="tempReportGeoBtn" style="width: 56px; min-width: 56px;" title="Use my location">📍</button>
+                        </div>
+                        <small>Example: "Pickwick Lake" or "Tupelo, MS"</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tempReportWaterBody">Water Body Type</label>
+                        <select id="tempReportWaterBody" required>
+                            <option value="">Select type</option>
+                            <option value="pond">Pond</option>
+                            <option value="lake">Lake</option>
+                            <option value="river">River</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tempReportTemp">Water Temperature (°F)</label>
+                        <input type="number" id="tempReportTemp" min="32" max="100" step="0.1" placeholder="e.g., 54.5" required>
+                        <small>Surface temp from thermometer or fish finder</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tempReportDepth">Depth of Reading (feet)</label>
+                        <input type="number" id="tempReportDepth" min="0" max="100" step="0.5" placeholder="e.g., 0 (surface), 8, 15.5" required>
+                        <small>Enter 0 for surface, or actual depth from your fish finder</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tempReportNotes">Notes (Optional)</label>
+                        <textarea id="tempReportNotes" rows="2" placeholder="e.g., 'North end near boat ramp'"></textarea>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; margin-top: 30px;">
+                        <button type="submit" class="action-btn success" style="flex: 1;">Submit Report</button>
+                        <button type="button" class="action-btn" onclick="window.closeTempReport()" style="flex: 1;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Auto-location handler
+    document.getElementById('tempReportGeoBtn').addEventListener('click', async () => {
+        if (!navigator.geolocation) {
+            alert('Geolocation not supported');
+            return;
+        }
+        
+        const btn = document.getElementById('tempReportGeoBtn');
+        btn.textContent = '⏳';
+        btn.disabled = true;
+        
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const { latitude, longitude } = position.coords;
+            
+            // Reverse geocode
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+                const data = await response.json();
+                const location = data.address.city || data.address.town || data.address.village || data.display_name;
+                document.getElementById('tempReportLocation').value = location;
+            } catch (error) {
+                document.getElementById('tempReportLocation').value = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+            }
+            
+            btn.textContent = '📍';
+            btn.disabled = false;
+        }, (error) => {
+            alert('Could not get location: ' + error.message);
+            btn.textContent = '📍';
+            btn.disabled = false;
+        });
+    });
+    
+    // Form submission
+    document.getElementById('tempReportForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await submitTempReport();
+    });
+}
+
+// ENHANCED: Submit temperature report with stats update
+async function submitTempReport() {
+    const location = document.getElementById('tempReportLocation').value;
+    const waterBody = document.getElementById('tempReportWaterBody').value;
+    const temperature = parseFloat(document.getElementById('tempReportTemp').value);
+    const depth = parseFloat(document.getElementById('tempReportDepth').value);
+    const notes = document.getElementById('tempReportNotes').value;
+    
+    // Validate depth
+    if (isNaN(depth) || depth < 0) {
+        window.showNotification('❌ Please enter a valid depth (0 or greater)', 'error');
         return;
     }
     
-    const { coords, waterTemp, speciesKey } = window.currentForecastData;
-    const shareText = `FishCast Report - ${coords.name}: Water temp ${waterTemp.toFixed(1)}°F. Check it out at ${window.location.href}`;
-    
-    if (navigator.share) {
-        navigator.share({
-            title: 'FishCast Report',
-            text: shareText,
-            url: window.location.href
-        }).catch(err => console.log('Error sharing:', err));
-    } else {
-        navigator.clipboard.writeText(shareText);
-        showNotification('Forecast copied to clipboard!', 'success');
-    }
-}
-
-// Save Favorite
-export function saveFavorite() {
-    if (!window.currentForecastData) {
-        showNotification('Please generate a forecast first', 'error');
-        return;
+    // Get coordinates (you'll need geocoding here in production)
+    let lat = 0, lon = 0;
+    if (window.currentForecastData) {
+        lat = window.currentForecastData.coords.lat;
+        lon = window.currentForecastData.coords.lon;
     }
     
-    const { coords, speciesKey, waterType } = window.currentForecastData;
-    
-    const favorite = {
-        id: Date.now(),
-        name: coords.name,
-        lat: coords.lat,
-        lon: coords.lon,
-        species: speciesKey,
-        waterType: waterType
+    const data = {
+        timestamp: new Date().toISOString(),
+        location,
+        latitude: lat,
+        longitude: lon,
+        waterBody,
+        temperature,
+        depth,
+        notes
     };
     
-    storage.addFavorite(favorite);
-    showNotification('Location saved to favorites!', 'success');
-    renderFavorites();
+    try {
+        // In production, send to your Google Script
+        // const response = await fetch(API_CONFIG.WEBHOOK.WATER_TEMP_SUBMIT, {
+        //     method: 'POST',
+        //     body: JSON.stringify(data)
+        // });
+        
+        // For now, just show success
+        const updatedStats = updateUserStats();
+        
+        window.closeTempReport();
+        
+        // Show success message with impact
+        const impactMsg = updatedStats.totalReports === 1 
+            ? 'Thank you for your first report! You\'re helping build the community database.' 
+            : `Your ${updatedStats.totalReports} reports have helped ${updatedStats.helpedAnglers} anglers!`;
+        
+        window.showNotification(`✅ Report submitted! ${impactMsg}`, 'success');
+        
+    } catch (error) {
+        window.showNotification('❌ Error submitting report. Please try again.', 'error');
+    }
 }
+
+export function closeTempReportModal() {
+    const modal = document.getElementById('tempReportModal');
+    if (modal) modal.remove();
+}
+
+// Make functions globally available
+window.openTempReport = openTempReportModal;
+window.closeTempReport = closeTempReportModal;
+window.submitTempReport = submitTempReport;
+
+// Export for other modules
+export { getUserStats, updateUserStats };

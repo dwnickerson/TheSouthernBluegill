@@ -51,12 +51,15 @@ export function renderForecast(data) {
     const resultsDiv = document.getElementById('results');
     const speciesData = SPECIES_DATA[speciesKey];
     
-    // Calculate today's score
-    const currentScore = calculateFishingScore(weather.forecast, waterTemp, speciesKey);
+    // Calculate solunar first to get moon phase
     const solunar = calculateSolunar(coords.lat, coords.lon, new Date());
+    
+    // Calculate today's score WITH MOON PHASE
+    const currentScore = calculateFishingScore(weather.forecast, waterTemp, speciesKey, solunar.moon_phase_percent);
+    
     const windSpeed = kmhToMph(weather.forecast.current.wind_speed_10m);
     const windDir = getWindDirection(weather.forecast.current.wind_direction_10m);
-    const tips = getTechniqueTips(currentScore.score, waterTemp, windSpeed, weather.forecast, speciesKey);
+    const tips = getTechniqueTips(currentScore.score, waterTemp, windSpeed, weather.forecast, speciesKey, currentScore.clarity);
     const pTrend = getPressureTrend(weather.forecast.hourly.surface_pressure.slice(0, 6));
     
     // Weather icon
@@ -64,6 +67,33 @@ export function renderForecast(data) {
     const moonIcon = getMoonIcon(solunar.moon_phase);
     const precipProb = weather.forecast.hourly.precipitation_probability[0] || 0;
     const precipIcon = getPrecipIcon(precipProb);
+    
+    // NEW: Accuracy estimate (will be dynamic when backend is ready)
+    const reportCount = data.reportCount || 0;  // From backend
+    let accuracyEstimate = '±4°F';
+    let accuracyClass = 'fair';
+    if (reportCount >= 20) { 
+        accuracyEstimate = '±1°F'; 
+        accuracyClass = 'excellent';
+    } else if (reportCount >= 10) { 
+        accuracyEstimate = '±1.5°F'; 
+        accuracyClass = 'good';
+    } else if (reportCount >= 5) { 
+        accuracyEstimate = '±2°F'; 
+        accuracyClass = 'good';
+    } else if (reportCount > 0) { 
+        accuracyEstimate = '±3°F'; 
+        accuracyClass = 'fair';
+    }
+    
+    // NEW: Water clarity badge
+    const clarityIcons = {
+        clear: '💎 Clear',
+        slightly_stained: '🌊 Slightly Stained',
+        stained: '💧 Stained',
+        murky: '🌫️ Murky'
+    };
+    const clarityBadge = clarityIcons[currentScore.clarity] || '💧 Normal';
     
     // Start building HTML
     let html = `
@@ -101,6 +131,16 @@ export function renderForecast(data) {
                             20ft: ${estimateTempByDepth(waterTemp, waterType, 20).toFixed(1)}°F
                         </small>
                     </span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Accuracy Estimate</span>
+                    <span class="detail-value ${accuracyClass}">
+                        ${accuracyEstimate}${reportCount > 0 ? ` (${reportCount} reports)` : ' (no local data)'}
+                    </span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Water Clarity</span>
+                    <span class="detail-value">${clarityBadge}</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Air Temperature</span>
@@ -278,6 +318,7 @@ window.showDayDetails = function(dayIndex, date) {
     const weatherCode = dailyData.weather_code[dayIndex];
     const maxTemp = cToF(dailyData.temperature_2m_max[dayIndex]);
     const minTemp = cToF(dailyData.temperature_2m_min[dayIndex]);
+    const avgAirTemp = (maxTemp + minTemp) / 2;
     const precipProb = dailyData.precipitation_probability_max[dayIndex];
     const precipSum = dailyData.precipitation_sum ? dailyData.precipitation_sum[dayIndex] : 0;
     const windSpeed = dailyData.wind_speed_10m_max ? kmhToMph(dailyData.wind_speed_10m_max[dayIndex]) : 0;
@@ -288,6 +329,27 @@ window.showDayDetails = function(dayIndex, date) {
     const weatherDesc = getWeatherDescription(weatherCode);
     const precipIcon = getPrecipIcon(precipProb);
     
+    // Estimate water temp for this day (rough approximation)
+    // Water temp lags air temp by ~1-2 weeks depending on water body
+    const lagDays = data.waterType === 'pond' ? 7 : data.waterType === 'lake' ? 12 : 18;
+    const waterTempEstimate = data.waterTemp + ((avgAirTemp - data.waterTemp) * (1 / lagDays));
+    
+    // Get fish phase based on estimated water temp
+    const speciesData = SPECIES_DATA[data.speciesKey];
+    let fishPhase = 'Unknown';
+    for (const [phaseName, phaseData] of Object.entries(speciesData.phases)) {
+        const [min, max] = phaseData.temp_range;
+        if (waterTempEstimate >= min && waterTempEstimate < max) {
+            fishPhase = phaseName.replace('_', ' ');
+            break;
+        }
+    }
+    
+    // Estimate depth temps
+    const temp4ft = estimateTempByDepth(waterTempEstimate, data.waterType, 4);
+    const temp10ft = estimateTempByDepth(waterTempEstimate, data.waterType, 10);
+    const temp20ft = estimateTempByDepth(waterTempEstimate, data.waterType, 20);
+    
     // Highlight selected day
     document.querySelectorAll('.forecast-day-card').forEach(card => {
         card.classList.remove('active');
@@ -295,7 +357,7 @@ window.showDayDetails = function(dayIndex, date) {
     const selectedCard = document.querySelector(`.forecast-day-card[data-day="${dayIndex}"]`);
     if (selectedCard) selectedCard.classList.add('active');
     
-    // Show detailed modal with more information
+    // Show detailed modal with water temps and fish phase
     const modalHTML = `
         <div class="modal show" id="dayDetailModal" onclick="if(event.target === this) this.classList.remove('show')">
             <div class="modal-content" onclick="event.stopPropagation()">
@@ -309,8 +371,21 @@ window.showDayDetails = function(dayIndex, date) {
                         <span class="detail-value">${weatherIcon} ${weatherDesc}</span>
                     </div>
                     <div class="detail-row">
-                        <span class="detail-label">High / Low</span>
+                        <span class="detail-label">Air Temp (High / Low)</span>
                         <span class="detail-value">🌡️ ${maxTemp.toFixed(1)}°F / ${minTemp.toFixed(1)}°F</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Water Temperature</span>
+                        <span class="detail-value">
+                            💧 Surface: ${waterTempEstimate.toFixed(1)}°F<br>
+                            <small style="color: var(--text-secondary);">
+                                4ft: ${temp4ft.toFixed(1)}°F | 10ft: ${temp10ft.toFixed(1)}°F | 20ft: ${temp20ft.toFixed(1)}°F
+                            </small>
+                        </span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Fish Phase</span>
+                        <span class="detail-value">🐠 ${fishPhase}</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Precipitation</span>
@@ -326,12 +401,12 @@ window.showDayDetails = function(dayIndex, date) {
                     </div>
                     <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid var(--border-color);">
                         <p style="color: var(--text-secondary); text-align: center; font-size: 0.9rem;">
-                            <strong>Fishing Tip:</strong> ${getFishingTipForDay(maxTemp, minTemp, precipProb, windSpeed)}
+                            <strong>Fishing Tip:</strong> ${getFishingTipForDay(maxTemp, minTemp, precipProb, windSpeed, waterTempEstimate)}
                         </p>
                     </div>
                     <div style="margin-top: 15px;">
                         <p style="color: var(--text-secondary); text-align: center;">
-                            <small>Click outside to close</small>
+                            <small>Water temp estimated • Click outside to close</small>
                         </p>
                     </div>
                 </div>
