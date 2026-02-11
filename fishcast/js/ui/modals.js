@@ -164,14 +164,19 @@ export function openTempReportModal() {
 
 // Handle temperature report submission
 export async function handleTempReportSubmit() {
+    console.log('🌡️ Water temp submission started...');
+    
     const location = document.getElementById('tempReportLocation').value;
     const waterBody = document.getElementById('tempReportWaterBody').value;
     const temperature = parseFloat(document.getElementById('tempReportTemp').value);
     const depth = parseFloat(document.getElementById('tempReportDepth').value);
     const notes = document.getElementById('tempReportNotes').value;
     
+    console.log('Form data:', { location, waterBody, temperature, depth, notes });
+    
     if (isNaN(depth) || depth < 0) {
-        window.showNotification('❌ Please enter a valid depth (0 or greater)', 'error');
+        console.warn('Invalid depth:', depth);
+        showNotification('❌ Please enter a valid depth (0 or greater)', 'error');
         return;
     }
     
@@ -192,18 +197,30 @@ export async function handleTempReportSubmit() {
         notes
     };
     
+    console.log('Submitting data:', data);
+    
     try {
+        console.log('Updating stats...');
         const updatedStats = updateUserStats();
-        window.closeTempReport();
+        console.log('Updated stats:', updatedStats);
         
         const impactMsg = updatedStats.totalReports === 1 
             ? 'Thank you for your first report! You\'re helping build the community database.' 
             : `Your ${updatedStats.totalReports} reports have helped ${updatedStats.helpedAnglers} anglers!`;
         
-        window.showNotification(`✅ Report submitted! ${impactMsg}`, 'success');
+        // Show notification FIRST
+        console.log('Showing notification...');
+        showNotification(`✅ Report submitted! ${impactMsg}`, 'success');
+        
+        // Then close modal after a brief delay
+        setTimeout(() => {
+            console.log('Closing modal...');
+            window.closeTempReport();
+        }, 300);
         
     } catch (error) {
-        window.showNotification('❌ Error submitting report. Please try again.', 'error');
+        console.error('Error submitting report:', error);
+        showNotification('❌ Error submitting report. Please try again.', 'error');
     }
 }
 
@@ -264,19 +281,26 @@ export function showNotification(message, type = 'info') {
         color: white;
         padding: 16px 24px;
         border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         z-index: 10000;
         max-width: 400px;
-        animation: slideIn 0.3s ease;
+        font-weight: 500;
+        opacity: 0;
+        transition: opacity 0.3s ease;
     `;
     notification.textContent = message;
     
     // Add to page
     document.body.appendChild(notification);
     
+    // Fade in
+    setTimeout(() => {
+        notification.style.opacity = '1';
+    }, 10);
+    
     // Remove after 5 seconds
     setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease';
+        notification.style.opacity = '0';
         setTimeout(() => notification.remove(), 300);
     }, 5000);
 }
