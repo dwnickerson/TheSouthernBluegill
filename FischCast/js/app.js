@@ -232,7 +232,7 @@ function setupEventListeners() {
 // Service worker registration
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/fishing-forecast/sw.js')
+        navigator.serviceWorker.register('/fishcast/sw.js')
             .then(reg => console.log('✅ Service Worker registered'))
             .catch(err => console.log('❌ Service Worker registration failed:', err));
     }
