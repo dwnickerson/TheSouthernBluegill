@@ -163,7 +163,7 @@ export function openTempReportModal() {
 }
 
 // Handle temperature report submission
-async function handleTempReportSubmit() {
+export async function handleTempReportSubmit() {
     const location = document.getElementById('tempReportLocation').value;
     const waterBody = document.getElementById('tempReportWaterBody').value;
     const temperature = parseFloat(document.getElementById('tempReportTemp').value);
@@ -211,6 +211,87 @@ export function closeTempReportModal() {
     const modal = document.getElementById('tempReportModal');
     if (modal) modal.remove();
 }
+
+// Stub functions for features not yet implemented
+export function openCatchLog() {
+    console.log('Catch log feature coming soon!');
+}
+
+export function closeCatchLog() {
+    console.log('Catch log feature coming soon!');
+}
+
+export function submitCatchLog() {
+    console.log('Catch log feature coming soon!');
+}
+
+export function openSettings() {
+    console.log('Settings feature coming soon!');
+}
+
+export function closeSettings() {
+    console.log('Settings feature coming soon!');
+}
+
+export function saveSettings() {
+    console.log('Settings feature coming soon!');
+}
+
+export function exportAllData() {
+    console.log('Export feature coming soon!');
+}
+
+export function clearAllData() {
+    console.log('Clear data feature coming soon!');
+}
+
+export function openAbout() {
+    alert('FishCast v3.3\nBy The Southern Bluegill Association\n\nScientifically accurate fishing forecasts!');
+}
+
+export function closeAbout() {
+    console.log('About closed');
+}
+
+export function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+        color: white;
+        padding: 16px 24px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        z-index: 10000;
+        max-width: 400px;
+        animation: slideIn 0.3s ease;
+    `;
+    notification.textContent = message;
+    
+    // Add to page
+    document.body.appendChild(notification);
+    
+    // Remove after 5 seconds
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 5000);
+}
+
+// Make showNotification globally available
+window.showNotification = showNotification;
+
+export function shareForecast() {
+    console.log('Share feature coming soon!');
+}
+
+// Aliases for compatibility
+export const openTempReport = openTempReportModal;
+export const closeTempReport = closeTempReportModal;
+export const submitTempReport = handleTempReportSubmit;
 
 // Make functions globally available
 window.openTempReport = openTempReportModal;
