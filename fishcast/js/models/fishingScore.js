@@ -55,14 +55,16 @@ export function getPressureTrend(pressureList) {
 // NEW: Calculate moon phase bonus
 export function getMoonPhaseBonus(moonPhasePercent, speciesKey) {
     const speciesData = SPECIES_DATA[speciesKey];
-    if (!speciesData.preferences.moon_sensitive) return 0;
+    if (!speciesData || !speciesData.preferences || !speciesData.preferences.moon_sensitive) return 0;
+    
+    const isBass = speciesKey === 'bass' || speciesKey === 'smallmouth' || speciesKey === 'spotted';
     
     // Full moon (around 100%) and New moon (around 0%) are best
     // First/Last quarter (around 25%, 75%) are moderate
     
     if (moonPhasePercent >= 95 || moonPhasePercent <= 5) {
         // Full or New moon - major feeding activity
-        return speciesKey === 'bass' ? 12 : 10;
+        return isBass ? 12 : 10;
     } else if (moonPhasePercent >= 45 && moonPhasePercent <= 55) {
         // First or Last Quarter
         return 5;
@@ -80,6 +82,14 @@ export function getMoonPhaseBonus(moonPhasePercent, speciesKey) {
 export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhasePercent = 50) {
     let score = 50;
     const speciesData = SPECIES_DATA[speciesKey];
+    
+    // Defensive check - if species not found, throw helpful error
+    if (!speciesData) {
+        console.error(`Species "${speciesKey}" not found in SPECIES_DATA`);
+        console.error('Available species:', Object.keys(SPECIES_DATA));
+        throw new Error(`Unknown species: "${speciesKey}". Please select a valid species from the dropdown.`);
+    }
+    
     const factors = [];
     const prefs = speciesData.preferences;
     
@@ -91,11 +101,13 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
     
     // Pressure trend scoring - enhanced with rate consideration
     if (pTrend === 'rapid_fall') {
-        const bonus = speciesKey === 'crappie' ? 40 : 35;
+        const isCrappie = speciesKey.includes('crappie');
+        const bonus = isCrappie ? 40 : 35;
         score += bonus;
         factors.push({ name: `Rapid pressure fall (${pRate.toFixed(1)} mb/hr)`, value: bonus });
     } else if (pTrend === 'falling') {
-        const bonus = speciesKey === 'crappie' ? 30 : 25;
+        const isCrappie = speciesKey.includes('crappie');
+        const bonus = isCrappie ? 30 : 25;
         score += bonus;
         factors.push({ name: `Falling pressure (${pRate.toFixed(1)} mb/hr)`, value: bonus });
     } else if (pTrend === 'rising') {
@@ -136,8 +148,10 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
     
     // Wind analysis
     const windSpeed = kmhToMph(weather.current.wind_speed_10m);
+    const isBass = speciesKey === 'bass' || speciesKey === 'smallmouth' || speciesKey === 'spotted';
+    const isCrappie = speciesKey.includes('crappie');
     
-    if (speciesKey === 'bass') {
+    if (isBass && speciesKey === 'bass') {
         const windIdeal = prefs.wind_ideal || [5, 15];
         if (windSpeed >= windIdeal[0] && windSpeed <= windIdeal[1]) {
             score += 15;
@@ -149,7 +163,7 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
         } else {
             score += 5;
         }
-    } else if (speciesKey === 'crappie') {
+    } else if (isCrappie) {
         if (windSpeed < 5) {
             score += 15;
             factors.push({ name: 'Calm conditions (crappie love it)', value: 15 });
@@ -172,9 +186,9 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
     if (clouds >= 30 && clouds <= 70) {
         score += 10;
     } else if (clouds > 70) {
-        if (speciesKey === 'crappie') {
+        if (isCrappie) {
             score += 15;
-        } else if (speciesKey === 'bass') {
+        } else if (speciesKey === 'bass' || speciesKey === 'smallmouth' || speciesKey === 'spotted') {
             score += 8;
         } else if (speciesKey === 'bluegill' && prefs.spawn_needs_sun && waterTemp >= 67 && waterTemp <= 74) {
             score -= 5;
@@ -185,22 +199,22 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
     const code = weather.current.weather_code;
     
     if (code === 51 || code === 53 || code === 61) {
-        if (speciesKey === 'bass' && prefs.loves_light_rain) {
+        if ((speciesKey === 'bass' || speciesKey === 'smallmouth' || speciesKey === 'spotted') && prefs.loves_light_rain) {
             if (pTrend === 'falling' || pTrend === 'rapid_fall') {
                 score += 20;
             } else {
                 score += 10;
             }
-        } else if (speciesKey === 'crappie') {
+        } else if (isCrappie) {
             score += 5;
         }
     } else if (code === 45 || code === 48) {
-        const bonus = speciesKey === 'crappie' ? 20 : 15;
+        const bonus = isCrappie ? 20 : 15;
         score += bonus;
     } else if (code === 95 || code === 96 || code === 99) {
         score -= 40;
     } else if (code === 63 || code === 65 || code === 80 || code === 81 || code === 82) {
-        const penalty = speciesKey === 'crappie' ? -15 : -12;
+        const penalty = isCrappie ? -15 : -12;
         score += penalty;
     }
     
@@ -227,6 +241,7 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
 // Generate fishing technique tips - ENHANCED
 export function getTechniqueTips(score, waterTemp, windSpeed, weather, speciesKey, clarity = 'clear') {
     const tips = [];
+    const isBass = speciesKey === 'bass' || speciesKey === 'smallmouth' || speciesKey === 'spotted';
     
     if (waterTemp < 50) {
         tips.push("🐢 Fish are sluggish in cold water - use slow presentations and smaller baits");
@@ -237,7 +252,7 @@ export function getTechniqueTips(score, waterTemp, windSpeed, weather, speciesKe
     }
     
     // NEW: Water clarity tips
-    if (clarity === 'stained' && speciesKey === 'bass') {
+    if (clarity === 'stained' && isBass) {
         tips.push("💧 Stained water is ideal for bass - use vibrating baits and darker colors");
     } else if (clarity === 'murky') {
         tips.push("🌊 Murky water - fish slow down your presentation and use loud rattles");
@@ -260,9 +275,9 @@ export function getTechniqueTips(score, waterTemp, windSpeed, weather, speciesKe
     // Fixed topwater recommendation - only when water temp is warm enough
     const code = weather.current.weather_code;
     if (code === 51 || code === 53 || code === 61) {
-        if (speciesKey === 'bass' && waterTemp >= 58) {
+        if (isBass && waterTemp >= 58) {
             tips.push("🌧️ Light rain + warm water - topwater lures can be very effective!");
-        } else if (speciesKey === 'bass') {
+        } else if (isBass) {
             tips.push("🌧️ Light rain - fish are active but use subsurface lures in cold water");
         }
     }

@@ -314,6 +314,40 @@ export const SPECIES_DATA = {
     
     // ==================== CRAPPIE (Pomoxis) ====================
     
+    // Generic crappie (defaults to white crappie for backwards compatibility)
+    crappie: {
+        name: "Crappie (White)",
+        scientific: "Pomoxis annularis",
+        family: "Crappie (Pomoxis)",
+        phases: {
+            inactive: { temp_range: [35, 45], score_bonus: -8 },
+            cold_water: { temp_range: [45, 52], score_bonus: 10 },
+            pre_spawn: { temp_range: [52, 58], score_bonus: 22 },
+            spawn: { temp_range: [58, 68], score_bonus: 35 },
+            post_spawn: { temp_range: [68, 75], score_bonus: 15 },
+            summer: { temp_range: [75, 85], score_bonus: 18 },
+            fall: { temp_range: [55, 70], score_bonus: 25 }
+        },
+        preferences: {
+            tolerates_murky: true,
+            slight_current_ok: true,
+            brush_oriented: true,
+            suspended: true,
+            tight_schools: true,
+            more_aggressive: true,
+            vertical_bars: true,
+            spawns_earlier: true,
+            day_active: true,
+            less_moon_sensitive: true,
+            depth_by_season: {
+                spring: [2, 8],
+                summer: [10, 20],
+                fall: [8, 15],
+                winter: [15, 25]
+            }
+        }
+    },
+    
     white_crappie: {
         name: "White Crappie",
         scientific: "Pomoxis annularis",
