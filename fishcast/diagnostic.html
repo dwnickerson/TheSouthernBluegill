@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FishCast Diagnostic</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #00ff00; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #333; }
+        .pass { background: #002200; border-color: #00ff00; }
+        .fail { background: #220000; border-color: #ff0000; color: #ff0000; }
+    </style>
+</head>
+<body>
+    <h1>🔧 FishCast Diagnostic Tool</h1>
+    <div id="results"></div>
+    
+    <script>
+        const results = document.getElementById('results');
+        
+        function test(name, fn) {
+            try {
+                const result = fn();
+                results.innerHTML += `<div class="test pass">✅ ${name}: ${result}</div>`;
+            } catch(e) {
+                results.innerHTML += `<div class="test fail">❌ ${name}: ${e.message}</div>`;
+            }
+        }
+        
+        // Test 1: Basic JavaScript
+        test("JavaScript works", () => "YES");
+        
+        // Test 2: Can we fetch app.js?
+        fetch('js/app.js')
+            .then(r => {
+                results.innerHTML += `<div class="test ${r.ok ? 'pass' : 'fail'}">${r.ok ? '✅' : '❌'} js/app.js HTTP ${r.status} - Content-Type: ${r.headers.get('content-type')}</div>`;
+                return r.text();
+            })
+            .then(text => {
+                const isJS = text.includes('import') || text.includes('export');
+                results.innerHTML += `<div class="test ${isJS ? 'pass' : 'fail'}">${isJS ? '✅' : '❌'} js/app.js contains JavaScript: ${isJS}</div>`;
+            })
+            .catch(e => {
+                results.innerHTML += `<div class="test fail">❌ Cannot load js/app.js: ${e.message}</div>`;
+            });
+        
+        // Test 3: Try to import a module
+        import('js/app.js')
+            .then(() => {
+                results.innerHTML += `<div class="test pass">✅ ES6 modules work!</div>`;
+            })
+            .catch(e => {
+                results.innerHTML += `<div class="test fail">❌ ES6 modules fail: ${e.message}</div>`;
+            });
+            
+        // Test 4: Check paths
+        test("Current URL", () => window.location.href);
+        test("Base path", () => window.location.pathname);
+    </script>
+</body>
+</html>
