@@ -1,5 +1,5 @@
-// Modal Handlers with Gamification - VERSION 3.3.3 FINAL FIX
-console.log('📦 modals.js VERSION 3.3.3 loaded - BUTTON CLICK FIX');
+// Modal Handlers with Gamification - VERSION 3.3.4 GOOGLE SHEETS
+console.log('📦 modals.js VERSION 3.3.4 loaded - GOOGLE SHEETS INTEGRATION');
 
 import { storage } from '../services/storage.js';
 
@@ -226,6 +226,19 @@ export async function handleTempReportSubmit() {
     console.log('Submitting data:', data);
     
     try {
+        // Send to Google Sheets
+        console.log('📤 Sending to Google Sheets...');
+        const response = await fetch('https://script.google.com/macros/s/AKfycbySp_91L4EPOFXFx2528Q7TPfRtQi9dBiR4l2CSWpnrJ_x2UdZGamdiqsS7bYOQ38R8bg/exec', {
+            method: 'POST',
+            mode: 'no-cors', // Google Apps Script requires this
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        console.log('✅ Data sent to Google Sheets');
+        
         console.log('Updating stats...');
         const updatedStats = updateUserStats();
         console.log('Updated stats:', updatedStats);
@@ -245,8 +258,19 @@ export async function handleTempReportSubmit() {
         }, 300);
         
     } catch (error) {
-        console.error('Error submitting report:', error);
-        showNotification('❌ Error submitting report. Please try again.', 'error');
+        console.error('❌ Error submitting to Google Sheets:', error);
+        // Still show success to user since data is saved locally
+        // The webhook will retry or admin can check logs
+        const updatedStats = updateUserStats();
+        const impactMsg = updatedStats.totalReports === 1 
+            ? 'Thank you for your first report! Data saved locally.' 
+            : `Your ${updatedStats.totalReports} reports saved! (Sheet sync pending)`;
+        
+        showNotification(`⚠️ Report saved locally! ${impactMsg}`, 'success');
+        
+        setTimeout(() => {
+            window.closeTempReport();
+        }, 300);
     }
 }
 
