@@ -216,8 +216,7 @@ function setupEventListeners() {
     document.getElementById('themeToggle')?.addEventListener('click', toggleTheme);
     document.getElementById('waterTempBtn')?.addEventListener('click', openTempReport);
     
-    // Water temp report form
-    document.getElementById('tempReportForm')?.addEventListener('submit', submitTempReport);
+    // Note: tempReportForm listener is in modals.js (form is created dynamically)
     
     // Catch log form
     document.getElementById('catchLogForm')?.addEventListener('submit', submitCatchLog);
