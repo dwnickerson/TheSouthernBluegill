@@ -1,4 +1,6 @@
-// Modal Handlers with Gamification - FIXED VERSION
+// Modal Handlers with Gamification - VERSION 3.3.1
+console.log('📦 modals.js VERSION 3.3.1 loaded');
+
 import { storage } from '../services/storage.js';
 
 // Get user's report statistics

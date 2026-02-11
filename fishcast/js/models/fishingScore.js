@@ -151,7 +151,7 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
     const isBass = speciesKey === 'bass' || speciesKey === 'smallmouth' || speciesKey === 'spotted';
     const isCrappie = speciesKey.includes('crappie');
     
-    if (isBass) {
+    if (isBass && speciesKey === 'bass') {
         const windIdeal = prefs.wind_ideal || [5, 15];
         if (windSpeed >= windIdeal[0] && windSpeed <= windIdeal[1]) {
             score += 15;
@@ -188,7 +188,7 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
     } else if (clouds > 70) {
         if (isCrappie) {
             score += 15;
-        } else if (isBass) {
+        } else if (speciesKey === 'bass' || speciesKey === 'smallmouth' || speciesKey === 'spotted') {
             score += 8;
         } else if (speciesKey === 'bluegill' && prefs.spawn_needs_sun && waterTemp >= 67 && waterTemp <= 74) {
             score -= 5;
@@ -199,7 +199,7 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
     const code = weather.current.weather_code;
     
     if (code === 51 || code === 53 || code === 61) {
-        if (isBass && prefs.loves_light_rain) {
+        if ((speciesKey === 'bass' || speciesKey === 'smallmouth' || speciesKey === 'spotted') && prefs.loves_light_rain) {
             if (pTrend === 'falling' || pTrend === 'rapid_fall') {
                 score += 20;
             } else {
