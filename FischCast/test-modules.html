@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FishCast Module Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .pass { background: #27ae60; color: white; }
+        .fail { background: #e74c3c; color: white; }
+        .pending { background: #f39c12; color: white; }
+        pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        #console-log {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 FishCast Module Loading Test</h1>
+    
+    <div class="test-card">
+        <h3>Test 1: Basic JavaScript</h3>
+        <p>Status: <span id="test1" class="status pending">Testing...</span></p>
+        <p>This tests if JavaScript is enabled and running.</p>
+    </div>
+    
+    <div class="test-card">
+        <h3>Test 2: ES6 Module Support</h3>
+        <p>Status: <span id="test2" class="status pending">Testing...</span></p>
+        <p>This tests if your browser supports ES6 modules.</p>
+    </div>
+    
+    <div class="test-card">
+        <h3>Test 3: Module Import</h3>
+        <p>Status: <span id="test3" class="status pending">Testing...</span></p>
+        <p>This tests if modules can actually be loaded from the server.</p>
+        <div id="test3-error" style="display:none; margin-top:10px;">
+            <strong>Error Details:</strong>
+            <pre id="test3-error-msg"></pre>
+        </div>
+    </div>
+    
+    <div class="test-card">
+        <h3>Test 4: MIME Type Check</h3>
+        <p>Status: <span id="test4" class="status pending">Testing...</span></p>
+        <p>Checking if .js files are served with correct MIME type.</p>
+        <div id="test4-details"></div>
+    </div>
+    
+    <div class="test-card">
+        <h3>Console Log</h3>
+        <pre id="console-log">Waiting for logs...</pre>
+    </div>
+    
+    <div class="test-card">
+        <h3>What The Results Mean:</h3>
+        <ul>
+            <li><strong>All Pass:</strong> Modules should work! Try the main app.</li>
+            <li><strong>Test 3 Fails:</strong> Server MIME type issue. Upload .htaccess file.</li>
+            <li><strong>Test 2 Fails:</strong> Browser too old. Use modern browser.</li>
+        </ul>
+    </div>
+
+    <script>
+        // Capture console logs
+        const originalLog = console.log;
+        const originalError = console.error;
+        const logs = [];
+        
+        function addLog(type, ...args) {
+            const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+            logs.push(`[${type}] ${msg}`);
+            updateConsoleLog();
+            if (type === 'log') originalLog(...args);
+            else originalError(...args);
+        }
+        
+        console.log = (...args) => addLog('log', ...args);
+        console.error = (...args) => addLog('error', ...args);
+        
+        function updateConsoleLog() {
+            document.getElementById('console-log').textContent = logs.join('\n') || 'No logs yet';
+        }
+        
+        // Test 1: Basic JavaScript
+        document.getElementById('test1').textContent = 'PASS';
+        document.getElementById('test1').className = 'status pass';
+        console.log('✓ Test 1: JavaScript is working');
+        
+        // Test 2: ES6 Module Support
+        if ('noModule' in HTMLScriptElement.prototype) {
+            document.getElementById('test2').textContent = 'PASS';
+            document.getElementById('test2').className = 'status pass';
+            console.log('✓ Test 2: Browser supports ES6 modules');
+        } else {
+            document.getElementById('test2').textContent = 'FAIL - Browser Too Old';
+            document.getElementById('test2').className = 'status fail';
+            console.error('✗ Test 2: Browser does not support ES6 modules');
+        }
+        
+        // Test 4: MIME Type Check
+        fetch('js/app.js')
+            .then(response => {
+                const contentType = response.headers.get('content-type');
+                const test4 = document.getElementById('test4');
+                const test4Details = document.getElementById('test4-details');
+                
+                test4Details.innerHTML = `<p>Content-Type: <code>${contentType}</code></p>`;
+                
+                if (contentType && (contentType.includes('javascript') || contentType.includes('application/javascript'))) {
+                    test4.textContent = 'PASS';
+                    test4.className = 'status pass';
+                    console.log('✓ Test 4: MIME type correct:', contentType);
+                } else {
+                    test4.textContent = 'FAIL - Wrong MIME Type';
+                    test4.className = 'status fail';
+                    console.error('✗ Test 4: Wrong MIME type:', contentType);
+                    test4Details.innerHTML += `<p style="color: #e74c3c;"><strong>FIX:</strong> Upload the .htaccess file to fix MIME types.</p>`;
+                }
+            })
+            .catch(err => {
+                document.getElementById('test4').textContent = 'FAIL - Cannot Fetch';
+                document.getElementById('test4').className = 'status fail';
+                console.error('✗ Test 4: Could not fetch app.js:', err);
+            });
+    </script>
+    
+    <!-- Test 3: Try to import a module -->
+    <script type="module">
+        console.log('✓ Test 3: Starting module import test...');
+        
+        try {
+            // Try importing the storage service (simplest module)
+            import('./js/services/storage.js')
+                .then(module => {
+                    document.getElementById('test3').textContent = 'PASS';
+                    document.getElementById('test3').className = 'status pass';
+                    console.log('✓ Test 3: Module imported successfully!');
+                    console.log('Module exports:', Object.keys(module));
+                })
+                .catch(err => {
+                    document.getElementById('test3').textContent = 'FAIL';
+                    document.getElementById('test3').className = 'status fail';
+                    document.getElementById('test3-error').style.display = 'block';
+                    document.getElementById('test3-error-msg').textContent = err.message + '\n\n' + err.stack;
+                    console.error('✗ Test 3: Module import failed:', err);
+                });
+        } catch (err) {
+            document.getElementById('test3').textContent = 'FAIL';
+            document.getElementById('test3').className = 'status fail';
+            console.error('✗ Test 3: Module import threw error:', err);
+        }
+    </script>
+</body>
+</html>

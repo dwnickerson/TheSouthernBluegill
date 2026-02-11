@@ -1,6 +1,11 @@
 // FishCast Main Application
 // Entry point and coordinator for all modules
 
+// Debug logging for module loading
+console.log('🚀 Starting FishCast V2.0...');
+console.log('📍 Current URL:', window.location.href);
+console.log('🔧 Module import starting...');
+
 import { storage } from './services/storage.js';
 import { getLocation } from './services/geocoding.js';
 import { getWeather } from './services/weatherAPI.js';

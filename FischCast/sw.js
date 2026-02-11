@@ -1,5 +1,5 @@
 // FishCast Service Worker
-const CACHE_NAME = 'fishcast-v3';
+const CACHE_NAME = 'fishcast-v4';
 const APP_PATH = '/fishcast/';
 
 const urlsToCache = [
