@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FishCast - Version Check</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .check-card {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .pass { background: #27ae60; color: white; }
+        .fail { background: #e74c3c; color: white; }
+        code {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .gradient-test {
+            height: 60px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        button {
+            padding: 12px 24px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 FishCast Version Check</h1>
+    
+    <div class="check-card">
+        <h3>Step 1: Clear Your Browser Cache</h3>
+        <p><strong>You're seeing old cached files!</strong></p>
+        <p>Try these in order:</p>
+        <ol>
+            <li><strong>Hard Refresh:</strong> Press <code>Ctrl + Shift + R</code> (Windows/Linux) or <code>Cmd + Shift + R</code> (Mac)</li>
+            <li><strong>Clear Cache:</strong> 
+                <ul>
+                    <li>Chrome: Settings → Privacy → Clear browsing data → Cached images and files</li>
+                    <li>Firefox: Settings → Privacy → Clear Data → Cached Web Content</li>
+                    <li>Safari: Develop → Empty Caches</li>
+                </ul>
+            </li>
+            <li><strong>Incognito Mode:</strong> Open in private/incognito window</li>
+        </ol>
+        <button onclick="location.reload(true)">🔄 Hard Reload This Page</button>
+        <button onclick="window.location.href = window.location.href + '?v=' + Date.now()">🔄 Force Fresh Load</button>
+    </div>
+
+    <div class="check-card">
+        <h3>Step 2: Test CSS Version</h3>
+        <p>Check if new CSS is loading:</p>
+        <div class="gradient-test">
+            If you see a purple gradient here, NEW CSS is loaded! ✨
+        </div>
+        <p id="cssCheck">Checking CSS version...</p>
+    </div>
+
+    <div class="check-card">
+        <h3>Step 3: CSS File Direct Link</h3>
+        <p>Click to load CSS directly (bypass cache):</p>
+        <button onclick="window.open('styles/main.css?v=' + Date.now(), '_blank')">📄 View CSS File</button>
+        <p><small>Look for "Professional UI" in the first line</small></p>
+    </div>
+
+    <div class="check-card">
+        <h3>Step 4: Nuclear Option - Add Version to HTML</h3>
+        <p>If cache won't clear, edit <code>index.html</code> line 14:</p>
+        <p><strong>Change from:</strong></p>
+        <code>&lt;link rel="stylesheet" href="styles/main.css"&gt;</code>
+        <p style="margin: 10px 0;"><strong>Change to:</strong></p>
+        <code>&lt;link rel="stylesheet" href="styles/main.css?v=2.0"&gt;</code>
+        <p style="margin-top: 15px;"><small>The <code>?v=2.0</code> forces browser to reload CSS!</small></p>
+    </div>
+
+    <div class="check-card">
+        <h3>Step 5: Verify Upload</h3>
+        <p>Make sure these files uploaded correctly:</p>
+        <ul>
+            <li>✓ <code>styles/main.css</code> (should be ~15KB, 500+ lines)</li>
+            <li>✓ <code>js/ui/forecast.js</code> (should have weather icons)</li>
+            <li>✓ <code>.htaccess</code> (for module loading)</li>
+        </ul>
+        <button onclick="checkFiles()">🔍 Check File Sizes</button>
+        <div id="fileCheck"></div>
+    </div>
+
+    <div class="check-card">
+        <h3>Quick Diagnostic</h3>
+        <p>Current page loaded at: <strong id="loadTime"></strong></p>
+        <p>CSS cache age: <span id="cacheAge">Checking...</span></p>
+        <button onclick="location.href='/?nocache=' + Date.now()">🏠 Go to Main App (No Cache)</button>
+    </div>
+
+    <script>
+        // Show load time
+        document.getElementById('loadTime').textContent = new Date().toLocaleTimeString();
+
+        // Check CSS version
+        setTimeout(() => {
+            const testDiv = document.querySelector('.gradient-test');
+            const styles = window.getComputedStyle(testDiv);
+            const bg = styles.backgroundImage;
+            
+            const cssCheck = document.getElementById('cssCheck');
+            if (bg.includes('gradient')) {
+                cssCheck.innerHTML = '<span class="status pass">✅ NEW CSS LOADED!</span><br><small>Gradient detected! The new styles are working.</small>';
+            } else {
+                cssCheck.innerHTML = '<span class="status fail">❌ OLD CSS CACHED</span><br><small>No gradient detected. Clear your cache and refresh!</small>';
+            }
+        }, 100);
+
+        // Check if CSS is from cache
+        async function checkCacheAge() {
+            try {
+                const response = await fetch('styles/main.css', { method: 'HEAD' });
+                const age = response.headers.get('age');
+                const cacheControl = response.headers.get('cache-control');
+                
+                let cacheInfo = '';
+                if (age) {
+                    cacheInfo = `Cached ${age} seconds ago`;
+                }
+                if (cacheControl) {
+                    cacheInfo += ` (${cacheControl})`;
+                }
+                
+                document.getElementById('cacheAge').textContent = cacheInfo || 'Not cached (good!)';
+            } catch (e) {
+                document.getElementById('cacheAge').textContent = 'Unable to check';
+            }
+        }
+        checkCacheAge();
+
+        // Check file sizes
+        async function checkFiles() {
+            const fileCheck = document.getElementById('fileCheck');
+            fileCheck.innerHTML = '<p>Checking...</p>';
+            
+            const files = [
+                'styles/main.css',
+                'js/ui/forecast.js',
+                '.htaccess'
+            ];
+            
+            let results = '<ul>';
+            for (const file of files) {
+                try {
+                    const response = await fetch(file, { method: 'HEAD' });
+                    const size = response.headers.get('content-length');
+                    const sizeKB = size ? (size / 1024).toFixed(1) + ' KB' : 'Unknown';
+                    results += `<li>✅ ${file}: ${sizeKB}</li>`;
+                } catch (e) {
+                    results += `<li>❌ ${file}: Not found or error</li>`;
+                }
+            }
+            results += '</ul>';
+            fileCheck.innerHTML = results;
+        }
+    </script>
+</body>
+</html>

@@ -38,6 +38,13 @@ function getPressureIndicator(trend) {
     return '<span class="pressure-stable">Stable</span>';
 }
 
+// Get precipitation icon based on percentage
+function getPrecipIcon(percentage) {
+    if (percentage >= 40) return '🌧️'; // Rain Likely
+    if (percentage >= 1) return '🌦️';  // Chance of Rain
+    return '☀️'; // Clear (0% only)
+}
+
 export function renderForecast(data) {
     const { coords, waterTemp, weather, speciesKey, waterType, days } = data;
     
@@ -55,6 +62,8 @@ export function renderForecast(data) {
     // Weather icon
     const weatherIcon = getWeatherIcon(weather.forecast.current.weather_code);
     const moonIcon = getMoonIcon(solunar.moon_phase);
+    const precipProb = weather.forecast.hourly.precipitation_probability[0] || 0;
+    const precipIcon = getPrecipIcon(precipProb);
     
     // Start building HTML
     let html = `
@@ -87,7 +96,8 @@ export function renderForecast(data) {
                     <span class="detail-value">
                         🌡️ Surface: ${waterTemp.toFixed(1)}°F<br>
                         <small style="color: var(--text-secondary);">
-                            📏 10ft: ${estimateTempByDepth(waterTemp, waterType, 10).toFixed(1)}°F | 
+                            📏 4ft: ${estimateTempByDepth(waterTemp, waterType, 4).toFixed(1)}°F | 
+                            10ft: ${estimateTempByDepth(waterTemp, waterType, 10).toFixed(1)}°F | 
                             20ft: ${estimateTempByDepth(waterTemp, waterType, 20).toFixed(1)}°F
                         </small>
                     </span>
@@ -139,8 +149,7 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Precipitation</span>
                     <span class="detail-value">
-                        ${weather.forecast.hourly.precipitation_probability[0] > 30 ? '🌧️' : '☀️'} 
-                        ${weather.forecast.hourly.precipitation_probability[0] || 0}% chance
+                        ${precipIcon} ${precipProb}% chance
                     </span>
                 </div>
             </div>
@@ -166,6 +175,20 @@ export function renderForecast(data) {
                     </span>
                 </div>
             </div>
+        </div>
+        
+        <div class="detail-card" style="margin: 30px 0;">
+            <h3>📡 Weather Radar</h3>
+            <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px; margin-top: 15px;">
+                <iframe 
+                    src="https://embed.windy.com/embed2.html?lat=${coords.lat}&lon=${coords.lon}&detailLat=${coords.lat}&detailLon=${coords.lon}&width=650&height=450&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1" 
+                    frameborder="0" 
+                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+                </iframe>
+            </div>
+            <p style="margin-top: 10px; color: var(--text-secondary); font-size: 0.9rem; text-align: center;">
+                <small>Powered by Windy.com - Real-time radar for ${coords.name}</small>
+            </p>
         </div>
     `;
     
@@ -237,7 +260,7 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords) {
                 <div style="font-size: 2rem; margin: 10px 0;">${weatherIcon}</div>
                 <div class="day-score ${scoreClass}">${Math.round(estimatedScore)}</div>
                 <div class="day-temp">${maxTemp.toFixed(0)}° / ${minTemp.toFixed(0)}°</div>
-                <div class="day-precip">💧 ${precipProb}%</div>
+                <div class="day-precip">${getPrecipIcon(precipProb)} ${precipProb}%</div>
             </div>
         `;
     }
@@ -246,7 +269,7 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords) {
     return html;
 }
 
-// Function to show detailed day information
+// Enhanced day detail modal with more information
 window.showDayDetails = function(dayIndex, date) {
     const data = window.currentForecastData;
     if (!data) return;
@@ -256,16 +279,23 @@ window.showDayDetails = function(dayIndex, date) {
     const maxTemp = cToF(dailyData.temperature_2m_max[dayIndex]);
     const minTemp = cToF(dailyData.temperature_2m_min[dayIndex]);
     const precipProb = dailyData.precipitation_probability_max[dayIndex];
+    const precipSum = dailyData.precipitation_sum ? dailyData.precipitation_sum[dayIndex] : 0;
+    const windSpeed = dailyData.wind_speed_10m_max ? kmhToMph(dailyData.wind_speed_10m_max[dayIndex]) : 0;
+    const windDir = dailyData.wind_direction_10m_dominant ? getWindDirection(dailyData.wind_direction_10m_dominant[dayIndex]) : 'N';
+    const sunrise = dailyData.sunrise ? new Date(dailyData.sunrise[dayIndex]).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'N/A';
+    const sunset = dailyData.sunset ? new Date(dailyData.sunset[dayIndex]).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'N/A';
     const weatherIcon = getWeatherIcon(weatherCode);
     const weatherDesc = getWeatherDescription(weatherCode);
+    const precipIcon = getPrecipIcon(precipProb);
     
     // Highlight selected day
     document.querySelectorAll('.forecast-day-card').forEach(card => {
         card.classList.remove('active');
     });
-    document.querySelector(`.forecast-day-card[data-day="${dayIndex}"]`).classList.add('active');
+    const selectedCard = document.querySelector(`.forecast-day-card[data-day="${dayIndex}"]`);
+    if (selectedCard) selectedCard.classList.add('active');
     
-    // Show detailed modal
+    // Show detailed modal with more information
     const modalHTML = `
         <div class="modal show" id="dayDetailModal" onclick="if(event.target === this) this.classList.remove('show')">
             <div class="modal-content" onclick="event.stopPropagation()">
@@ -284,9 +314,22 @@ window.showDayDetails = function(dayIndex, date) {
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Precipitation</span>
-                        <span class="detail-value">💧 ${precipProb}% chance</span>
+                        <span class="detail-value">${precipIcon} ${precipProb}% chance${precipSum > 0 ? ` (${precipSum.toFixed(2)} in)` : ''}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Wind</span>
+                        <span class="detail-value">💨 ${windSpeed.toFixed(1)} mph ${windDir}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Sunrise / Sunset</span>
+                        <span class="detail-value">🌅 ${sunrise} / 🌇 ${sunset}</span>
                     </div>
                     <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid var(--border-color);">
+                        <p style="color: var(--text-secondary); text-align: center; font-size: 0.9rem;">
+                            <strong>Fishing Tip:</strong> ${getFishingTipForDay(maxTemp, minTemp, precipProb, windSpeed)}
+                        </p>
+                    </div>
+                    <div style="margin-top: 15px;">
                         <p style="color: var(--text-secondary); text-align: center;">
                             <small>Click outside to close</small>
                         </p>
@@ -303,6 +346,24 @@ window.showDayDetails = function(dayIndex, date) {
     // Add new modal
     document.body.insertAdjacentHTML('beforeend', modalHTML);
 };
+
+// Helper function to provide fishing tips for specific day
+function getFishingTipForDay(maxTemp, minTemp, precipProb, windSpeed) {
+    const avgTemp = (maxTemp + minTemp) / 2;
+    
+    if (precipProb > 60 && avgTemp > 60) {
+        return "Fish before the rain arrives - pressure drop triggers feeding!";
+    } else if (windSpeed > 15) {
+        return "Strong winds - target protected coves and wind-blown banks.";
+    } else if (avgTemp < 50) {
+        return "Cold day - slow down your presentation and fish deeper.";
+    } else if (avgTemp >= 65 && avgTemp <= 75) {
+        return "Perfect temperatures - fish should be active and feeding!";
+    } else if (precipProb < 20 && windSpeed < 5) {
+        return "Calm, clear conditions - use natural colors and stealthy approaches.";
+    }
+    return "Good fishing conditions - focus on structure and cover.";
+}
 
 export function showLoading() {
     const resultsDiv = document.getElementById('results');

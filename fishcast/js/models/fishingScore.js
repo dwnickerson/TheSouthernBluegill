@@ -179,10 +179,14 @@ export function getTechniqueTips(score, waterTemp, windSpeed, weather, speciesKe
         tips.push("📉 Falling pressure - fish are feeding aggressively before weather change!");
     }
     
+    // Fixed topwater recommendation - only when water temp is warm enough
     const code = weather.current.weather_code;
     if (code === 51 || code === 53 || code === 61) {
-        if (speciesKey === 'bass') {
-            tips.push("🌧️ Light rain - topwater lures can be very effective!");
+        if (speciesKey === 'bass' && waterTemp >= 58) {
+            // Only recommend topwater when water is warm enough (58°F+)
+            tips.push("🌧️ Light rain + warm water - topwater lures can be very effective!");
+        } else if (speciesKey === 'bass') {
+            tips.push("🌧️ Light rain - fish are active but use subsurface lures in cold water");
         }
     }
     
