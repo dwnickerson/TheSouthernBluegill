@@ -1,7 +1,7 @@
-// Enhanced Modal Handlers with Gamification
+// Modal Handlers with Gamification - FIXED VERSION
 import { storage } from '../services/storage.js';
 
-// NEW: Get user's report statistics
+// Get user's report statistics
 function getUserStats() {
     const stats = storage.get('userStats') || {
         totalReports: 0,
@@ -13,11 +13,11 @@ function getUserStats() {
     return stats;
 }
 
-// NEW: Update user stats after submission
+// Update user stats after submission
 function updateUserStats() {
     const stats = getUserStats();
     stats.totalReports += 1;
-    stats.helpedAnglers = Math.floor(stats.totalReports * 8.5); // Estimate: each report helps ~8-9 anglers
+    stats.helpedAnglers = Math.floor(stats.totalReports * 8.5);
     
     // Check for badges
     if (stats.totalReports === 1 && !stats.badges.includes('first_reporter')) {
@@ -37,7 +37,7 @@ function updateUserStats() {
     return stats;
 }
 
-// NEW: Show badge earned notification
+// Show badge earned notification
 function showBadgeEarned(title, message) {
     const badgeHTML = `
         <div class="badge-notification" id="badgeNotification">
@@ -50,14 +50,13 @@ function showBadgeEarned(title, message) {
     `;
     document.body.insertAdjacentHTML('beforeend', badgeHTML);
     
-    // Auto-dismiss after 5 seconds
     setTimeout(() => {
         const badge = document.getElementById('badgeNotification');
         if (badge) badge.remove();
     }, 5000);
 }
 
-// ENHANCED: Water temperature report modal - STANDALONE, NO PRE-FILL
+// Water temperature report modal
 export function openTempReportModal() {
     const userStats = getUserStats();
     
@@ -69,7 +68,6 @@ export function openTempReportModal() {
                     🌡️ Submit Water Temperature
                 </div>
                 
-                <!-- Gamification Stats -->
                 <div style="background: var(--bg-primary); padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
                     <div style="font-size: 2rem; font-weight: 700; color: var(--accent);">${userStats.helpedAnglers}</div>
                     <div style="color: var(--text-secondary); font-size: 0.9rem;">anglers helped by your ${userStats.totalReports} reports! 🎣</div>
@@ -139,7 +137,6 @@ export function openTempReportModal() {
         navigator.geolocation.getCurrentPosition(async (position) => {
             const { latitude, longitude } = position.coords;
             
-            // Reverse geocode
             try {
                 const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
                 const data = await response.json();
@@ -161,32 +158,23 @@ export function openTempReportModal() {
     // Form submission
     document.getElementById('tempReportForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        await submitTempReport();
+        await handleTempReportSubmit();
     });
 }
 
-// ENHANCED: Submit temperature report with stats update
-export async function submitTempReport(e) {
-    if (e) e.preventDefault();
+// Handle temperature report submission
+async function handleTempReportSubmit() {
+    const location = document.getElementById('tempReportLocation').value;
+    const waterBody = document.getElementById('tempReportWaterBody').value;
+    const temperature = parseFloat(document.getElementById('tempReportTemp').value);
+    const depth = parseFloat(document.getElementById('tempReportDepth').value);
+    const notes = document.getElementById('tempReportNotes').value;
     
-    const location = document.getElementById('tempReportLocation').value ||
-                    document.getElementById('reportLocation')?.value;
-    const waterBody = document.getElementById('tempReportWaterBody').value ||
-                     document.getElementById('reportWaterBody')?.value;
-    const temperature = parseFloat(document.getElementById('tempReportTemp').value ||
-                                   document.getElementById('reportTemp')?.value);
-    const depth = parseFloat(document.getElementById('tempReportDepth').value ||
-                            document.getElementById('reportDepth')?.value);
-    const notes = document.getElementById('tempReportNotes').value ||
-                 document.getElementById('reportNotes')?.value || '';
-    
-    // Validate depth
     if (isNaN(depth) || depth < 0) {
-        showNotification('❌ Please enter a valid depth (0 or greater)', 'error');
+        window.showNotification('❌ Please enter a valid depth (0 or greater)', 'error');
         return;
     }
     
-    // Get coordinates (you'll need geocoding here in production)
     let lat = 0, lon = 0;
     if (window.currentForecastData) {
         lat = window.currentForecastData.coords.lat;
@@ -205,26 +193,17 @@ export async function submitTempReport(e) {
     };
     
     try {
-        // In production, send to your Google Script
-        // const response = await fetch(API_CONFIG.WEBHOOK.WATER_TEMP_SUBMIT, {
-        //     method: 'POST',
-        //     body: JSON.stringify(data)
-        // });
-        
-        // For now, just show success
         const updatedStats = updateUserStats();
+        window.closeTempReport();
         
-        closeTempReportModal();
-        
-        // Show success message with impact
         const impactMsg = updatedStats.totalReports === 1 
             ? 'Thank you for your first report! You\'re helping build the community database.' 
             : `Your ${updatedStats.totalReports} reports have helped ${updatedStats.helpedAnglers} anglers!`;
         
-        showNotification(`✅ Report submitted! ${impactMsg}`, 'success');
+        window.showNotification(`✅ Report submitted! ${impactMsg}`, 'success');
         
     } catch (error) {
-        showNotification('❌ Error submitting report. Please try again.', 'error');
+        window.showNotification('❌ Error submitting report. Please try again.', 'error');
     }
 }
 
@@ -233,218 +212,9 @@ export function closeTempReportModal() {
     if (modal) modal.remove();
 }
 
-// Catch Log Modal
-export function openCatchLog() {
-    const modal = document.getElementById('catchLogModal');
-    if (modal) modal.classList.add('show');
-}
-
-export function closeCatchLog() {
-    const modal = document.getElementById('catchLogModal');
-    if (modal) modal.classList.remove('show');
-}
-
-export async function submitCatchLog(e) {
-    e.preventDefault();
-    const species = document.getElementById('catchSpecies').value;
-    const count = document.getElementById('catchCount').value;
-    const dateTime = document.getElementById('catchDateTime').value;
-    const location = document.getElementById('catchLocation').value;
-    const notes = document.getElementById('catchNotes').value;
-    
-    const catchData = { species, count, dateTime, location, notes, timestamp: Date.now() };
-    
-    // Save to localStorage
-    const catches = storage.get('catches') || [];
-    catches.push(catchData);
-    storage.set('catches', catches);
-    
-    closeCatchLog();
-    showNotification('✅ Catch logged successfully!', 'success');
-    
-    // Reset form
-    document.getElementById('catchLogForm').reset();
-}
-
-// Settings Modal
-export function openSettings() {
-    const modal = document.getElementById('settingsModal');
-    if (modal) {
-        modal.classList.add('show');
-        
-        // Load current settings
-        const defaultLocation = storage.getDefaultLocation();
-        const defaultSpecies = storage.getDefaultSpecies();
-        const defaultWaterBody = storage.getDefaultWaterBody();
-        
-        if (defaultLocation) document.getElementById('defaultLocation').value = defaultLocation;
-        if (defaultSpecies) document.getElementById('defaultSpecies').value = defaultSpecies;
-        if (defaultWaterBody) document.getElementById('defaultWaterBody').value = defaultWaterBody;
-    }
-}
-
-export function closeSettings() {
-    const modal = document.getElementById('settingsModal');
-    if (modal) modal.classList.remove('show');
-}
-
-export function saveSettings() {
-    const defaultLocation = document.getElementById('defaultLocation').value;
-    const defaultSpecies = document.getElementById('defaultSpecies').value;
-    const defaultWaterBody = document.getElementById('defaultWaterBody').value;
-    
-    storage.setDefaultLocation(defaultLocation);
-    storage.setDefaultSpecies(defaultSpecies);
-    storage.setDefaultWaterBody(defaultWaterBody);
-    
-    closeSettings();
-    showNotification('✅ Settings saved!', 'success');
-}
-
-export function exportAllData() {
-    const allData = {
-        favorites: storage.get('favorites') || [],
-        catches: storage.get('catches') || [],
-        userStats: storage.get('userStats') || {},
-        settings: {
-            defaultLocation: storage.getDefaultLocation(),
-            defaultSpecies: storage.getDefaultSpecies(),
-            defaultWaterBody: storage.getDefaultWaterBody(),
-            theme: storage.getTheme()
-        }
-    };
-    
-    const dataStr = JSON.stringify(allData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `fishcast-data-${Date.now()}.json`;
-    link.click();
-    
-    showNotification('✅ Data exported!', 'success');
-}
-
-export function clearAllData() {
-    if (confirm('Are you sure you want to clear ALL data? This cannot be undone!')) {
-        localStorage.clear();
-        closeSettings();
-        showNotification('✅ All data cleared!', 'success');
-        setTimeout(() => location.reload(), 1000);
-    }
-}
-
-// About Modal
-export function openAbout() {
-    const modal = document.getElementById('aboutModal');
-    if (modal) modal.classList.add('show');
-}
-
-export function closeAbout() {
-    const modal = document.getElementById('aboutModal');
-    if (modal) modal.classList.remove('show');
-}
-
-// Notification System
-export function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.textContent = message;
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 15px 20px;
-        background: ${type === 'success' ? '#27ae60' : type === 'error' ? '#e74c3c' : '#3498db'};
-        color: white;
-        border-radius: 4px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        z-index: 10000;
-        animation: slideIn 0.3s ease-out;
-    `;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease-out';
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
-}
-
-// Share Forecast
-export function shareForecast(forecastData) {
-    if (navigator.share) {
-        navigator.share({
-            title: 'FishCast Forecast',
-            text: `Check out this fishing forecast for ${forecastData.location}!`,
-            url: window.location.href
-        }).catch(err => console.log('Share failed:', err));
-    } else {
-        showNotification('Sharing not supported on this device', 'info');
-    }
-}
-
-// Save Favorite
-export function saveFavorite(location, speciesKey, waterType) {
-    const favorites = storage.get('favorites') || [];
-    const favorite = {
-        location,
-        speciesKey,
-        waterType,
-        timestamp: Date.now()
-    };
-    
-    // Check if already exists
-    const exists = favorites.some(f => f.location === location && f.speciesKey === speciesKey);
-    if (exists) {
-        showNotification('⭐ Already in favorites!', 'info');
-        return;
-    }
-    
-    favorites.push(favorite);
-    storage.set('favorites', favorites);
-    showNotification('⭐ Added to favorites!', 'success');
-    
-    // Refresh favorites display
-    if (window.renderFavorites) {
-        window.renderFavorites();
-    }
-}
-
 // Make functions globally available
 window.openTempReport = openTempReportModal;
 window.closeTempReport = closeTempReportModal;
-window.submitTempReport = submitTempReport;
-window.openCatchLog = openCatchLog;
-window.closeCatchLog = closeCatchLog;
-window.openSettings = openSettings;
-window.closeSettings = closeSettings;
-window.saveSettings = saveSettings;
-window.exportAllData = exportAllData;
-window.clearAllData = clearAllData;
-window.openAbout = openAbout;
-window.closeAbout = closeAbout;
-window.shareForecast = shareForecast;
-window.saveFavorite = saveFavorite;
 
-// Export all functions for module imports
-export const openTempReport = openTempReportModal;
-export const closeTempReport = closeTempReportModal;
-export { 
-    submitTempReport,
-    openCatchLog,
-    closeCatchLog,
-    submitCatchLog,
-    openSettings,
-    closeSettings,
-    saveSettings,
-    exportAllData,
-    clearAllData,
-    openAbout,
-    closeAbout,
-    showNotification,
-    shareForecast,
-    saveFavorite,
-    getUserStats,
-    updateUserStats
-};
+// Export for other modules
+export { getUserStats, updateUserStats };
