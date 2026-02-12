@@ -1,5 +1,5 @@
-// Modal Handlers with Gamification - VERSION 3.3.10 GEOCODING FIX
-console.log('📦 modals.js VERSION 3.3.10 loaded - GEOCODING VALIDATION + RETRY');
+// Modal Handlers with Gamification - VERSION 3.3.11 DEBUG LOGGING
+console.log('📦 modals.js VERSION 3.3.11 loaded - DEBUG LOGGING ENABLED');
 
 import { storage } from '../services/storage.js';
 
@@ -232,15 +232,21 @@ export function openTempReportModal() {
 export async function handleTempReportSubmit() {
     console.log('🌡️ Water temp submission started...');
     
-    const waterbodyName = document.getElementById('tempReportWaterbody').value;
-    const location = document.getElementById('tempReportLocation').value;
-    const waterBody = document.getElementById('tempReportWaterBody').value;
+    const waterbodyName = document.getElementById('tempReportWaterbody').value || '';
+    const location = document.getElementById('tempReportLocation').value || '';
+    const waterBody = document.getElementById('tempReportWaterBody').value || '';
     const temperature = parseFloat(document.getElementById('tempReportTemp').value);
     const depth = parseFloat(document.getElementById('tempReportDepth').value);
-    const clarity = document.getElementById('tempReportClarity').value;
-    const notes = document.getElementById('tempReportNotes').value;
+    const clarity = document.getElementById('tempReportClarity').value || '';
+    const notes = document.getElementById('tempReportNotes').value || '';
     
     console.log('Form data:', { waterbodyName, location, waterBody, temperature, depth, clarity, notes });
+    console.log('Form data types:', {
+        waterbodyName: typeof waterbodyName,
+        waterBody: typeof waterBody,
+        clarity: typeof clarity,
+        notes: typeof notes
+    });
     
     // Validate location format
     if (!location || location.trim().length < 3) {
@@ -326,6 +332,10 @@ export async function handleTempReportSubmit() {
     
     console.log('Submitting data:', data);
     
+    const jsonBody = JSON.stringify(data);
+    console.log('📦 JSON body:', jsonBody);
+    console.log('📦 JSON length:', jsonBody.length);
+    
     try {
         // Send to Google Sheets
         console.log('📤 Sending to Google Sheets...');
@@ -335,7 +345,7 @@ export async function handleTempReportSubmit() {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(data)
+            body: jsonBody
         });
         
         console.log('✅ Data sent to Google Sheets');
