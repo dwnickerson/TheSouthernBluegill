@@ -1,4 +1,5 @@
-// Enhanced Forecast UI Rendering with Weather Icons & Clickable Days - v3.4.0 PHYSICS
+// Enhanced Forecast UI Rendering with Weather Icons & Clickable Days - v3.4.1 WEATHER FIX
+// Physics-based water temp evolution + Wind display on forecast cards
 import { SPECIES_DATA } from '../config/species.js';
 import { cToF, kmhToMph, getWindDirection } from '../utils/math.js';
 import { formatDate, formatDateShort } from '../utils/date.js';
@@ -369,6 +370,10 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
         const weatherCode = dailyData.weather_code[i];
         const weatherIcon = getWeatherIcon(weatherCode);
         
+        // Get wind data for the day
+        const windSpeed = dailyData.wind_speed_10m_max ? kmhToMph(dailyData.wind_speed_10m_max[i]) : 0;
+        const windDir = dailyData.wind_direction_10m_dominant ? getWindDirection(dailyData.wind_direction_10m_dominant[i]) : '';
+        
         // Simple score estimation for future days
         const avgTemp = (maxTemp + minTemp) / 2;
         const estimatedScore = Math.max(30, Math.min(85, 50 + (avgTemp - 60) * 0.5));
@@ -387,6 +392,7 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
                 <div class="day-temp">${maxTemp.toFixed(0)}° / ${minTemp.toFixed(0)}°</div>
                 <div class="day-precip">${getPrecipIcon(precipProb)} ${precipProb}%</div>
                 <div style="font-size: 0.85em; color: #888; margin-top: 4px;">💧 ${waterTemps[i].toFixed(1)}°F</div>
+                <div style="font-size: 0.85em; color: #888;">💨 ${windSpeed.toFixed(0)} mph ${windDir}</div>
             </div>
         `;
     }

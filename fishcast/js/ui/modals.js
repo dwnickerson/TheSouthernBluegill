@@ -1,5 +1,5 @@
-// Modal Handlers with Gamification - VERSION 3.3.11 DEBUG LOGGING
-console.log('📦 modals.js VERSION 3.3.11 loaded - DEBUG LOGGING ENABLED');
+// Modal Handlers with Gamification - VERSION 3.3.12 MODAL CLOSE FIX
+console.log('📦 modals.js VERSION 3.3.12 loaded - MODAL CLOSE FIX');
 
 import { storage } from '../services/storage.js';
 
@@ -362,11 +362,21 @@ export async function handleTempReportSubmit() {
         console.log('Showing notification...');
         showNotification(`✅ Report submitted! ${impactMsg}`, 'success');
         
-        // Then close modal after a brief delay
+        // Add closing animation and close modal
         setTimeout(() => {
             console.log('Closing modal...');
-            window.closeTempReport();
-        }, 300);
+            const modal = document.getElementById('tempReportModal');
+            if (modal) {
+                // Add fade-out animation
+                modal.style.opacity = '0';
+                modal.style.transition = 'opacity 0.3s ease';
+                
+                // Remove after animation completes
+                setTimeout(() => {
+                    window.closeTempReport();
+                }, 300);
+            }
+        }, 500);
         
     } catch (error) {
         console.error('❌ Error submitting to Google Sheets:', error);
@@ -386,8 +396,15 @@ export async function handleTempReportSubmit() {
 }
 
 export function closeTempReportModal() {
+    console.log('🔵 closeTempReportModal called');
     const modal = document.getElementById('tempReportModal');
-    if (modal) modal.remove();
+    console.log('🔵 Modal element found:', modal);
+    if (modal) {
+        modal.remove();
+        console.log('✅ Modal removed');
+    } else {
+        console.error('❌ Modal element not found! Cannot close.');
+    }
 }
 
 // Stub functions for features not yet implemented
