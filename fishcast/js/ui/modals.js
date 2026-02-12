@@ -266,7 +266,7 @@ export async function handleTempReportSubmit() {
     try {
         // Send to Google Sheets
         console.log('📤 Sending to Google Sheets...');
-        const response = await fetch('https://script.google.com/macros/s/AKfycbySp_91L4EPOFXFx2528Q7TPfRtQi9dBiR4l2CSWpnrJ_x2UdZGamdiqsS7bYOQ38R8bg/exec', {
+        const response = await fetch('https://script.google.com/macros/s/AKfycbxmuReDxhNFGjFC_LaEcCiTB8R7uI9lJxMbMsEWSoIp_VRegLarMnnILlvk-2K7ghDYeg/exec', {
             method: 'POST',
             mode: 'no-cors', // Google Apps Script requires this
             headers: {
