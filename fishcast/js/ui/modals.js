@@ -1,5 +1,5 @@
-// Modal Handlers with Gamification - VERSION 3.3.12 MODAL CLOSE FIX
-console.log('📦 modals.js VERSION 3.3.12 loaded - MODAL CLOSE FIX');
+// Modal Handlers with Gamification - VERSION 3.3.13 COMPREHENSIVE ABOUT
+console.log('📦 modals.js VERSION 3.3.13 loaded - COMPREHENSIVE ABOUT PAGE');
 
 import { storage } from '../services/storage.js';
 
@@ -557,47 +557,171 @@ export function clearAllData() {
 export function openAbout() {
     const modalHTML = `
         <div class="modal show" id="aboutModal" onclick="if(event.target === this) window.closeAbout()">
-            <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-content" onclick="event.stopPropagation()" style="max-height: 90vh; overflow-y: auto;">
                 <div class="modal-header">
                     <span class="modal-close" onclick="window.closeAbout()">×</span>
                     🎣 About FishCast
                 </div>
                 
                 <div style="padding: 20px;">
-                    <h3 style="margin-top: 0; color: var(--accent);">FishCast v3.3.6</h3>
-                    <p style="color: var(--text-secondary); margin-bottom: 20px;">
-                        By The Southern Bluegill Association
+                    <h3 style="margin-top: 0; color: var(--accent);">FishCast v3.4</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 25px;">
+                        By <strong>The Southern Bluegill Association</strong><br>
+                        <a href="mailto:info@thesouthernbluegill.com" style="color: var(--accent); text-decoration: none;">info@thesouthernbluegill.com</a>
                     </p>
                     
-                    <h4 style="color: var(--text-primary); margin-top: 20px;">🔬 Scientifically Accurate Forecasts</h4>
-                    <p style="color: var(--text-secondary); line-height: 1.6;">
-                        FishCast uses real biological data to predict fish behavior. Our forecasts are based on:
+                    <!-- What is FishCast -->
+                    <h4 style="color: var(--text-primary); margin-top: 25px; border-bottom: 2px solid var(--accent); padding-bottom: 8px;">
+                        🎯 What is FishCast?
+                    </h4>
+                    <p style="color: var(--text-secondary); line-height: 1.7;">
+                        FishCast is a <strong>science-based fishing forecast tool</strong> that predicts fish behavior using real biological data, physics-based water temperature modeling, and community-contributed observations. Unlike generic fishing apps, FishCast uses <strong>species-specific biology</strong> to tell you exactly what the fish are doing—spawning, feeding actively, or going dormant.
                     </p>
-                    <ul style="color: var(--text-secondary); line-height: 1.8;">
-                        <li>Species-specific temperature preferences</li>
-                        <li>Spawning behavior patterns</li>
-                        <li>Weather conditions</li>
-                        <li>Moon phase & solunar theory</li>
-                        <li>Water clarity modeling</li>
+                    
+                    <!-- How Forecasting Works -->
+                    <h4 style="color: var(--text-primary); margin-top: 25px; border-bottom: 2px solid var(--accent); padding-bottom: 8px;">
+                        🔬 How Our Forecasting Works
+                    </h4>
+                    
+                    <p style="color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px;">
+                        <strong style="color: var(--accent);">1. Physics-Based Water Temperature Model</strong><br>
+                        We don't just guess water temps—we calculate them using thermal physics:
+                    </p>
+                    <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px; margin-bottom: 15px;">
+                        <li><strong>Thermal Lag:</strong> Water resists temperature change based on water body size (ponds: 5 days, lakes: 10 days, reservoirs: 14 days)</li>
+                        <li><strong>Solar Radiation:</strong> Clear skies warm water faster; cloudy days slow warming</li>
+                        <li><strong>Wind Mixing:</strong> Strong winds cool warm water through evaporation and mix temperature layers</li>
+                        <li><strong>Depth Stratification:</strong> Estimates temperature at 4ft, 10ft, and 20ft depths using thermocline modeling</li>
+                        <li><strong>Community Calibration:</strong> Your water temp reports fine-tune our model for specific lakes and ponds</li>
                     </ul>
                     
-                    <h4 style="color: var(--text-primary); margin-top: 20px;">🌡️ Community Water Temps</h4>
-                    <p style="color: var(--text-secondary); line-height: 1.6;">
-                        Help improve forecasts by submitting water temperature readings. Your data helps the entire fishing community!
+                    <p style="color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px;">
+                        <strong style="color: var(--accent);">2. Species-Specific Biology</strong><br>
+                        We track <strong>17 sunfish and bass species</strong>, each with unique temperature preferences:
+                    </p>
+                    <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px; margin-bottom: 15px;">
+                        <li><strong>Spawning Ranges:</strong> Each species spawns at specific temperatures (e.g., Bluegill: 67-75°F, Largemouth Bass: 60-68°F)</li>
+                        <li><strong>Activity Phases:</strong> Dormant (too cold), Pre-Spawn, Spawn, Post-Spawn, Summer Peak, Fall Feed</li>
+                        <li><strong>Behavioral Patterns:</strong> Feeding intensity, depth preferences, and location patterns for each phase</li>
+                    </ul>
+                    
+                    <p style="color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px;">
+                        <strong style="color: var(--accent);">3. Weather Integration</strong><br>
+                        Real-time and 7-day forecast data including:
+                    </p>
+                    <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px; margin-bottom: 15px;">
+                        <li>Air temperature, wind speed/direction, cloud cover</li>
+                        <li>Precipitation probability and barometric pressure</li>
+                        <li>Sunrise/sunset times and moon phase</li>
+                        <li>All integrated into our water temp physics model</li>
+                    </ul>
+                    
+                    <p style="color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px;">
+                        <strong style="color: var(--accent);">4. Solunar Theory</strong><br>
+                        Moon position and phase influence fish feeding activity. We calculate:
+                    </p>
+                    <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px; margin-bottom: 15px;">
+                        <li>Major and minor feeding periods based on moon overhead/underfoot</li>
+                        <li>Moon phase effects on nighttime activity</li>
+                        <li>Combined with water temp for accurate bite time predictions</li>
+                    </ul>
+                    
+                    <!-- Community Data & ML Plans -->
+                    <h4 style="color: var(--text-primary); margin-top: 25px; border-bottom: 2px solid var(--accent); padding-bottom: 8px;">
+                        🤝 Community Data & Machine Learning
+                    </h4>
+                    
+                    <p style="color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px;">
+                        <strong style="color: var(--accent);">How Your Water Temp Reports Help:</strong>
+                    </p>
+                    <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px; margin-bottom: 15px;">
+                        <li><strong>Immediate Impact:</strong> Your report helps calibrate water temp estimates for YOUR specific water body</li>
+                        <li><strong>Community Benefit:</strong> Aggregated data improves forecasts for all users in your region</li>
+                        <li><strong>Accuracy Tracking:</strong> We compare our predictions against real measurements to continuously improve</li>
+                        <li><strong>Local Patterns:</strong> Multiple reports from the same lake reveal unique thermal characteristics</li>
+                    </ul>
+                    
+                    <p style="color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px;">
+                        <strong style="color: var(--accent);">🚀 Future: Machine Learning Models</strong><br>
+                        We're building ML models trained on community data to:
+                    </p>
+                    <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px; margin-bottom: 15px;">
+                        <li><strong>Learn Local Anomalies:</strong> Springs, tributaries, shading, and other factors that make your lake unique</li>
+                        <li><strong>Predict Spawn Timing:</strong> ML will identify when YOUR lake's fish typically spawn based on historical patterns</li>
+                        <li><strong>Personalized Forecasts:</strong> The more reports from your lake, the more accurate your forecasts become</li>
+                        <li><strong>Water Body Profiles:</strong> Automatic classification of thermal behavior (fast-warming vs. stable, shallow vs. deep)</li>
+                        <li><strong>Catch Data Integration:</strong> Planned feature to correlate conditions with actual fishing success</li>
+                    </ul>
+                    
+                    <p style="background: var(--bg-secondary); padding: 15px; border-left: 4px solid var(--accent); border-radius: 4px; color: var(--text-secondary); line-height: 1.7; margin-top: 15px;">
+                        <strong>🎯 Example:</strong> If you report 68°F from "Smith Pond" on April 15, our ML model learns that Smith Pond reaches bluegill spawn temp in mid-April. Next year, it will predict spawn timing specifically for Smith Pond based on weather patterns, even before anyone reports!
                     </p>
                     
-                    <h4 style="color: var(--text-primary); margin-top: 20px;">🐟 12 Sunfish Species</h4>
-                    <p style="color: var(--text-secondary); line-height: 1.6;">
-                        Bluegill, Redear, Green, Longear, Pumpkinseed, Redbreast, Warmouth, Rock Bass, Flier, Spotted, Shadow Bass, and Sacramento Perch.
+                    <!-- Privacy & Data Usage -->
+                    <h4 style="color: var(--text-primary); margin-top: 25px; border-bottom: 2px solid var(--accent); padding-bottom: 8px;">
+                        🔒 Privacy & Data Usage
+                    </h4>
+                    
+                    <p style="color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px;">
+                        <strong>What We Collect:</strong>
+                    </p>
+                    <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px; margin-bottom: 15px;">
+                        <li><strong>Water Temperature Reports:</strong> Temperature, depth, water body name, city/state location, water clarity, optional notes</li>
+                        <li><strong>Location Data:</strong> City and state only—NOT precise GPS coordinates. We geocode your city to get approximate coordinates for forecasting</li>
+                        <li><strong>Device Type:</strong> Browser user-agent for debugging purposes only</li>
+                        <li><strong>Anonymous Submissions:</strong> We do NOT collect names, email addresses, phone numbers, or user accounts</li>
+                    </ul>
+                    
+                    <p style="color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px;">
+                        <strong>How We Use Your Data:</strong>
+                    </p>
+                    <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px; margin-bottom: 15px;">
+                        <li><strong>Improve Forecasts:</strong> Calibrate water temp models and validate physics predictions</li>
+                        <li><strong>Train ML Models:</strong> Build machine learning models to predict spawn timing and water temp patterns</li>
+                        <li><strong>Community Sharing:</strong> Aggregate data shown on the app (e.g., "42 anglers helped by your 5 reports")</li>
+                        <li><strong>Research:</strong> Analyze regional patterns to improve biological models</li>
+                    </ul>
+                    
+                    <p style="color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px;">
+                        <strong>What We DON'T Do:</strong>
+                    </p>
+                    <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px; margin-bottom: 15px;">
+                        <li>❌ Sell or share your data with third parties</li>
+                        <li>❌ Track you across websites (no cookies or tracking pixels)</li>
+                        <li>❌ Collect precise GPS coordinates of your fishing spots</li>
+                        <li>❌ Require accounts, logins, or personal information</li>
+                        <li>❌ Send marketing emails or spam</li>
+                    </ul>
+                    
+                    <p style="background: #1a472a; padding: 15px; border-left: 4px solid #4ade80; border-radius: 4px; color: var(--text-secondary); line-height: 1.7; margin-top: 15px;">
+                        <strong>🛡️ Our Commitment:</strong> Your data powers better forecasts for the entire fishing community, but your privacy is paramount. All data is anonymized, aggregated, and used solely to improve fishing forecasts. We're anglers too—we respect your secret spots!
                     </p>
                     
-                    <h4 style="color: var(--text-primary); margin-top: 20px;">🔒 Privacy</h4>
-                    <p style="color: var(--text-secondary); line-height: 1.6; font-size: 0.9rem;">
-                        We collect water temperature readings, location (city/state), and device type. We do NOT collect names, email addresses, or precise GPS coordinates unless you generate a forecast first. Data is used to improve fishing forecasts for the community. Your submissions are anonymous.
-                    </p>
+                    <!-- Current Features -->
+                    <h4 style="color: var(--text-primary); margin-top: 25px; border-bottom: 2px solid var(--accent); padding-bottom: 8px;">
+                        ✨ Current Features
+                    </h4>
+                    <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px;">
+                        <li><strong>17 Species:</strong> 12 Sunfish (Bluegill, Redear, Green Sunfish, Longear, Pumpkinseed, Redbreast, Warmouth, Rock Bass, Flier, Spotted Sunfish, Shadow Bass, Sacramento Perch) + 3 Bass (Largemouth, Smallmouth, Spotted) + 2 Crappie (Black, White)</li>
+                        <li><strong>7-Day Physics-Based Forecasts:</strong> Water temp evolution using real weather data</li>
+                        <li><strong>Current Conditions:</strong> Real-time weather, water temp estimate, fish phase</li>
+                        <li><strong>Depth Analysis:</strong> Temperature estimates at surface, 4ft, 10ft, 20ft</li>
+                        <li><strong>Fishing Scores:</strong> 0-100 rating based on all factors combined</li>
+                        <li><strong>Technique Tips:</strong> What to use based on current conditions</li>
+                        <li><strong>Community Reports:</strong> Submit and benefit from crowd-sourced water temps</li>
+                        <li><strong>Mobile Friendly:</strong> Works on any device, no app install needed</li>
+                    </ul>
                     
-                    <div style="margin-top: 30px; text-align: center;">
-                        <button class="action-btn" onclick="window.closeAbout()" style="min-width: 120px;">Close</button>
+                    <!-- Contact -->
+                    <div style="margin-top: 30px; padding: 20px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                        <p style="color: var(--text-secondary); line-height: 1.7; margin: 0;">
+                            <strong>Questions, feedback, or bug reports?</strong><br>
+                            Email us at <a href="mailto:info@thesouthernbluegill.com" style="color: var(--accent); text-decoration: none; font-weight: bold;">info@thesouthernbluegill.com</a>
+                        </p>
+                    </div>
+                    
+                    <div style="margin-top: 25px; text-align: center;">
+                        <button class="action-btn" onclick="window.closeAbout()" style="min-width: 150px;">Close</button>
                     </div>
                 </div>
             </div>
