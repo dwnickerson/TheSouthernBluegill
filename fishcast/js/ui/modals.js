@@ -1,5 +1,5 @@
-// Modal Handlers with Gamification - VERSION 3.3.13 COMPREHENSIVE ABOUT
-console.log('📦 modals.js VERSION 3.3.13 loaded - COMPREHENSIVE ABOUT PAGE');
+// Modal Handlers with Gamification - VERSION 3.3.14 DATE/TIME FIX
+console.log('📦 modals.js VERSION 3.3.14 loaded - MEASUREMENT DATE/TIME CAPTURE');
 
 import { storage } from '../services/storage.js';
 
@@ -108,6 +108,18 @@ export function openTempReportModal() {
                     </div>
                     
                     <div class="form-group">
+                        <label for="tempReportDate">Date of Measurement</label>
+                        <input type="date" id="tempReportDate" required>
+                        <small>When did you take this reading?</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tempReportTime">Time of Measurement</label>
+                        <input type="time" id="tempReportTime" required>
+                        <small>What time did you take this reading?</small>
+                    </div>
+                    
+                    <div class="form-group">
                         <label for="tempReportTemp">Water Temperature (°F)</label>
                         <input type="number" id="tempReportTemp" min="32" max="100" step="0.1" placeholder="e.g., 54.5" required>
                         <small>Surface temp from thermometer or fish finder</small>
@@ -148,6 +160,24 @@ export function openTempReportModal() {
     console.log('🔵 Inserting modal HTML into page...');
     document.body.insertAdjacentHTML('beforeend', modalHTML);
     console.log('✅ Modal HTML inserted');
+    
+    // Set default date and time to NOW
+    const now = new Date();
+    const dateInput = document.getElementById('tempReportDate');
+    const timeInput = document.getElementById('tempReportTime');
+    
+    // Format date as YYYY-MM-DD
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    dateInput.value = `${year}-${month}-${day}`;
+    
+    // Format time as HH:MM
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    timeInput.value = `${hours}:${minutes}`;
+    
+    console.log(`🕐 Default measurement time set to: ${dateInput.value} ${timeInput.value}`);
     
     // Check if form exists
     const form = document.getElementById('tempReportForm');
@@ -240,7 +270,35 @@ export async function handleTempReportSubmit() {
     const clarity = document.getElementById('tempReportClarity').value || '';
     const notes = document.getElementById('tempReportNotes').value || '';
     
-    console.log('Form data:', { waterbodyName, location, waterBody, temperature, depth, clarity, notes });
+    // Get measurement date and time
+    const measurementDate = document.getElementById('tempReportDate').value;
+    const measurementTime = document.getElementById('tempReportTime').value;
+    
+    // Validate date/time
+    if (!measurementDate || !measurementTime) {
+        showNotification('❌ Please enter the date and time of your measurement', 'error');
+        return;
+    }
+    
+    // Create timestamp from user-entered date and time
+    const measurementDateTime = new Date(`${measurementDate}T${measurementTime}`);
+    const now = new Date();
+    
+    // Validate not in the future (allow 5 minute grace period for clock differences)
+    if (measurementDateTime.getTime() > now.getTime() + (5 * 60 * 1000)) {
+        showNotification('❌ Measurement time cannot be in the future', 'error');
+        return;
+    }
+    
+    // Validate not too old (max 30 days in the past for data quality)
+    const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+    if (measurementDateTime.getTime() < thirtyDaysAgo.getTime()) {
+        showNotification('⚠️ Measurements older than 30 days may not be accurate. Please submit recent data.', 'error');
+        return;
+    }
+    
+    console.log('Form data:', { waterbodyName, location, waterBody, temperature, depth, clarity, notes, measurementDate, measurementTime });
+    console.log('Measurement timestamp:', measurementDateTime.toISOString());
     console.log('Form data types:', {
         waterbodyName: typeof waterbodyName,
         waterBody: typeof waterBody,
@@ -317,7 +375,7 @@ export async function handleTempReportSubmit() {
     
     // NEW ORDER: A, B, C, D, E, F, G, H, I, J, K
     const data = {
-        timestamp: new Date().toISOString(),     // A
+        timestamp: measurementDateTime.toISOString(),  // A - ACTUAL measurement time, not submission time
         location,                                 // B
         latitude: lat,                            // C (from geocoding)
         longitude: lon,                           // D (from geocoding)
