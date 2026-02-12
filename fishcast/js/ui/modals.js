@@ -1,5 +1,5 @@
-// Modal Handlers with Gamification - VERSION 3.3.4 GOOGLE SHEETS
-console.log('📦 modals.js VERSION 3.3.4 loaded - GOOGLE SHEETS INTEGRATION');
+// Modal Handlers with Gamification - VERSION 3.3.9 COMPLETE
+console.log('📦 modals.js VERSION 3.3.9 loaded - WATER CLARITY ADDED');
 
 import { storage } from '../services/storage.js';
 
@@ -82,21 +82,28 @@ export function openTempReportModal() {
                 
                 <form id="tempReportForm" action="" onsubmit="event.preventDefault(); return false;">
                     <div class="form-group">
-                        <label for="tempReportLocation">Location</label>
+                        <label for="tempReportWaterbody">Water Body Name</label>
+                        <input type="text" id="tempReportWaterbody" placeholder="e.g., Pickwick Lake, Smith Pond" required>
+                        <small>Name of the specific lake, pond, or river</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tempReportLocation">Location (City, State)</label>
                         <div style="display: flex; gap: 10px;">
-                            <input type="text" id="tempReportLocation" placeholder="Lake/pond name or city" required>
+                            <input type="text" id="tempReportLocation" placeholder="e.g., Counce, TN" required>
                             <button type="button" id="tempReportGeoBtn" style="width: 56px; min-width: 56px;" title="Use my location">📍</button>
                         </div>
-                        <small>Example: "Pickwick Lake" or "Tupelo, MS"</small>
+                        <small>City and state where the water body is located</small>
                     </div>
                     
                     <div class="form-group">
                         <label for="tempReportWaterBody">Water Body Type</label>
                         <select id="tempReportWaterBody" required>
                             <option value="">Select type</option>
-                            <option value="pond">Pond</option>
-                            <option value="lake">Lake</option>
-                            <option value="river">River</option>
+                            <option value="pond">Pond (< 20 acres)</option>
+                            <option value="lake">Lake (> 20 acres)</option>
+                            <option value="river">River/Stream</option>
+                            <option value="reservoir">Reservoir</option>
                         </select>
                     </div>
                     
@@ -110,6 +117,18 @@ export function openTempReportModal() {
                         <label for="tempReportDepth">Depth of Reading (feet)</label>
                         <input type="number" id="tempReportDepth" min="0" max="100" step="0.5" placeholder="e.g., 0 (surface), 8, 15.5" required>
                         <small>Enter 0 for surface, or actual depth from your fish finder</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tempReportClarity">Water Clarity</label>
+                        <select id="tempReportClarity" required>
+                            <option value="">Select clarity</option>
+                            <option value="clear">Clear (6+ ft visibility)</option>
+                            <option value="slightly_stained">Slightly Stained (3-6 ft)</option>
+                            <option value="stained">Stained (1-3 ft)</option>
+                            <option value="muddy">Muddy (< 1 ft)</option>
+                        </select>
+                        <small>How far can you see into the water?</small>
                     </div>
                     
                     <div class="form-group">
@@ -192,13 +211,15 @@ export function openTempReportModal() {
 export async function handleTempReportSubmit() {
     console.log('🌡️ Water temp submission started...');
     
+    const waterbodyName = document.getElementById('tempReportWaterbody').value;
     const location = document.getElementById('tempReportLocation').value;
     const waterBody = document.getElementById('tempReportWaterBody').value;
     const temperature = parseFloat(document.getElementById('tempReportTemp').value);
     const depth = parseFloat(document.getElementById('tempReportDepth').value);
+    const clarity = document.getElementById('tempReportClarity').value;
     const notes = document.getElementById('tempReportNotes').value;
     
-    console.log('Form data:', { location, waterBody, temperature, depth, notes });
+    console.log('Form data:', { waterbodyName, location, waterBody, temperature, depth, clarity, notes });
     
     if (isNaN(depth) || depth < 0) {
         console.warn('Invalid depth:', depth);
@@ -206,21 +227,38 @@ export async function handleTempReportSubmit() {
         return;
     }
     
-    let lat = 0, lon = 0;
-    if (window.currentForecastData) {
-        lat = window.currentForecastData.coords.lat;
-        lon = window.currentForecastData.coords.lon;
+    // Geocode the location to get lat/long
+    console.log('🗺️ Geocoding location:', location);
+    let lat = null, lon = null;
+    try {
+        const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`;
+        const geocodeResponse = await fetch(geocodeUrl);
+        const geocodeData = await geocodeResponse.json();
+        
+        if (geocodeData && geocodeData.length > 0) {
+            lat = parseFloat(geocodeData[0].lat);
+            lon = parseFloat(geocodeData[0].lon);
+            console.log('✅ Geocoded:', { lat, lon });
+        } else {
+            console.warn('⚠️ Could not geocode location');
+        }
+    } catch (error) {
+        console.error('❌ Geocoding error:', error);
     }
     
+    // NEW ORDER: A, B, C, D, E, F, G, H, I, J, K
     const data = {
-        timestamp: new Date().toISOString(),
-        location,
-        latitude: lat,
-        longitude: lon,
-        waterBody,
-        temperature,
-        depth,
-        notes
+        timestamp: new Date().toISOString(),     // A
+        location,                                 // B
+        latitude: lat,                            // C (from geocoding)
+        longitude: lon,                           // D (from geocoding)
+        waterbodyName,                            // E
+        waterBody,                                // F
+        temperature,                              // G
+        depth,                                    // H
+        clarity,                                  // I (NEW!)
+        notes,                                    // J
+        userAgent: navigator.userAgent            // K
     };
     
     console.log('Submitting data:', data);
@@ -293,31 +331,195 @@ export function submitCatchLog() {
 }
 
 export function openSettings() {
-    console.log('Settings feature coming soon!');
+    const darkMode = storage.get('darkMode') || 'false';
+    const stats = getUserStats();
+    
+    const modalHTML = `
+        <div class="modal show" id="settingsModal" onclick="if(event.target === this) window.closeSettings()">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <span class="modal-close" onclick="window.closeSettings()">×</span>
+                    ⚙️ Settings
+                </div>
+                
+                <div style="padding: 20px;">
+                    <h4 style="margin-top: 0; color: var(--text-primary);">🎨 Appearance</h4>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin: 15px 0; padding: 15px; background: var(--bg-primary); border-radius: 8px;">
+                        <div>
+                            <div style="font-weight: 600; color: var(--text-primary);">Dark Mode</div>
+                            <div style="font-size: 0.9rem; color: var(--text-secondary);">Toggle dark/light theme</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="darkModeToggle" ${darkMode === 'true' ? 'checked' : ''}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    
+                    <h4 style="margin-top: 30px; color: var(--text-primary);">📊 Your Stats</h4>
+                    
+                    <div style="background: var(--bg-primary); padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent);">${stats.totalReports}</div>
+                                <div style="color: var(--text-secondary); font-size: 0.9rem;">Water Temp Reports</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent);">${stats.helpedAnglers}</div>
+                                <div style="color: var(--text-secondary); font-size: 0.9rem;">Anglers Helped</div>
+                            </div>
+                        </div>
+                        
+                        ${stats.badges.length > 0 ? `
+                            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border);">
+                                <div style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 8px;">Badges Earned:</div>
+                                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                    ${stats.badges.map(badge => {
+                                        const badges = {
+                                            'first_reporter': '🏆 First Report',
+                                            'dedicated': '🌟 Dedicated',
+                                            'expert': '💎 Expert'
+                                        };
+                                        return `<span style="background: var(--accent); color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.85rem;">${badges[badge] || badge}</span>`;
+                                    }).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <h4 style="margin-top: 30px; color: var(--text-primary);">💾 Data</h4>
+                    
+                    <div style="display: flex; gap: 10px; margin: 15px 0;">
+                        <button class="action-btn" onclick="window.exportUserData()" style="flex: 1;">
+                            📤 Export My Data
+                        </button>
+                        <button class="action-btn" onclick="if(confirm('Clear all your local data? This cannot be undone.')) window.clearUserData()" style="flex: 1;">
+                            🗑️ Clear All Data
+                        </button>
+                    </div>
+                    
+                    <div style="margin-top: 30px; text-align: center;">
+                        <button class="action-btn success" onclick="window.saveSettings()" style="min-width: 120px;">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Add event listener for dark mode toggle
+    document.getElementById('darkModeToggle').addEventListener('change', (e) => {
+        const enabled = e.target.checked;
+        if (enabled) {
+            document.body.classList.add('dark-mode');
+        } else {
+            document.body.classList.remove('dark-mode');
+        }
+    });
 }
 
 export function closeSettings() {
-    console.log('Settings feature coming soon!');
+    const modal = document.getElementById('settingsModal');
+    if (modal) modal.remove();
 }
 
 export function saveSettings() {
-    console.log('Settings feature coming soon!');
+    const darkMode = document.getElementById('darkModeToggle').checked;
+    storage.set('darkMode', darkMode.toString());
+    
+    showNotification('⚙️ Settings saved!', 'success');
+    closeSettings();
 }
 
 export function exportAllData() {
-    console.log('Export feature coming soon!');
+    const stats = getUserStats();
+    const darkMode = storage.get('darkMode') || 'false';
+    
+    const data = {
+        exportDate: new Date().toISOString(),
+        version: '3.3.7',
+        userStats: stats,
+        settings: {
+            darkMode: darkMode
+        }
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fishcast-data-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showNotification('📤 Data exported successfully!', 'success');
 }
 
 export function clearAllData() {
-    console.log('Clear data feature coming soon!');
+    storage.clear();
+    showNotification('🗑️ All data cleared!', 'success');
+    setTimeout(() => {
+        window.location.reload();
+    }, 1500);
 }
 
 export function openAbout() {
-    alert('FishCast v3.3\nBy The Southern Bluegill Association\n\nScientifically accurate fishing forecasts!');
+    const modalHTML = `
+        <div class="modal show" id="aboutModal" onclick="if(event.target === this) window.closeAbout()">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <span class="modal-close" onclick="window.closeAbout()">×</span>
+                    🎣 About FishCast
+                </div>
+                
+                <div style="padding: 20px;">
+                    <h3 style="margin-top: 0; color: var(--accent);">FishCast v3.3.6</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                        By The Southern Bluegill Association
+                    </p>
+                    
+                    <h4 style="color: var(--text-primary); margin-top: 20px;">🔬 Scientifically Accurate Forecasts</h4>
+                    <p style="color: var(--text-secondary); line-height: 1.6;">
+                        FishCast uses real biological data to predict fish behavior. Our forecasts are based on:
+                    </p>
+                    <ul style="color: var(--text-secondary); line-height: 1.8;">
+                        <li>Species-specific temperature preferences</li>
+                        <li>Spawning behavior patterns</li>
+                        <li>Weather conditions</li>
+                        <li>Moon phase & solunar theory</li>
+                        <li>Water clarity modeling</li>
+                    </ul>
+                    
+                    <h4 style="color: var(--text-primary); margin-top: 20px;">🌡️ Community Water Temps</h4>
+                    <p style="color: var(--text-secondary); line-height: 1.6;">
+                        Help improve forecasts by submitting water temperature readings. Your data helps the entire fishing community!
+                    </p>
+                    
+                    <h4 style="color: var(--text-primary); margin-top: 20px;">🐟 12 Sunfish Species</h4>
+                    <p style="color: var(--text-secondary); line-height: 1.6;">
+                        Bluegill, Redear, Green, Longear, Pumpkinseed, Redbreast, Warmouth, Rock Bass, Flier, Spotted, Shadow Bass, and Sacramento Perch.
+                    </p>
+                    
+                    <h4 style="color: var(--text-primary); margin-top: 20px;">🔒 Privacy</h4>
+                    <p style="color: var(--text-secondary); line-height: 1.6; font-size: 0.9rem;">
+                        We collect water temperature readings, location (city/state), and device type. We do NOT collect names, email addresses, or precise GPS coordinates unless you generate a forecast first. Data is used to improve fishing forecasts for the community. Your submissions are anonymous.
+                    </p>
+                    
+                    <div style="margin-top: 30px; text-align: center;">
+                        <button class="action-btn" onclick="window.closeAbout()" style="min-width: 120px;">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
 }
 
 export function closeAbout() {
-    console.log('About closed');
+    const modal = document.getElementById('aboutModal');
+    if (modal) modal.remove();
 }
 
 export function showNotification(message, type = 'info') {
@@ -376,6 +578,14 @@ export const submitTempReport = handleTempReportSubmit;
 window.openTempReport = openTempReportModal;
 window.closeTempReport = closeTempReportModal;
 window.handleWaterTempSubmit = handleTempReportSubmit;
+window.showNotification = showNotification;
+window.openAbout = openAbout;
+window.closeAbout = closeAbout;
+window.openSettings = openSettings;
+window.closeSettings = closeSettings;
+window.saveSettings = saveSettings;
+window.exportUserData = exportAllData;
+window.clearUserData = clearAllData;
 
 // Export for other modules
 export { getUserStats, updateUserStats };

@@ -1,10 +1,11 @@
-// Enhanced Forecast UI Rendering with Weather Icons & Clickable Days
+// Enhanced Forecast UI Rendering with Weather Icons & Clickable Days - v3.4.0 PHYSICS
 import { SPECIES_DATA } from '../config/species.js';
 import { cToF, kmhToMph, getWindDirection } from '../utils/math.js';
 import { formatDate, formatDateShort } from '../utils/date.js';
 import { calculateFishingScore, getTechniqueTips, getPressureTrend } from '../models/fishingScore.js';
 import { calculateSolunar } from '../models/solunar.js';
 import { estimateTempByDepth } from '../models/waterTemp.js';
+import { WATER_BODIES_V2 } from '../config/waterBodies.js';
 
 // Get weather icon based on code
 function getWeatherIcon(code) {
@@ -43,6 +44,76 @@ function getPrecipIcon(percentage) {
     if (percentage >= 40) return '🌧️'; // Rain Likely
     if (percentage >= 1) return '🌦️';  // Chance of Rain
     return '☀️'; // Clear (0% only)
+}
+
+// ===== PHYSICS-BASED WATER TEMPERATURE EVOLUTION =====
+// Calculate how water temp changes day-by-day using thermal physics
+function calculateWaterTempEvolution(initialWaterTemp, forecastData, waterType, latitude) {
+    const body = WATER_BODIES_V2[waterType];
+    const temps = [initialWaterTemp]; // Day 0 (today)
+    
+    const { daily } = forecastData;
+    const airTemps = daily.temperature_2m_mean || daily.temperature_2m_max; // Use what's available
+    const cloudCover = daily.cloud_cover_mean || [];
+    const windSpeeds = daily.wind_speed_10m_max || [];
+    
+    // For each future day, calculate water temp change using physics
+    for (let day = 0; day < 7; day++) {
+        const currentWaterTemp = temps[temps.length - 1];
+        const airTemp = cToF(airTemps[day]);
+        const clouds = cloudCover[day] || 50;
+        const windKmh = windSpeeds[day] || 0;
+        const windMph = windKmh * 0.621371;
+        
+        // 1. Thermal Inertia Effect (water resists change)
+        const tempDelta = airTemp - currentWaterTemp;
+        const baseInertia = body.thermal_lag_days === 5 ? 0.15 : 
+                           body.thermal_lag_days === 10 ? 0.08 : 0.05;
+        
+        // Use hyperbolic tangent for realistic saturation
+        const responseFactor = Math.tanh(Math.abs(tempDelta) / 15);
+        const thermalChange = tempDelta * baseInertia * responseFactor;
+        
+        // 2. Solar Radiation Effect (clear vs cloudy)
+        // Normal cloud cover varies by season (approximation)
+        const normalClouds = 45; // Average
+        const cloudDev = normalClouds - clouds;
+        // Clear skies = more warming, cloudy = less
+        const solarEffect = cloudDev * 0.05; // ±2-3°F for big deviations
+        
+        // 3. Wind Mixing Effect (only significant if strong AND temp difference)
+        let windEffect = 0;
+        if (windMph > body.mixing_wind_threshold) {
+            const windExcess = windMph - body.mixing_wind_threshold;
+            if (currentWaterTemp - airTemp > 5) {
+                // Warm water + wind = cooling (evaporation)
+                windEffect = -0.3 * windExcess;
+                windEffect = Math.max(-2, windEffect); // Cap at -2°F
+            } else if (airTemp - currentWaterTemp > 5) {
+                // Cool water + wind = slight warming (mixing)
+                windEffect = 0.15 * windExcess;
+                windEffect = Math.min(1.5, windEffect); // Cap at +1.5°F
+            }
+        }
+        
+        // 4. Combine all effects
+        let newTemp = currentWaterTemp + thermalChange + solarEffect + windEffect;
+        
+        // 5. Apply physical constraints
+        const maxChange = body.max_daily_change;
+        const actualChange = newTemp - currentWaterTemp;
+        
+        if (Math.abs(actualChange) > maxChange) {
+            newTemp = currentWaterTemp + (Math.sign(actualChange) * maxChange);
+        }
+        
+        // 6. Absolute limits
+        newTemp = Math.max(32, Math.min(95, newTemp));
+        
+        temps.push(newTemp);
+    }
+    
+    return temps; // Returns [day0, day1, day2, ..., day7]
 }
 
 export function renderForecast(data) {
@@ -234,7 +305,7 @@ export function renderForecast(data) {
     
     // Multi-day forecast if requested
     if (days > 1) {
-        html += renderMultiDayForecast(weather, speciesKey, waterType, coords);
+        html += renderMultiDayForecast(weather, speciesKey, waterType, coords, waterTemp);
     }
     
     resultsDiv.innerHTML = html;
@@ -271,12 +342,26 @@ function getWeatherDescription(code) {
     return descriptions[code] || 'Unknown';
 }
 
-function renderMultiDayForecast(weather, speciesKey, waterType, coords) {
+function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialWaterTemp) {
     let html = '<div class="multi-day-forecast"><h3>📅 Extended Forecast</h3><div class="forecast-days">';
     
     const dailyData = weather.forecast.daily;
     
-    for (let i = 0; i < dailyData.time.length; i++) {
+    // 🔬 PHYSICS: Calculate water temps for all days using thermal model
+    const waterTemps = calculateWaterTempEvolution(
+        initialWaterTemp, 
+        weather.forecast, 
+        waterType,
+        coords.lat
+    );
+    
+    // Store globally for day detail modal
+    window.waterTempsEvolution = waterTemps;
+    
+    console.log('🌡️ Water temp evolution (physics):', waterTemps.map(t => t.toFixed(1) + '°F').join(' → '));
+    
+    // Start from day 1 (tomorrow) instead of day 0 (today)
+    for (let i = 1; i < dailyData.time.length; i++) {
         const date = dailyData.time[i];
         const maxTemp = cToF(dailyData.temperature_2m_max[i]);
         const minTemp = cToF(dailyData.temperature_2m_min[i]);
@@ -301,6 +386,7 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords) {
                 <div class="day-score ${scoreClass}">${Math.round(estimatedScore)}</div>
                 <div class="day-temp">${maxTemp.toFixed(0)}° / ${minTemp.toFixed(0)}°</div>
                 <div class="day-precip">${getPrecipIcon(precipProb)} ${precipProb}%</div>
+                <div style="font-size: 0.85em; color: #888; margin-top: 4px;">💧 ${waterTemps[i].toFixed(1)}°F</div>
             </div>
         `;
     }
@@ -329,10 +415,10 @@ window.showDayDetails = function(dayIndex, date) {
     const weatherDesc = getWeatherDescription(weatherCode);
     const precipIcon = getPrecipIcon(precipProb);
     
-    // Estimate water temp for this day (rough approximation)
-    // Water temp lags air temp by ~1-2 weeks depending on water body
-    const lagDays = data.waterType === 'pond' ? 7 : data.waterType === 'lake' ? 12 : 18;
-    const waterTempEstimate = data.waterTemp + ((avgAirTemp - data.waterTemp) * (1 / lagDays));
+    // 🔬 PHYSICS: Use pre-calculated water temp from thermal evolution model
+    const waterTempEstimate = window.waterTempsEvolution 
+        ? window.waterTempsEvolution[dayIndex] 
+        : data.waterTemp + ((avgAirTemp - data.waterTemp) / 10); // Fallback if not available
     
     // Get fish phase based on estimated water temp
     const speciesData = SPECIES_DATA[data.speciesKey];
