@@ -1037,15 +1037,134 @@ export function closeTempReportModal() {
 
 // Stub functions for features not yet implemented
 export function openCatchLog() {
-    console.log('Catch log feature coming soon!');
+    const modal = document.getElementById('catchLogModal');
+    if (!modal) {
+        showNotification('Catch log modal is unavailable right now.', 'error');
+        return;
+    }
+
+    const now = new Date();
+    const dateTimeInput = document.getElementById('catchDateTime');
+    const locationInput = document.getElementById('catchLocation');
+    const speciesInput = document.getElementById('catchSpecies');
+    const selectedSpecies = document.getElementById('species')?.value;
+
+    if (dateTimeInput && !dateTimeInput.value) {
+        dateTimeInput.value = now.toISOString().slice(0, 16);
+    }
+
+    if (locationInput && !locationInput.value) {
+        locationInput.value = document.getElementById('location')?.value || '';
+    }
+
+    if (speciesInput && selectedSpecies) {
+        const speciesMap = {
+            bluegill: 'bluegill',
+            coppernose: 'bluegill',
+            redear: 'bluegill',
+            green_sunfish: 'bluegill',
+            warmouth: 'bluegill',
+            longear: 'bluegill',
+            rock_bass: 'bass',
+            bass: 'bass',
+            smallmouth: 'bass',
+            spotted: 'bass',
+            white_crappie: 'crappie',
+            black_crappie: 'crappie'
+        };
+        const mappedSpecies = speciesMap[selectedSpecies] || 'bluegill';
+        speciesInput.value = mappedSpecies;
+    }
+
+    modal.classList.add('show');
+
+    if (!document.getElementById('catchLogHistory')) {
+        const history = document.createElement('div');
+        history.id = 'catchLogHistory';
+        document.querySelector('#catchLogModal .modal-content')?.appendChild(history);
+    }
+
+    renderCatchLogHistory();
 }
 
+
+function renderCatchLogHistory() {
+    const historyContainer = document.getElementById('catchLogHistory');
+    if (!historyContainer) return;
+
+    const catches = storage.getCatches();
+    if (!catches || catches.length === 0) {
+        historyContainer.innerHTML = `
+            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                <h4 style="margin: 0 0 8px;">Recent Catches</h4>
+                <p style="margin: 0; color: var(--text-secondary);">No catches logged yet.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const items = catches.slice(0, 5).map((entry) => {
+        const when = entry.dateTime ? new Date(entry.dateTime) : null;
+        const whenLabel = when && !Number.isNaN(when.getTime())
+            ? when.toLocaleString()
+            : 'Unknown time';
+
+        return `
+            <div style="padding: 8px 0; border-bottom: 1px solid var(--border-color);">
+                <div style="font-weight: 700;">${entry.count} ${entry.species}</div>
+                <div style="font-size: 0.9rem; color: var(--text-secondary);">${entry.location} · ${whenLabel}</div>
+            </div>
+        `;
+    }).join('');
+
+    historyContainer.innerHTML = `
+        <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+            <h4 style="margin: 0 0 8px;">Recent Catches</h4>
+            ${items}
+        </div>
+    `;
+}
 export function closeCatchLog() {
-    console.log('Catch log feature coming soon!');
+    const modal = document.getElementById('catchLogModal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
 }
 
-export function submitCatchLog() {
-    console.log('Catch log feature coming soon!');
+export function submitCatchLog(event) {
+    event?.preventDefault();
+
+    const species = document.getElementById('catchSpecies')?.value;
+    const count = parseInt(document.getElementById('catchCount')?.value || '0', 10);
+    const dateTime = document.getElementById('catchDateTime')?.value;
+    const location = document.getElementById('catchLocation')?.value?.trim();
+    const notes = document.getElementById('catchNotes')?.value?.trim() || '';
+
+    if (!species || !count || !dateTime || !location) {
+        showNotification('Please complete all required catch log fields.', 'error');
+        return;
+    }
+
+    const catchEntry = {
+        id: `catch_${Date.now()}`,
+        species,
+        count,
+        dateTime,
+        location,
+        notes,
+        createdAt: new Date().toISOString()
+    };
+
+    const saved = storage.addCatch(catchEntry);
+    if (!saved) {
+        showNotification('Unable to save catch log. Please try again.', 'error');
+        return;
+    }
+
+    document.getElementById('catchLogForm')?.reset();
+    renderCatchLogHistory();
+    closeCatchLog();
+    showNotification(`✅ Catch logged. Re-open Log Catch to view recent entries.`, 'success');
 }
 
 export function openSettings() {
@@ -1403,7 +1522,42 @@ export function showNotification(message, type = 'info') {
 window.showNotification = showNotification;
 
 export function shareForecast() {
-    console.log('Share feature coming soon!');
+    const score = document.querySelector('.score-display')?.textContent?.trim();
+    const rating = document.querySelector('.rating')?.textContent?.trim();
+    const location = document.getElementById('location')?.value?.trim();
+    const speciesLabel = document.querySelector('#species option:checked')?.textContent?.trim();
+
+    if (!score || !rating) {
+        showNotification('Generate a forecast before sharing.', 'error');
+        return;
+    }
+
+    const shareText = [
+        '🎣 FishCast Forecast',
+        `${location || 'My spot'} · ${speciesLabel || 'Fishing'}`,
+        `Score: ${score} (${rating})`,
+        `Check yours: ${window.location.href}`
+    ].join('\n');
+
+    if (navigator.share) {
+        navigator.share({
+            title: 'FishCast Forecast',
+            text: shareText,
+            url: window.location.href
+        }).catch(() => {
+            // user cancelled share sheet
+        });
+        return;
+    }
+
+    if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(shareText)
+            .then(() => showNotification('📋 Forecast copied to clipboard!', 'success'))
+            .catch(() => showNotification('Unable to copy forecast text.', 'error'));
+        return;
+    }
+
+    showNotification('Sharing is not supported on this browser.', 'error');
 }
 
 export function saveFavorite(locationData) {

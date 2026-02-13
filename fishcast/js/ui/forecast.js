@@ -682,7 +682,7 @@ export function renderForecast(data) {
     
     // Multi-day forecast if requested
     if (days > 1) {
-        html += renderMultiDayForecast(weather, speciesKey, waterType, coords, waterTemp);
+        html += renderMultiDayForecast(weather, speciesKey, waterType, coords, waterTemp, solunar.moon_phase_percent);
     }
     
     resultsDiv.innerHTML = html;
@@ -719,7 +719,7 @@ function getWeatherDescription(code) {
     return descriptions[code] || 'Unknown';
 }
 
-function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialWaterTemp) {
+function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialWaterTemp, moonPhasePercent = 50) {
     let html = '<div class="multi-day-forecast"><h3>📅 Extended Forecast</h3><div class="forecast-days">';
     
     const dailyData = weather.forecast.daily;
@@ -750,24 +750,41 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
         const windSpeed = dailyData.wind_speed_10m_max ? kmhToMph(dailyData.wind_speed_10m_max[i]) : 0;
         const windDir = dailyData.wind_direction_10m_dominant ? getWindDirection(dailyData.wind_direction_10m_dominant[i]) : '';
         
-        // Simple score estimation for future days
-        const avgTemp = (maxTemp + minTemp) / 2;
-        const estimatedScore = Math.max(30, Math.min(85, 50 + (avgTemp - 60) * 0.5));
-        
-        let scoreClass = 'fair';
-        if (estimatedScore >= 80) scoreClass = 'excellent';
-        else if (estimatedScore >= 65) scoreClass = 'good';
-        else if (estimatedScore >= 50) scoreClass = 'fair';
-        else scoreClass = 'poor';
+        // Build a day-specific weather object and use the full scoring model
+        const dayPressure = dailyData.surface_pressure_mean?.[i] || weather.forecast.current.surface_pressure || 1013;
+        const dayWind = dailyData.wind_speed_10m_max?.[i] || 0;
+        const dayClouds = dailyData.cloud_cover_mean?.[i] ?? weather.forecast.current.cloud_cover ?? 50;
+        const dayCode = dailyData.weather_code[i];
+        const dayPrecipProb = dailyData.precipitation_probability_max?.[i] || 0;
+
+        const scoreWeather = {
+            current: {
+                surface_pressure: dayPressure,
+                wind_speed_10m: dayWind,
+                cloud_cover: dayClouds,
+                weather_code: dayCode
+            },
+            hourly: {
+                surface_pressure: [dayPressure, dayPressure, dayPressure, dayPressure, dayPressure, dayPressure],
+                precipitation_probability: [dayPrecipProb]
+            },
+            daily: {
+                precipitation_sum: dailyData.precipitation_sum || []
+            }
+        };
+
+        const estimated = calculateFishingScore(scoreWeather, waterTemps[i], speciesKey, moonPhasePercent);
+        const estimatedScore = estimated.score;
+        const scoreClass = estimated.colorClass;
         
         html += `
             <div class="forecast-day-card" onclick="window.showDayDetails(${i}, '${date}')" data-day="${i}">
                 <div class="day-header">${formatDateShort(date)}</div>
                 <div style="font-size: 2rem; margin: 10px 0;">${weatherIcon}</div>
-                <div class="day-score ${scoreClass}">${Math.round(estimatedScore)}</div>
+                <div class="day-score ${scoreClass}" title="Estimated fishing score">${Math.round(estimatedScore)}</div>
                 <div class="day-temp">${maxTemp.toFixed(0)}° / ${minTemp.toFixed(0)}°</div>
                 <div class="day-precip">${getPrecipIcon(precipProb)} ${precipProb}%</div>
-                <div style="font-size: 0.85em; color: #888; margin-top: 4px;">💧 ${waterTemps[i].toFixed(1)}°F</div>
+                <div style="font-size: 0.85em; color: #888; margin-top: 4px;">🎯 Est. score · 💧 ${waterTemps[i].toFixed(1)}°F</div>
                 <div style="font-size: 0.85em; color: #888;">💨 ${windSpeed.toFixed(0)} mph ${windDir}</div>
             </div>
         `;
