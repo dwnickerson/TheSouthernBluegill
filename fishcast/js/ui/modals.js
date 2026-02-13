@@ -301,7 +301,7 @@ export function openQuickReportModal() {
         <div id="quickReportModal" class="modal" style="display: flex;">
             <div class="modal-content quick-report">
                 <div class="modal-header">
-                    <h2>⚡ Quick Report</h2>
+                    <h2>⚡</h2>
                     <button class="close-btn" onclick="closeQuickReport()">×</button>
                 </div>
                 
