@@ -301,7 +301,7 @@ export function openQuickReportModal() {
         <div id="quickReportModal" class="modal" style="display: flex;">
             <div class="modal-content quick-report">
                 <div class="modal-header">
-                    <h2>⚡</h2>
+                    <h2>⚡ Quick Report</h2>
                     <button class="close-btn" onclick="closeQuickReport()">×</button>
                 </div>
                 
@@ -982,21 +982,27 @@ export async function handleTempReportSubmit() {
         console.log('Showing notification...');
         showNotification(`✅ Report submitted! ${impactMsg}`, 'success');
         
-        // Add closing animation and close modal
-        setTimeout(() => {
-            console.log('Closing modal...');
-            const modal = document.getElementById('tempReportModal');
-            if (modal) {
-                // Add fade-out animation
-                modal.style.opacity = '0';
-                modal.style.transition = 'opacity 0.3s ease';
-                
-                // Remove after animation completes
-                setTimeout(() => {
-                    window.closeTempReport();
-                }, 300);
-            }
-        }, 500);
+        // MOBILE FIX: Close instantly on mobile, animate on desktop
+        const isMobile = window.innerWidth <= 768;
+        
+        if (isMobile) {
+            // Instant close on mobile (no animation delays that could fail)
+            console.log('📱 Mobile detected - instant close');
+            window.closeTempReport();
+        } else {
+            // Desktop: Nice animated close
+            console.log('💻 Desktop detected - animated close');
+            setTimeout(() => {
+                const modal = document.getElementById('tempReportModal');
+                if (modal) {
+                    modal.style.opacity = '0';
+                    modal.style.transition = 'opacity 0.3s ease';
+                    setTimeout(() => {
+                        window.closeTempReport();
+                    }, 300);
+                }
+            }, 500);
+        }
         
     } catch (error) {
         console.error('❌ Error submitting to Google Sheets:', error);
@@ -1010,9 +1016,17 @@ export async function handleTempReportSubmit() {
         
         showNotification(`⚠️ Report saved locally! ${impactMsg}`, 'success');
         
-        setTimeout(() => {
+        // MOBILE FIX: Close instantly on mobile
+        const isMobile = window.innerWidth <= 768;
+        
+        if (isMobile) {
+            console.log('📱 Mobile - instant close on error');
             window.closeTempReport();
-        }, 300);
+        } else {
+            setTimeout(() => {
+                window.closeTempReport();
+            }, 300);
+        }
     }
 }
 
