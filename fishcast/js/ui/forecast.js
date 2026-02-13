@@ -784,7 +784,7 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
                 <div class="day-score ${scoreClass}"title="Estimated fishing score">${Math.round(estimatedScore)}</div>
                 <div class="day-temp">${maxTemp.toFixed(0)}° / ${minTemp.toFixed(0)}°</div>
                 <div class="day-precip">${getPrecipIcon(precipProb)} ${precipProb}%</div>
-                <div style="font-size: 0.85em; color: #888; margin-top: 4px;">🎯 Est. score · 💧 ${waterTemps[i].toFixed(1)}°F</div>
+                <div style="font-size: 0.85em; color: #888; margin-top: 4px;">💧 ${waterTemps[i].toFixed(1)}°F</div>
                 <div style="font-size: 0.85em; color: #888;">💨 ${windSpeed.toFixed(0)} mph ${windDir}</div>
             </div>
         `;
