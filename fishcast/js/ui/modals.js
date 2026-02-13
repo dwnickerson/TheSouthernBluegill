@@ -982,9 +982,6 @@ export async function handleTempReportSubmit() {
         console.log('Showing notification...');
         showNotification(`✅ Report submitted! ${impactMsg}`, 'success');
         
-        // FIX: Reset button state (was missing!)
-        resetSubmitButton();
-        
         // Add closing animation and close modal
         setTimeout(() => {
             console.log('Closing modal...');
@@ -996,6 +993,8 @@ export async function handleTempReportSubmit() {
                 
                 // Remove after animation completes
                 setTimeout(() => {
+                    // Reset button BEFORE closing modal
+                    resetSubmitButton();
                     window.closeTempReport();
                 }, 300);
             }
@@ -1014,6 +1013,7 @@ export async function handleTempReportSubmit() {
         showNotification(`⚠️ Report saved locally! ${impactMsg}`, 'success');
         
         setTimeout(() => {
+            resetSubmitButton();
             window.closeTempReport();
         }, 300);
     }
