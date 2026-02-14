@@ -539,6 +539,9 @@ export function renderForecast(data) {
             <div class="location-info">
                 📍 ${coords.name} | 🐟 ${speciesData.name}
             </div>
+            <div class="location-info">
+                📝 ${todaySummary}
+            </div>
         </div>
         
         <div class="action-buttons">
@@ -577,10 +580,6 @@ export function renderForecast(data) {
             
             <div class="detail-card">
                 <h3><span class="cloud-icon"></span>Weather</h3>
-                <div class="detail-row">
-                    <span class="detail-label">Today's Weather Summary</span>
-                    <span class="detail-value">📝 ${todaySummary}</span>
-                </div>
                 <div class="detail-row">
                     <span class="detail-label">Conditions</span>
                     <span class="detail-value">${weatherIcon} ${getWeatherDescription(weather.forecast.current.weather_code)}</span>
