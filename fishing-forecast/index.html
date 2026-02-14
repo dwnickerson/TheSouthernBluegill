@@ -554,10 +554,49 @@
             padding: 30px;
             box-shadow: var(--shadow);
             transition: all 0.2s;
+            cursor: pointer;
         }
         
         .day-card:hover {
             box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
+
+        .solunar-preview {
+            margin-top: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 2px;
+            padding: 12px;
+            background: var(--bg-primary);
+        }
+
+        .day-details-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        .day-details-item {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 2px;
+            padding: 10px;
+        }
+
+        .day-details-item-label {
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            margin-bottom: 4px;
+        }
+
+        .day-details-item-value {
+            color: var(--text-primary);
+            font-weight: 700;
+            font-size: 0.95rem;
+            line-height: 1.35;
         }
         
         .day-header {
@@ -993,6 +1032,16 @@
         </div>
     </div>
 
+    <div id="dayDetailsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-close" onclick="closeDayDetails()">×</span>
+                <span id="dayDetailsTitle">📅 Day Details</span>
+            </div>
+            <div id="dayDetailsContent"></div>
+        </div>
+    </div>
+
     <!-- Settings Modal -->
     <div id="settingsModal" class="modal">
         <div class="modal-content">
@@ -1356,6 +1405,20 @@
             const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
             const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
             return `${days[date.getDay()]} ${months[date.getMonth()]} ${date.getDate()}`;
+        }
+
+        function getMoonPhaseIcon(phaseName) {
+            const iconMap = {
+                'New Moon': '🌑',
+                'Waxing Crescent': '🌒',
+                'First Quarter': '🌓',
+                'Waxing Gibbous': '🌔',
+                'Full Moon': '🌕',
+                'Waning Gibbous': '🌖',
+                'Last Quarter': '🌗',
+                'Waning Crescent': '🌘'
+            };
+            return iconMap[phaseName] || '🌙';
         }
 
         function calculateSolunar(lat, lon, date) {
@@ -2002,6 +2065,9 @@
 
         const offlineManager = new OfflineManager();
 
+        let dayForecastDetails = [];
+
+
         // ============================================
         // MAIN FORECAST GENERATION
         // ============================================
@@ -2036,6 +2102,8 @@
                     speciesKey
                 );
                 
+                dayForecastDetails = [];
+
                 let html = `
                     <div class="score-header">
                         <h2>Today's Forecast</h2>
@@ -2195,16 +2263,42 @@
                     const futureDate = new Date(date + 'T12:00:00');
                     const daySolunar = calculateSolunar(coords.lat, coords.lon, futureDate);
                     
+                    const moonIcon = getMoonPhaseIcon(daySolunar.moon_phase);
+                    const dayDateLabel = formatDate(date);
+
                     allDailyScores.push({
                         date: date,
                         score: dayScore.score,
                         rating: dayScore.rating,
                         colorClass: dayScore.colorClass
                     });
+
+                    dayForecastDetails.push({
+                        date: date,
+                        dateLabel: dayDateLabel,
+                        score: dayScore.score,
+                        rating: dayScore.rating,
+                        colorClass: dayScore.colorClass,
+                        waterTemp: `${dayWaterTemp.toFixed(1)}°F`,
+                        airTemp: `${cToF(forecast.daily.temperature_2m_max[i]).toFixed(0)}° / ${cToF(forecast.daily.temperature_2m_min[i]).toFixed(0)}°F`,
+                        wind: `${windSpeed.toFixed(1)} mph ${windDir}`,
+                        pressure: `${(pressure * 0.02953).toFixed(2)} inHg (${pressureTrend.replace('_', ' ')})`,
+                        clouds: `${clouds}%`,
+                        precip: `${precip}%`,
+                        sunriseSunset: `${formatTime(forecast.daily.sunrise[i])} / ${formatTime(forecast.daily.sunset[i])}`,
+                        fishPhase: dayScore.phase.replace('_', ' '),
+                        solunar: {
+                            moonIcon: moonIcon,
+                            moonPhase: daySolunar.moon_phase,
+                            illumination: `${daySolunar.illumination.toFixed(0)}%`,
+                            majorPeriods: daySolunar.major_periods,
+                            minorPeriods: daySolunar.minor_periods
+                        }
+                    });
                     
                     html += `
-                        <div class="day-card">
-                            <div class="day-header">${formatDate(date)}</div>
+                        <div class="day-card" onclick="openDayDetails('${date}')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDayDetails('${date}');}">
+                            <div class="day-header">${dayDateLabel}</div>
                             <div class="day-score ${dayScore.colorClass}">${dayScore.score}</div>
                             <div class="day-rating ${dayScore.colorClass}">${dayScore.rating}</div>
                             <div class="weather-detail">
@@ -2232,24 +2326,22 @@
                                 <span class="weather-value">${precip}%</span>
                             </div>
                             <div class="weather-detail">
-                                <span class="weather-label">Moon</span>
-                                <span class="weather-value">${daySolunar.moon_phase} (${daySolunar.illumination.toFixed(0)}%)</span>
-                            </div>
-                            <div class="weather-detail">
-                                <span class="weather-label">Sunrise / Sunset</span>
-                                <span class="weather-value">${formatTime(forecast.daily.sunrise[i])} / ${formatTime(forecast.daily.sunset[i])}</span>
-                            </div>
-                            <div class="weather-detail">
-                                <span class="weather-label">Major Periods</span>
-                                <span class="weather-value">${daySolunar.major_periods[0]}<br>${daySolunar.major_periods[1]}</span>
-                            </div>
-                            <div class="weather-detail">
-                                <span class="weather-label">Minor Periods</span>
-                                <span class="weather-value">${daySolunar.minor_periods[0]}<br>${daySolunar.minor_periods[1]}</span>
-                            </div>
-                            <div class="weather-detail">
                                 <span class="weather-label">Fish Phase</span>
                                 <span class="weather-value">${dayScore.phase.replace('_', ' ')}</span>
+                            </div>
+                            <div class="solunar-preview">
+                                <div class="weather-detail">
+                                    <span class="weather-label">Solunar (Preview)</span>
+                                    <span class="weather-value">${moonIcon} ${daySolunar.moon_phase}</span>
+                                </div>
+                                <div class="weather-detail">
+                                    <span class="weather-label">Major</span>
+                                    <span class="weather-value">${daySolunar.major_periods[0]}</span>
+                                </div>
+                                <div class="weather-detail">
+                                    <span class="weather-label">Minor</span>
+                                    <span class="weather-value">${daySolunar.minor_periods[0]}</span>
+                                </div>
                             </div>
                         </div>
                     `;
@@ -2557,6 +2649,80 @@
 
         // Store forecast data globally for water temp reporting
         window.currentForecastData = null;
+
+        function openDayDetails(dateStr) {
+            const details = dayForecastDetails.find(day => day.date === dateStr);
+            if (!details) return;
+
+            document.getElementById('dayDetailsTitle').textContent = `📅 ${details.dateLabel} Details`;
+            document.getElementById('dayDetailsContent').innerHTML = `
+                <div class="day-details-grid">
+                    <div class="day-details-item">
+                        <div class="day-details-item-label">Fishing Score</div>
+                        <div class="day-details-item-value ${details.colorClass}">${details.score} (${details.rating})</div>
+                    </div>
+                    <div class="day-details-item">
+                        <div class="day-details-item-label">Water Temp</div>
+                        <div class="day-details-item-value">${details.waterTemp}</div>
+                    </div>
+                    <div class="day-details-item">
+                        <div class="day-details-item-label">Air Temp</div>
+                        <div class="day-details-item-value">${details.airTemp}</div>
+                    </div>
+                    <div class="day-details-item">
+                        <div class="day-details-item-label">Wind</div>
+                        <div class="day-details-item-value">${details.wind}</div>
+                    </div>
+                    <div class="day-details-item">
+                        <div class="day-details-item-label">Pressure</div>
+                        <div class="day-details-item-value">${details.pressure}</div>
+                    </div>
+                    <div class="day-details-item">
+                        <div class="day-details-item-label">Clouds / Precip</div>
+                        <div class="day-details-item-value">${details.clouds} / ${details.precip}</div>
+                    </div>
+                    <div class="day-details-item">
+                        <div class="day-details-item-label">Sunrise / Sunset</div>
+                        <div class="day-details-item-value">${details.sunriseSunset}</div>
+                    </div>
+                    <div class="day-details-item">
+                        <div class="day-details-item-label">Fish Phase</div>
+                        <div class="day-details-item-value">${details.fishPhase}</div>
+                    </div>
+                </div>
+                <div class="solunar-preview" style="margin-top: 16px;">
+                    <div style="font-family: 'Cinzel', serif; font-weight: 700; margin-bottom: 10px;">🌙 Full Solunar Data</div>
+                    <div class="day-details-grid" style="margin-top: 0;">
+                        <div class="day-details-item">
+                            <div class="day-details-item-label">Moon Phase</div>
+                            <div class="day-details-item-value">${details.solunar.moonIcon} ${details.solunar.moonPhase} (${details.solunar.illumination})</div>
+                        </div>
+                        <div class="day-details-item">
+                            <div class="day-details-item-label">Major Period 1</div>
+                            <div class="day-details-item-value">${details.solunar.majorPeriods[0]}</div>
+                        </div>
+                        <div class="day-details-item">
+                            <div class="day-details-item-label">Major Period 2</div>
+                            <div class="day-details-item-value">${details.solunar.majorPeriods[1]}</div>
+                        </div>
+                        <div class="day-details-item">
+                            <div class="day-details-item-label">Minor Period 1</div>
+                            <div class="day-details-item-value">${details.solunar.minorPeriods[0]}</div>
+                        </div>
+                        <div class="day-details-item">
+                            <div class="day-details-item-label">Minor Period 2</div>
+                            <div class="day-details-item-value">${details.solunar.minorPeriods[1]}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('dayDetailsModal').classList.add('show');
+        }
+
+        function closeDayDetails() {
+            document.getElementById('dayDetailsModal').classList.remove('show');
+        }
 
         // Settings Modal Functions
         function openSettings() {
