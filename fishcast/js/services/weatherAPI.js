@@ -12,7 +12,7 @@ export async function getWeather(lat, lon, days = APP_CONSTANTS.DEFAULT_FORECAST
         `longitude=${lon}&` +
         `start_date=${startDate}&` +
         `end_date=${endDate}&` +
-        `daily=temperature_2m_mean,temperature_2m_max,temperature_2m_min,cloud_cover_mean,wind_speed_10m_max&` +
+        `daily=temperature_2m_mean,temperature_2m_max,temperature_2m_min,cloud_cover_mean,wind_speed_10m_max,precipitation_sum&` +
         `timezone=auto`;
     
     const historicalResponse = await fetch(historicalUrl);
