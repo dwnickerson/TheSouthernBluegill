@@ -555,7 +555,6 @@ export function renderForecast(data) {
         </div>
         
         <div class="action-buttons">
-            <button class="action-btn primary" onclick="window.openCatchLog()">📊 Log Catch</button>
             <button class="action-btn" onclick="window.shareForecast()">📱 Share</button>
             <button class="action-btn" onclick="window.saveFavorite()">⭐ Save Location</button>
             <button class="action-btn success" onclick="window.openTempReport()">🌡️ Submit Water Temp</button>

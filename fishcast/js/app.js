@@ -15,9 +15,6 @@ import {
     openTempReport,
     closeTempReport,
     submitTempReport,
-    openCatchLog,
-    closeCatchLog,
-    submitCatchLog,
     openSettings,
     closeSettings,
     saveSettings,
@@ -247,9 +244,6 @@ function setupEventListeners() {
    
     // Note: tempReportForm listener is in modals.js (form is created dynamically)
    
-    // Catch log form
-    document.getElementById('catchLogForm')?.addEventListener('submit', submitCatchLog);
-   
     // Settings links
     document.getElementById('settingsLink')?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -275,8 +269,6 @@ function registerServiceWorker() {
 // Make functions available globally for onclick handlers
 window.openTempReport = openTempReport;
 window.closeTempReport = closeTempReport;
-window.openCatchLog = openCatchLog;
-window.closeCatchLog = closeCatchLog;
 window.openSettings = openSettings;
 window.closeSettings = closeSettings;
 window.saveSettings = saveSettings;
