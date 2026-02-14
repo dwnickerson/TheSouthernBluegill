@@ -137,9 +137,18 @@ function calculateHourlyScore(params) {
 // Get pressure trend
 function getPressureTrendLocal(hourlyData, currentIndex) {
     if (currentIndex < 3) return 'stable';
-    
-    const current = hourlyData[currentIndex].surface_pressure;
-    const threeHoursAgo = hourlyData[currentIndex - 3].surface_pressure;
+
+    const pressures = hourlyData?.surface_pressure;
+    if (!pressures || pressures.length <= currentIndex || pressures.length <= currentIndex - 3) {
+        return 'stable';
+    }
+
+    const current = pressures[currentIndex];
+    const threeHoursAgo = pressures[currentIndex - 3];
+
+    if (typeof current !== 'number' || typeof threeHoursAgo !== 'number') {
+        return 'stable';
+    }
     
     const change = current - threeHoursAgo;
     
