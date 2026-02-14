@@ -16,6 +16,9 @@ export async function getWeather(lat, lon, days = APP_CONSTANTS.DEFAULT_FORECAST
         `timezone=auto`;
     
     const historicalResponse = await fetch(historicalUrl);
+    if (!historicalResponse.ok) {
+        throw new Error(`Historical weather request failed (${historicalResponse.status})`);
+    }
     const historicalData = await historicalResponse.json();
     
     // Fetch forecast data
@@ -29,6 +32,9 @@ export async function getWeather(lat, lon, days = APP_CONSTANTS.DEFAULT_FORECAST
         `forecast_days=${days}`;
     
     const forecastResponse = await fetch(forecastUrl);
+    if (!forecastResponse.ok) {
+        throw new Error(`Forecast weather request failed (${forecastResponse.status})`);
+    }
     const forecastData = await forecastResponse.json();
     
     return {
@@ -45,5 +51,8 @@ export async function getCurrentWeather(lat, lon) {
         `timezone=auto`;
     
     const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`Current weather request failed (${response.status})`);
+    }
     return await response.json();
 }

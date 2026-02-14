@@ -4,6 +4,16 @@ console.log('📦 modals.js VERSION 3.5.0 loaded - Multiple Favorites + Quick Re
 import { storage } from '../services/storage.js';
 import { renderFavorites } from './favorites.js';
 
+
+function escapeHTML(value = '') {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // ============================================
 // FEATURE 2: MULTIPLE FAVORITES
 // ============================================
@@ -182,8 +192,8 @@ function renderFavoritesList() {
     return waterBodyFavorites.map(fav => `
         <div class="favorite-item">
             <div class="favorite-info">
-                <strong>🌊 ${fav.name}</strong>
-                <small>${fav.location} · ${fav.waterType.charAt(0).toUpperCase() + fav.waterType.slice(1)}</small>
+                <strong>🌊 ${escapeHTML(fav.name)}</strong>
+                <small>${escapeHTML(fav.location)} · ${escapeHTML(fav.waterType.charAt(0).toUpperCase() + fav.waterType.slice(1))}</small>
             </div>
             <button class="delete-btn" onclick="deleteFavoriteFromModal('${fav.id}')">🗑️</button>
         </div>
@@ -386,10 +396,10 @@ export function openQuickReportModal() {
 function renderQuickReportLocations(locations) {
     return locations.map(loc => `
         <option value="${loc.id}" 
-                data-name="${loc.name}" 
-                data-location="${loc.location}" 
-                data-watertype="${loc.waterType}">
-            ${loc.name} (${loc.location})
+                data-name="${escapeHTML(loc.name)}" 
+                data-location="${escapeHTML(loc.location)}" 
+                data-watertype="${escapeHTML(loc.waterType)}">
+            ${escapeHTML(loc.name)} (${escapeHTML(loc.location)})
         </option>
     `).join('');
 }
@@ -1284,7 +1294,7 @@ export function exportAllData() {
 }
 
 export function clearAllData() {
-    storage.clear();
+    storage.clearAll();
     showNotification('🗑️ All data cleared!', 'success');
     setTimeout(() => {
         window.location.reload();

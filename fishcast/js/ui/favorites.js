@@ -2,6 +2,15 @@
 import { storage } from '../services/storage.js';
 import { SPECIES_DATA } from '../config/species.js';
 
+function escapeHTML(value = '') {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 export function renderFavorites() {
     const favorites = storage.getFavorites();
     const favoritesSection = document.getElementById('favoritesSection');
@@ -20,8 +29,8 @@ export function renderFavorites() {
         html += `
             <div class="favorite-item" onclick="loadFavorite(${fav.id})">
                 <div>
-                    <div class="favorite-name">${fav.name}</div>
-                    <div class="favorite-location">${speciesName} • ${fav.waterType}</div>
+                    <div class="favorite-name">${escapeHTML(fav.name)}</div>
+                    <div class="favorite-location">${escapeHTML(speciesName)} • ${escapeHTML(fav.waterType)}</div>
                 </div>
                 <span class="favorite-remove" onclick="event.stopPropagation(); removeFavorite(${fav.id})">✕</span>
             </div>
