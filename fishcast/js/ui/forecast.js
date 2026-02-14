@@ -544,9 +544,6 @@ export function renderForecast(data) {
         <div class="action-buttons">
             <button class="action-btn" onclick="window.shareForecast()">📱 Share</button>
             <button class="action-btn" onclick="window.saveFavorite()">⭐ Save Location</button>
-            <button class="action-btn success" onclick="window.openTempReport()">🌡️ Submit Water Temp</button>
-            <button class="action-btn" onclick="window.openWeatherRadar()">📡 Weather Radar</button>
-            <button class="action-btn" onclick="window.toggleTheme()">🌓 Dark Mode</button>
         </div>
 
         <div class="tips-card">

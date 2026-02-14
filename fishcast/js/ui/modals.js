@@ -2,6 +2,7 @@
 console.log('📦 modals.js VERSION 3.5.0 loaded - Multiple Favorites + Quick Report + Fixes');
 
 import { storage } from '../services/storage.js';
+import { renderFavorites } from './favorites.js';
 
 // ============================================
 // FEATURE 2: MULTIPLE FAVORITES
@@ -1550,8 +1551,40 @@ export function shareForecast() {
 }
 
 export function saveFavorite(locationData) {
-    console.log('Save favorite:', locationData);
-    window.showNotification('Favorites feature coming soon!', 'info');
+    const locationInput = document.getElementById('location');
+    const speciesInput = document.getElementById('species');
+    const waterTypeInput = document.getElementById('waterType');
+
+    const locationName = locationData?.name || locationInput?.value?.trim();
+    const species = locationData?.species || speciesInput?.value;
+    const waterType = locationData?.waterType || waterTypeInput?.value;
+
+    if (!locationName) {
+        window.showNotification('Enter a location before saving.', 'error');
+        return;
+    }
+
+    const favorites = storage.getFavorites();
+    const duplicate = favorites.find(fav =>
+        fav.name.toLowerCase() === locationName.toLowerCase() &&
+        fav.species === species &&
+        fav.waterType === waterType
+    );
+
+    if (duplicate) {
+        window.showNotification('⭐ Location is already in favorites.', 'info');
+        return;
+    }
+
+    storage.addFavorite({
+        id: Date.now(),
+        name: locationName,
+        species,
+        waterType
+    });
+
+    renderFavorites();
+    window.showNotification('⭐ Location saved to favorites!', 'success');
 }
 
 // Aliases for compatibility
