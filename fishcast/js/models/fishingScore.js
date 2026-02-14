@@ -16,15 +16,17 @@ export function getFishPhase(waterTemp, speciesData) {
     return { name: firstPhase, data: speciesData.phases[firstPhase] };
 }
 
-// NEW: Calculate water clarity based on recent precipitation
-export function calculateWaterClarity(precipLast3Days) {
-    // Sum precipitation from last 3 days
-    const totalPrecip = precipLast3Days.reduce((sum, val) => sum + (val || 0), 0);
-    
-    if (totalPrecip > 2.0) return 'murky';      // Heavy rain = murky
-    if (totalPrecip > 0.5) return 'stained';    // Moderate rain = stained
-    if (totalPrecip > 0.1) return 'slightly_stained';  // Light rain
-    return 'clear';  // No recent rain
+// Calculate water clarity from Open-Meteo precipitation totals (mm)
+export function calculateWaterClarity(precipLast3DaysMm) {
+    // Open-Meteo daily precipitation_sum is in millimeters. Convert to inches first
+    // so thresholds align with angler visibility expectations.
+    const totalMm = precipLast3DaysMm.reduce((sum, val) => sum + (val || 0), 0);
+    const totalInches = totalMm / 25.4;
+
+    if (totalInches >= 1.5) return 'muddy';           // Heavy runoff
+    if (totalInches >= 0.5) return 'stained';         // Noticeable stain
+    if (totalInches >= 0.1) return 'slightly_stained';// Slight color
+    return 'clear';
 }
 
 // NEW: Enhanced pressure rate calculation
@@ -141,9 +143,9 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
     if (clarity === 'stained' && prefs.stained_water_bonus) {
         score += prefs.stained_water_bonus;
         factors.push({ name: 'Stained water (bass love it!)', value: prefs.stained_water_bonus });
-    } else if (clarity === 'murky' && prefs.murky_water_penalty) {
+    } else if (clarity === 'muddy' && prefs.murky_water_penalty) {
         score -= prefs.murky_water_penalty;
-        factors.push({ name: 'Murky water (crappie avoid it)', value: -prefs.murky_water_penalty });
+        factors.push({ name: 'Muddy water (reduced visibility)', value: -prefs.murky_water_penalty });
     }
     
     // Wind analysis
@@ -254,8 +256,8 @@ export function getTechniqueTips(score, waterTemp, windSpeed, weather, speciesKe
     // NEW: Water clarity tips
     if (clarity === 'stained' && isBass) {
         tips.push("💧 Stained water is ideal for bass - use vibrating baits and darker colors");
-    } else if (clarity === 'murky') {
-        tips.push("🌊 Murky water - fish slow down your presentation and use loud rattles");
+    } else if (clarity === 'muddy') {
+        tips.push("🌊 Muddy water - fish slow down your presentation and use loud rattles");
     } else if (clarity === 'clear') {
         tips.push("💎 Clear water - use natural colors and finesse presentations");
     }

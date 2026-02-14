@@ -503,7 +503,18 @@ export function renderForecast(data) {
     const solunar = calculateSolunar(coords.lat, coords.lon, new Date());
     
     // Calculate today's score WITH MOON PHASE
-    const currentScore = calculateFishingScore(weather.forecast, waterTemp, speciesKey, solunar.moon_phase_percent);
+    // Use observed precipitation from recent historical days for clarity, not future forecast totals.
+    const recentPrecip = weather.historical?.daily?.precipitation_sum?.slice(-3) || [];
+    const scoreWeather = {
+        ...weather.forecast,
+        daily: {
+            ...weather.forecast.daily,
+            precipitation_sum: recentPrecip.length > 0
+                ? recentPrecip
+                : (weather.forecast.daily.precipitation_sum || [])
+        }
+    };
+    const currentScore = calculateFishingScore(scoreWeather, waterTemp, speciesKey, solunar.moon_phase_percent);
     
     const windSpeed = kmhToMph(weather.forecast.current.wind_speed_10m);
     const windDir = getWindDirection(weather.forecast.current.wind_direction_10m);
@@ -526,7 +537,7 @@ export function renderForecast(data) {
         clear: '💎 Clear',
         slightly_stained: '🌊 Slightly Stained',
         stained: '💧 Stained',
-        murky: '🌫️ Murky'
+        muddy: '🌫️ Muddy'
     };
     const clarityBadge = clarityIcons[currentScore.clarity] || '💧 Normal';
     
