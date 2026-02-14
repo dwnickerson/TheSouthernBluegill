@@ -547,11 +547,6 @@ export function renderForecast(data) {
         </div>
 
         <div class="tips-card">
-            <h3>📝 Today's Weather Summary</h3>
-            <div class="tip-item">${todaySummary}</div>
-        </div>
-        
-        <div class="tips-card">
             <h3>🎣 Fishing Tips for Today</h3>
             ${tips.map(tip => `<div class="tip-item">${tip}</div>`).join('')}
         </div>
@@ -582,6 +577,10 @@ export function renderForecast(data) {
             
             <div class="detail-card">
                 <h3><span class="cloud-icon"></span>Weather</h3>
+                <div class="detail-row">
+                    <span class="detail-label">Today's Weather Summary</span>
+                    <span class="detail-value">📝 ${todaySummary}</span>
+                </div>
                 <div class="detail-row">
                     <span class="detail-label">Conditions</span>
                     <span class="detail-value">${weatherIcon} ${getWeatherDescription(weather.forecast.current.weather_code)}</span>
