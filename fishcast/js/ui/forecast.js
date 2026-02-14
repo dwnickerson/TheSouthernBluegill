@@ -521,24 +521,6 @@ export function renderForecast(data) {
         `Air temperatures from ${todayLowTemp.toFixed(0)}°F to ${todayHighTemp.toFixed(0)}°F, ` +
         `winds around ${windSpeed.toFixed(0)} mph ${windDir}, and a ${pTrend} pressure trend.`;
     
-    // NEW: Accuracy estimate (will be dynamic when backend is ready)
-    const reportCount = data.reportCount || 0;  // From backend
-    let accuracyEstimate = '±4°F';
-    let accuracyClass = 'fair';
-    if (reportCount >= 20) { 
-        accuracyEstimate = '±1°F'; 
-        accuracyClass = 'excellent';
-    } else if (reportCount >= 10) { 
-        accuracyEstimate = '±1.5°F'; 
-        accuracyClass = 'good';
-    } else if (reportCount >= 5) { 
-        accuracyEstimate = '±2°F'; 
-        accuracyClass = 'good';
-    } else if (reportCount > 0) { 
-        accuracyEstimate = '±3°F'; 
-        accuracyClass = 'fair';
-    }
-    
     // NEW: Water clarity badge
     const clarityIcons = {
         clear: '💎 Clear',
@@ -592,25 +574,8 @@ export function renderForecast(data) {
                     </span>
                 </div>
                 <div class="detail-row">
-                    <span class="detail-label">Accuracy Estimate</span>
-                    <span class="detail-value ${accuracyClass}">
-                        ${accuracyEstimate}${reportCount > 0 ? ` (${reportCount} reports)` : ' (no local data)'}
-                    </span>
-                </div>
-                <div class="detail-row">
                     <span class="detail-label">Water Clarity</span>
                     <span class="detail-value">${clarityBadge}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Air Temperature</span>
-                    <span class="detail-value">
-                        🌡️ ${cToF(weather.forecast.current.temperature_2m).toFixed(1)}°F 
-                        <small>(feels like ${cToF(weather.forecast.current.apparent_temperature).toFixed(1)}°F)</small>
-                    </span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Today's Air Range</span>
-                    <span class="detail-value">🌡️ ${todayLowTemp.toFixed(1)}°F → ${todayHighTemp.toFixed(1)}°F</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Fish Phase</span>
@@ -623,6 +588,17 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Conditions</span>
                     <span class="detail-value">${weatherIcon} ${getWeatherDescription(weather.forecast.current.weather_code)}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Air Temperature</span>
+                    <span class="detail-value">
+                        🌡️ ${cToF(weather.forecast.current.temperature_2m).toFixed(1)}°F 
+                        <small>(feels like ${cToF(weather.forecast.current.apparent_temperature).toFixed(1)}°F)</small>
+                    </span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Today's Air Range</span>
+                    <span class="detail-value">🌡️ ${todayLowTemp.toFixed(1)}°F → ${todayHighTemp.toFixed(1)}°F</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Barometric Pressure</span>

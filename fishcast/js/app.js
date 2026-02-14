@@ -241,6 +241,7 @@ function setupEventListeners() {
     // Theme toggle
     document.getElementById('themeToggle')?.addEventListener('click', toggleTheme);
     document.getElementById('waterTempBtn')?.addEventListener('click', openTempReport);
+    document.getElementById('weatherRadarBtn')?.addEventListener('click', window.openWeatherRadar);
    
     // Note: tempReportForm listener is in modals.js (form is created dynamically)
    
