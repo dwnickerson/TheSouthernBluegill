@@ -563,16 +563,18 @@ export function renderForecast(data) {
             <button class="action-btn" onclick="window.shareForecast()">📱 Share</button>
             <button class="action-btn" onclick="window.saveFavorite()">⭐ Save Location</button>
             <button class="action-btn success" onclick="window.openTempReport()">🌡️ Submit Water Temp</button>
-        </div>
-        
-        <div class="tips-card">
-            <h3>🎣 Fishing Tips for Today</h3>
-            ${tips.map(tip => `<div class="tip-item">${tip}</div>`).join('')}
+            <button class="action-btn" onclick="window.openWeatherRadar()">📡 Weather Radar</button>
+            <button class="action-btn" onclick="window.toggleTheme()">🌓 Dark Mode</button>
         </div>
 
         <div class="tips-card">
             <h3>📝 Today's Weather Summary</h3>
             <div class="tip-item">${todaySummary}</div>
+        </div>
+        
+        <div class="tips-card">
+            <h3>🎣 Fishing Tips for Today</h3>
+            ${tips.map(tip => `<div class="tip-item">${tip}</div>`).join('')}
         </div>
         
         <div class="details-grid">
@@ -677,20 +679,6 @@ export function renderForecast(data) {
                 </div>
             </div>
         </div>
-        
-        <div class="detail-card" style="margin: 30px 0;">
-            <h3>📡 Weather Radar</h3>
-            <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px; margin-top: 15px;">
-                <iframe 
-                    src="https://embed.windy.com/embed2.html?lat=${coords.lat}&lon=${coords.lon}&detailLat=${coords.lat}&detailLon=${coords.lon}&width=650&height=450&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1" 
-                    frameborder="0" 
-                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
-                </iframe>
-            </div>
-            <p style="margin-top: 10px; color: var(--text-secondary); font-size: 0.9rem; text-align: center;">
-                <small>Powered by Windy.com - Real-time radar for ${coords.name}</small>
-            </p>
-        </div>
     `;
     
     // Multi-day forecast if requested
@@ -758,8 +746,6 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
         const precipProb = dailyData.precipitation_probability_max[i];
         const weatherCode = dailyData.weather_code[i];
         const weatherIcon = getWeatherIcon(weatherCode);
-        const daySolunar = calculateSolunar(coords.lat, coords.lon, new Date(date));
-        const moonIcon = getMoonIcon(daySolunar.moon_phase);
         
         // Get wind data for the day
         const windSpeed = dailyData.wind_speed_10m_max ? kmhToMph(dailyData.wind_speed_10m_max[i]) : 0;
@@ -801,15 +787,6 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
                 <div class="day-precip">${getPrecipIcon(precipProb)} ${precipProb}%</div>
                 <div style="font-size: 0.85em; color: #888; margin-top: 4px;">💧 ${waterTemps[i].toFixed(1)}°F</div>
                 <div style="font-size: 0.85em; color: #888;">💨 ${windSpeed.toFixed(0)} mph ${windDir}</div>
-                <div style="font-size: 0.78em; color: #777; margin-top: 6px; line-height: 1.45; text-align: left; padding: 0 4px;">
-                    <div><strong>Moon:</strong> ${moonIcon} ${daySolunar.moon_phase} (${daySolunar.moon_phase_percent}%)</div>
-                    <div><strong>Major:</strong></div>
-                    <div>🌟 ${daySolunar.major_periods[0]}</div>
-                    <div>🌟 ${daySolunar.major_periods[1]}</div>
-                    <div><strong>Minor:</strong></div>
-                    <div>⭐ ${daySolunar.minor_periods[0]}</div>
-                    <div>⭐ ${daySolunar.minor_periods[1]}</div>
-                </div>
             </div>
         `;
     }
@@ -837,6 +814,9 @@ window.showDayDetails = function(dayIndex, date) {
     const weatherIcon = getWeatherIcon(weatherCode);
     const weatherDesc = getWeatherDescription(weatherCode);
     const precipIcon = getPrecipIcon(precipProb);
+    const daySolunar = calculateSolunar(data.coords.lat, data.coords.lon, new Date(date));
+    const moonIcon = getMoonIcon(daySolunar.moon_phase);
+    const daySummary = `${weatherDesc} with ${precipProb}% rain chance. Air ${minTemp.toFixed(0)}°F to ${maxTemp.toFixed(0)}°F and winds near ${windSpeed.toFixed(0)} mph ${windDir}.`;
     
     // 🔬 PHYSICS: Use pre-calculated water temp from thermal evolution model
     const waterTempEstimate = window.waterTempsEvolution 
@@ -908,6 +888,29 @@ window.showDayDetails = function(dayIndex, date) {
                         <span class="detail-label">Sunrise / Sunset</span>
                         <span class="detail-value">🌅 ${sunrise} / 🌇 ${sunset}</span>
                     </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Moon Phase</span>
+                        <span class="detail-value">${moonIcon} ${daySolunar.moon_phase} (${daySolunar.moon_phase_percent}%)</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Major Periods</span>
+                        <span class="detail-value" style="line-height: 1.8;">
+                            🌟 ${daySolunar.major_periods[0]}<br>
+                            🌟 ${daySolunar.major_periods[1]}
+                        </span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Minor Periods</span>
+                        <span class="detail-value" style="line-height: 1.8;">
+                            ⭐ ${daySolunar.minor_periods[0]}<br>
+                            ⭐ ${daySolunar.minor_periods[1]}
+                        </span>
+                    </div>
+                    <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid var(--border-color);">
+                        <p style="color: var(--text-secondary); text-align: center; font-size: 0.9rem;">
+                            <strong>Weather Summary:</strong> ${daySummary}
+                        </p>
+                    </div>
                     <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid var(--border-color);">
                         <p style="color: var(--text-secondary); text-align: center; font-size: 0.9rem;">
                             <strong>Fishing Tip:</strong> ${getFishingTipForDay(maxTemp, minTemp, precipProb, windSpeed, waterTempEstimate)}
@@ -929,6 +932,19 @@ window.showDayDetails = function(dayIndex, date) {
     
     // Add new modal
     document.body.insertAdjacentHTML('beforeend', modalHTML);
+};
+
+window.openWeatherRadar = function() {
+    const data = window.currentForecastData;
+    if (!data?.coords) {
+        window.showNotification?.('Generate a forecast first to view radar.', 'info');
+        return;
+    }
+
+    const { lat, lon, name } = data.coords;
+    const radarUrl = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&detailLat=${lat}&detailLon=${lon}&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1`;
+    window.open(radarUrl, '_blank', 'noopener,noreferrer');
+    window.showNotification?.(`Opening radar for ${name}`, 'success');
 };
 
 // Helper function to provide fishing tips for specific day
