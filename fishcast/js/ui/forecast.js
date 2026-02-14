@@ -244,10 +244,7 @@ export function renderForecast(data) {
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Barometric Pressure</span>
-                    <span class="detail-value">
-                        📊 ${weather.forecast.current.surface_pressure} mb 
-                        <small>(${(weather.forecast.current.surface_pressure * 0.02953).toFixed(2)} inHg)</small>
-                    </span>
+                    <span class="detail-value">📊 ${(weather.forecast.current.surface_pressure * 0.02953).toFixed(2)} inHg</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Pressure Trend</span>
