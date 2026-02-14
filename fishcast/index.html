@@ -17,9 +17,6 @@
     <!-- Theme & Water Temp Buttons -->
     <div class="theme-toggle">
         <button id="waterTempBtn" title="Submit water temperature">🌡️</button>
-        <button id="quickReportBtn" class="action-btn quick" title="Quick report">
-    ⚡
-</button>
         <button id="themeToggle" title="Toggle dark mode">🌙</button>
         
     </div>
@@ -156,43 +153,6 @@
         </div>
     </div>
 
-    <!-- Catch Log Modal -->
-    <div id="catchLogModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <span class="modal-close" onclick="closeCatchLog()">×</span>
-                📊 Log Your Catch
-            </div>
-            <form id="catchLogForm">
-                <div style="margin: 20px 0;">
-                    <label>Species</label>
-                    <select id="catchSpecies" required style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 2px; background: var(--input-bg); color: var(--text-primary);">
-                        <option value="bass">Largemouth Bass</option>
-                        <option value="crappie">Crappie</option>
-                        <option value="bluegill">Bluegill</option>
-                    </select>
-                </div>
-                <div style="margin: 20px 0;">
-                    <label>Number Caught</label>
-                    <input type="number" id="catchCount" required min="1" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 2px; background: var(--input-bg); color: var(--text-primary);">
-                </div>
-                <div style="margin: 20px 0;">
-                    <label>Date & Time</label>
-                    <input type="datetime-local" id="catchDateTime" required style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 2px; background: var(--input-bg); color: var(--text-primary);">
-                </div>
-                <div style="margin: 20px 0;">
-                    <label>Location</label>
-                    <input type="text" id="catchLocation" required style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 2px; background: var(--input-bg); color: var(--text-primary);">
-                </div>
-                <div style="margin: 20px 0;">
-                    <label>Notes (Optional)</label>
-                    <textarea id="catchNotes" rows="3" style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 2px; background: var(--input-bg); color: var(--text-primary); resize: vertical; font-family: 'Lato', sans-serif;"></textarea>
-                </div>
-                <button type="submit" style="width: 100%; padding: 16px;">Log Catch</button>
-            </form>
-        </div>
-    </div>
-
     <!-- Settings Modal -->
     <div id="settingsModal" class="modal">
         <div class="modal-content">
@@ -266,12 +226,5 @@
     <!-- Chart.js for Feature 5 -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-<script type="module">
-    import { openQuickReportModal } from './js/ui/modals.js';
-    
-    document.getElementById('quickReportBtn').addEventListener('click', () => {
-        openQuickReportModal();
-    });
-</script>
 </body>
 </html>
