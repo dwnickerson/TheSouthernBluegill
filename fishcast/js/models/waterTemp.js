@@ -43,7 +43,7 @@ function calculateAirTempInfluence(airTemps, waterType) {
     for (let i = 1; i < recent.length; i++) {
         trendSum += (recent[i] - recent[i-1]);
     }
-    const trend = trendSum / (recent.length - 1);
+    const trend = recent.length > 1 ? trendSum / (recent.length - 1) : 0;
     
     let weightedSum = 0;
     let totalWeight = 0;
@@ -167,7 +167,10 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     const airDelta = airInfluence.average - calibratedBase;
     const airEffect = airDelta * thermalResponse;
     
-    const avgWind = windSpeeds.slice(-7).reduce((a, b) => a + b, 0) / Math.min(7, windSpeeds.length);
+    const windSampleSize = Math.min(7, windSpeeds.length);
+    const avgWind = windSampleSize > 0
+        ? windSpeeds.slice(-7).reduce((a, b) => a + b, 0) / windSampleSize
+        : 0;
     const avgWindMph = avgWind * 0.621371;
     const windEffect = calculateWindMixingEffect(avgWindMph, waterType, calibratedBase + solarEffect + airEffect, airInfluence.average);
     

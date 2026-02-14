@@ -6,12 +6,22 @@ import { kmhToMph } from '../utils/math.js';
 
 // Get fish phase based on water temperature
 export function getFishPhase(waterTemp, speciesData) {
+    let bestMatch = null;
+
     for (const [phaseName, phaseData] of Object.entries(speciesData.phases)) {
         const [min, max] = phaseData.temp_range;
         if (waterTemp >= min && waterTemp < max) {
-            return { name: phaseName, data: phaseData };
+            const span = max - min;
+            if (!bestMatch || span < bestMatch.span) {
+                bestMatch = { name: phaseName, data: phaseData, span };
+            }
         }
     }
+
+    if (bestMatch) {
+        return { name: bestMatch.name, data: bestMatch.data };
+    }
+
     const firstPhase = Object.keys(speciesData.phases)[0];
     return { name: firstPhase, data: speciesData.phases[firstPhase] };
 }

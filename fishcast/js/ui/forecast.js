@@ -70,8 +70,8 @@ function calculateHourlyScore(params) {
     // Water temperature (most important - up to 30 points)
     const speciesData = getSpeciesData(species);
     if (speciesData) {
-        const optimalTemp = speciesData.phases.spawn.optimal || 
-                          (speciesData.phases.spawn.min + speciesData.phases.spawn.max) / 2;
+        const spawnRange = speciesData.phases.spawn?.temp_range || [waterTemp, waterTemp];
+        const optimalTemp = (spawnRange[0] + spawnRange[1]) / 2;
         
         const tempDiff = Math.abs(waterTemp - optimalTemp);
         
@@ -160,7 +160,7 @@ function calculateBestTimes(hourlyData, species, currentWaterTemp, location) {
             surface_pressure: hourlyData.surface_pressure[i],
             wind_speed_10m: hourlyData.wind_speed_10m[i],
             cloud_cover: hourlyData.cloud_cover[i],
-            precipitation: hourlyData.precipitation[i] || 0
+            precipitation: (hourlyData.precipitation_probability?.[i] || 0) / 100
         };
         
         const date = new Date(hour.time);
@@ -179,7 +179,7 @@ function calculateBestTimes(hourlyData, species, currentWaterTemp, location) {
             airTemp: hour.temperature_2m,
             pressure: hour.surface_pressure,
             pressureTrend: getPressureTrendLocal(hourlyData, i),
-            windSpeed: hour.wind_speed_10m,
+            windSpeed: kmhToMph(hour.wind_speed_10m),
             cloudCover: hour.cloud_cover,
             precipitation: hour.precipitation,
             moonPhase: 0, // Could add moon phase calculation
@@ -196,7 +196,7 @@ function calculateBestTimes(hourlyData, species, currentWaterTemp, location) {
             airTemp: hour.temperature_2m,
             pressure: hour.surface_pressure,
             pressureTrend: getPressureTrendLocal(hourlyData, i),
-            windSpeed: hour.wind_speed_10m,
+            windSpeed: kmhToMph(hour.wind_speed_10m),
             solunar: solunar
         });
     }
@@ -219,14 +219,15 @@ function calculateBestTimes(hourlyData, species, currentWaterTemp, location) {
 }
 
 // Render best times widget
-function renderBestTimesWidget(bestTimes, species, forecastContainer) {
+function renderBestTimesWidget(bestTimes, speciesKey, forecastContainer) {
+    const speciesName = getSpeciesData(speciesKey)?.name || speciesKey;
     if (!bestTimes || bestTimes.length === 0) return;
     
     let html = `
         <div id="bestTimesWidget" class="best-times-widget">
             <div class="widget-header">
                 <h3>🎯 Best Fishing Times This Week</h3>
-                <span class="widget-subtitle">Top opportunities for catching ${species}</span>
+                <span class="widget-subtitle">Top opportunities for catching ${speciesName}</span>
             </div>
             <div class="best-times-list">
     `;
@@ -257,7 +258,7 @@ function renderBestTimesWidget(bestTimes, species, forecastContainer) {
                     <div class="detail-row">
                         <span class="icon">🌡️</span>
                         <span>${Math.round(conditions.waterTemp)}°F</span>
-                        ${getWaterTempLabel(conditions.waterTemp, species)}
+                        ${getWaterTempLabel(conditions.waterTemp, speciesKey)}
                     </div>
                     <div class="detail-row">
                         <span class="icon">📊</span>
@@ -278,7 +279,7 @@ function renderBestTimesWidget(bestTimes, species, forecastContainer) {
                     </div>
                 </div>
                 <div class="slot-action">
-                    <button class="add-calendar-btn" onclick="addToCalendar('${slot.startTime}', '${species}', ${slot.score})">
+                    <button class="add-calendar-btn" onclick="addToCalendar('${slot.startTime}', '${speciesName}', ${slot.score})">
                         📅 Add to Calendar
                     </button>
                 </div>
@@ -317,7 +318,8 @@ function getWaterTempLabel(temp, species) {
     const speciesData = getSpeciesData(species);
     if (!speciesData) return '';
     
-    if (temp >= speciesData.phases.spawn.min && temp <= speciesData.phases.spawn.max) {
+    const spawnRange = speciesData.phases.spawn?.temp_range;
+    if (spawnRange && temp >= spawnRange[0] && temp <= spawnRange[1]) {
         return '<span class="highlight">Spawn Range!</span>';
     }
     return '';
@@ -546,6 +548,8 @@ export function renderForecast(data) {
         muddy: '🌫️ Muddy'
     };
     const clarityBadge = clarityIcons[currentScore.clarity] || '💧 Normal';
+
+    const bestTimes = calculateBestTimes(weather.forecast.hourly, speciesKey, waterTemp, coords);
     
     // Start building HTML
     let html = `
@@ -673,6 +677,7 @@ export function renderForecast(data) {
     }
     
     resultsDiv.innerHTML = html;
+    renderBestTimesWidget(bestTimes, speciesKey, resultsDiv);
     resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
     
     // Store forecast data for sharing
@@ -865,7 +870,7 @@ window.showDayDetails = function(dayIndex, date) {
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Precipitation</span>
-                        <span class="detail-value">${precipIcon} ${precipProb}% chance${precipSum > 0 ? ` (${precipSum.toFixed(2)} in)` : ''}</span>
+                        <span class="detail-value">${precipIcon} ${precipProb}% chance${precipSum > 0 ? ` (${(precipSum / 25.4).toFixed(2)} in)` : ''}</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Wind</span>
@@ -962,8 +967,10 @@ export function showError(message) {
     resultsDiv.innerHTML = `
         <div class="error-card" style="background: var(--bg-card); padding: 40px; border-radius: 16px; text-align: center; margin: 40px 0;">
             <h3 style="font-size: 2rem; margin-bottom: 20px;">⚠️ Error</h3>
-            <p style="font-size: 1.1rem; margin-bottom: 20px;">${message}</p>
+            <p id="errorMessage" style="font-size: 1.1rem; margin-bottom: 20px;"></p>
             <p style="color: var(--text-secondary);">Please try again or contact support if the problem persists.</p>
         </div>
     `;
+    const messageEl = document.getElementById('errorMessage');
+    if (messageEl) messageEl.textContent = message;
 }
