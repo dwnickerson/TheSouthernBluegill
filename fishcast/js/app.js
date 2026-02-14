@@ -14,7 +14,6 @@ import { renderFavorites } from './ui/favorites.js';
 import {
     openTempReport,
     closeTempReport,
-    submitTempReport,
     openSettings,
     closeSettings,
     saveSettings,

@@ -41,6 +41,11 @@ export const storage = {
             this.remove(key);
         });
     },
+
+    // Backward compatibility for older callers
+    clear() {
+        return this.clearAll();
+    },
     
     // Favorites management
     getFavorites() {
