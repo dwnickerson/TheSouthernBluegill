@@ -279,6 +279,7 @@ window.closeAbout = closeAbout;
 window.shareForecast = shareForecast;
 window.saveFavorite = saveFavorite;
 window.renderFavorites = renderFavorites;
+window.toggleTheme = toggleTheme;
 
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {
