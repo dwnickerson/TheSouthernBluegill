@@ -1216,8 +1216,43 @@ export function closeSettings() {
 }
 
 export function saveSettings() {
-    const darkMode = document.getElementById('darkModeToggle').checked;
-    storage.set('darkMode', darkMode.toString());
+    const darkModeToggle = document.getElementById('darkModeToggle');
+    if (darkModeToggle) {
+        const darkMode = darkModeToggle.checked;
+        storage.set('darkMode', darkMode.toString());
+    }
+
+    // Support legacy settings modal fields used by fishcast/index.html
+    const defaultLocationInput = document.getElementById('defaultLocation');
+    const defaultSpeciesInput = document.getElementById('defaultSpecies');
+    const defaultWaterBodyInput = document.getElementById('defaultWaterBody');
+
+    if (defaultLocationInput) {
+        const location = defaultLocationInput.value.trim();
+        storage.setDefaultLocation(location);
+
+        // Keep form value in sync so users immediately see the saved location
+        const forecastLocationInput = document.getElementById('location');
+        if (forecastLocationInput && location) {
+            forecastLocationInput.value = location;
+        }
+    }
+
+    if (defaultSpeciesInput) {
+        storage.setDefaultSpecies(defaultSpeciesInput.value);
+        const speciesInput = document.getElementById('species');
+        if (speciesInput && defaultSpeciesInput.value) {
+            speciesInput.value = defaultSpeciesInput.value;
+        }
+    }
+
+    if (defaultWaterBodyInput) {
+        storage.setDefaultWaterBody(defaultWaterBodyInput.value);
+        const waterTypeInput = document.getElementById('waterType');
+        if (waterTypeInput && defaultWaterBodyInput.value) {
+            waterTypeInput.value = defaultWaterBodyInput.value;
+        }
+    }
     
     showNotification('⚙️ Settings saved!', 'success');
     closeSettings();
