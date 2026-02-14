@@ -515,6 +515,11 @@ export function renderForecast(data) {
     const moonIcon = getMoonIcon(solunar.moon_phase);
     const precipProb = weather.forecast.hourly.precipitation_probability[0] || 0;
     const precipIcon = getPrecipIcon(precipProb);
+    const todayHighTemp = cToF(weather.forecast.daily.temperature_2m_max[0]);
+    const todayLowTemp = cToF(weather.forecast.daily.temperature_2m_min[0]);
+    const todaySummary = `${getWeatherDescription(weather.forecast.current.weather_code)} with ${precipProb}% rain chance. ` +
+        `Air temperatures from ${todayLowTemp.toFixed(0)}°F to ${todayHighTemp.toFixed(0)}°F, ` +
+        `winds around ${windSpeed.toFixed(0)} mph ${windDir}, and a ${pTrend} pressure trend.`;
     
     // NEW: Accuracy estimate (will be dynamic when backend is ready)
     const reportCount = data.reportCount || 0;  // From backend
@@ -564,6 +569,11 @@ export function renderForecast(data) {
             <h3>🎣 Fishing Tips for Today</h3>
             ${tips.map(tip => `<div class="tip-item">${tip}</div>`).join('')}
         </div>
+
+        <div class="tips-card">
+            <h3>📝 Today's Weather Summary</h3>
+            <div class="tip-item">${todaySummary}</div>
+        </div>
         
         <div class="details-grid">
             <div class="detail-card">
@@ -595,6 +605,10 @@ export function renderForecast(data) {
                         🌡️ ${cToF(weather.forecast.current.temperature_2m).toFixed(1)}°F 
                         <small>(feels like ${cToF(weather.forecast.current.apparent_temperature).toFixed(1)}°F)</small>
                     </span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Today's Air Range</span>
+                    <span class="detail-value">🌡️ ${todayLowTemp.toFixed(1)}°F → ${todayHighTemp.toFixed(1)}°F</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Fish Phase</span>
@@ -744,6 +758,7 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
         const precipProb = dailyData.precipitation_probability_max[i];
         const weatherCode = dailyData.weather_code[i];
         const weatherIcon = getWeatherIcon(weatherCode);
+        const daySolunar = calculateSolunar(coords.lat, coords.lon, new Date(date));
         
         // Get wind data for the day
         const windSpeed = dailyData.wind_speed_10m_max ? kmhToMph(dailyData.wind_speed_10m_max[i]) : 0;
@@ -781,10 +796,14 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
                 <div class="day-header">${formatDateShort(date)}</div>
                 <div style="font-size: 2rem; margin: 10px 0;">${weatherIcon}</div>
                 <div class="day-score ${scoreClass}"title="Estimated fishing score">${Math.round(estimatedScore)}</div>
-                <div class="day-temp">${maxTemp.toFixed(0)}° / ${minTemp.toFixed(0)}°</div>
+                <div class="day-temp">${minTemp.toFixed(0)}° → ${maxTemp.toFixed(0)}°</div>
                 <div class="day-precip">${getPrecipIcon(precipProb)} ${precipProb}%</div>
                 <div style="font-size: 0.85em; color: #888; margin-top: 4px;">💧 ${waterTemps[i].toFixed(1)}°F</div>
                 <div style="font-size: 0.85em; color: #888;">💨 ${windSpeed.toFixed(0)} mph ${windDir}</div>
+                <div style="font-size: 0.8em; color: #888; margin-top: 4px; line-height: 1.5;">
+                    🌟 ${daySolunar.major_periods[0]}<br>
+                    ⭐ ${daySolunar.minor_periods[0]}
+                </div>
             </div>
         `;
     }
