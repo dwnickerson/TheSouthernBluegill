@@ -287,6 +287,21 @@ a:focus-visible,
 
 footer { margin-top: var(--space-4); text-align: center; color: var(--text-secondary); font-size: var(--fs-1); }
 footer a { color: var(--text-primary); }
+.footer-link {
+    color: var(--text-primary);
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+}
+.footer-link:hover { opacity: 0.85; }
+.footer-link:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
 
 @supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
     .card,
