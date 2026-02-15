@@ -110,18 +110,21 @@ function getHourlyDetailRowsForDate(hourlyForecast, targetDate) {
     const detailRows = [];
 
     hourlyTimes.forEach((timestamp, index) => {
-        const parsed = new Date(timestamp);
-        if (Number.isNaN(parsed.getTime())) return;
-
-        const dayKey = parsed.toISOString().split('T')[0];
+        const [dayKey, timePartRaw = '00:00'] = String(timestamp).split('T');
         if (dayKey !== targetDate) return;
+
+        const hour24 = Number.parseInt(timePartRaw.slice(0, 2), 10);
+        const safeHour24 = Number.isFinite(hour24) ? hour24 : 0;
+        const hour12 = safeHour24 % 12 || 12;
+        const meridiem = safeHour24 >= 12 ? 'PM' : 'AM';
 
         const tempF = cToF(hourlyTemps[index]);
         const precipChance = Number.isFinite(hourlyPrecip[index]) ? hourlyPrecip[index] : 0;
         const windMph = Number.isFinite(hourlyWindSpeed[index]) ? kmhToMph(hourlyWindSpeed[index]) : 0;
 
         detailRows.push({
-            timeLabel: parsed.toLocaleTimeString('en-US', { hour: 'numeric' }),
+            index: detailRows.length,
+            timeLabel: `${hour12} ${meridiem}`,
             tempF,
             precipChance,
             windMph
@@ -129,6 +132,61 @@ function getHourlyDetailRowsForDate(hourlyForecast, targetDate) {
     });
 
     return detailRows;
+}
+
+function renderDayDetailTrendCharts(hourlyDetails, dayIndex) {
+    if (!hourlyDetails || hourlyDetails.length < 2) return '';
+
+    const temps = hourlyDetails.map((hour) => hour.tempF);
+    const precip = hourlyDetails.map((hour) => hour.precipChance);
+    const wind = hourlyDetails.map((hour) => hour.windMph);
+
+    const tickIndices = [0, Math.floor((hourlyDetails.length - 1) / 2), hourlyDetails.length - 1]
+        .filter((value, index, array) => array.indexOf(value) === index);
+    const timeTicks = tickIndices.map((i) => ({
+        index: i,
+        label: hourlyDetails[i].timeLabel
+    }));
+
+    return `
+        <div class="day-detail-trend-block">
+            <div class="trend-chart-grid">
+                <div class="trend-panel">
+                    <div class="trend-title">Hourly Air Temperature</div>
+                    ${buildTrendLineSvg(temps, {
+                        stroke: '#7ed6a5',
+                        suffix: '°F',
+                        decimals: 0,
+                        gradientId: `dayTempTrendFill${dayIndex}`,
+                        xTicks: timeTicks,
+                        yAxisTitle: 'Temperature'
+                    })}
+                </div>
+                <div class="trend-panel">
+                    <div class="trend-title">Hourly Rain Chance</div>
+                    ${buildTrendLineSvg(precip, {
+                        stroke: '#62d0ff',
+                        suffix: '%',
+                        decimals: 0,
+                        gradientId: `dayPrecipTrendFill${dayIndex}`,
+                        xTicks: timeTicks,
+                        yAxisTitle: 'Precipitation'
+                    })}
+                </div>
+                <div class="trend-panel">
+                    <div class="trend-title">Hourly Wind</div>
+                    ${buildTrendLineSvg(wind, {
+                        stroke: '#f8c471',
+                        suffix: ' mph',
+                        decimals: 0,
+                        gradientId: `dayWindTrendFill${dayIndex}`,
+                        xTicks: timeTicks,
+                        yAxisTitle: 'Wind'
+                    })}
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 
@@ -732,23 +790,7 @@ window.showDayDetails = function(dayIndex, date) {
     const moonIcon = getMoonIcon(daySolunar.moon_phase);
     const daySummary = `${weatherDesc} with ${precipProb}% rain chance. Air ${minTemp.toFixed(0)}°F to ${maxTemp.toFixed(0)}°F and winds near ${windSpeed.toFixed(0)} mph ${windDir}.`;
     const hourlyDetails = getHourlyDetailRowsForDate(data.weather.forecast.hourly || {}, date);
-    const hourlyTrendMarkup = hourlyDetails.length > 0
-        ? `
-            <div class="detail-row" style="display:block;">
-                <span class="detail-label" style="display:block; margin-bottom: 8px;">Hourly Trends</span>
-                <div class="day-hourly-detail-grid">
-                    ${hourlyDetails.map((hour) => `
-                        <div class="day-hourly-detail-item">
-                            <strong>${hour.timeLabel}</strong>
-                            <span>${hour.tempF.toFixed(0)}°F</span>
-                            <span>${hour.precipChance.toFixed(0)}% rain</span>
-                            <span>${hour.windMph.toFixed(0)} mph</span>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `
-        : '';
+    const hourlyTrendMarkup = renderDayDetailTrendCharts(hourlyDetails, dayIndex);
     
     // 🔬 PHYSICS: Use pre-calculated water temp from thermal evolution model
     const waterTempEstimate = window.waterTempsEvolution 

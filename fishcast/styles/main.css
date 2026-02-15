@@ -468,24 +468,12 @@ button[type="submit"]:hover,
     margin-top: 6px;
 }
 
-.day-hourly-detail-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
-    gap: 8px;
+.day-detail-trend-block {
+    margin-top: 12px;
 }
 
-.day-hourly-detail-item {
-    display: grid;
-    gap: 2px;
-    padding: 8px;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.03);
-    font-size: 0.78rem;
-}
-
-.day-hourly-detail-item strong {
-    font-size: 0.8rem;
+.day-detail-trend-block .trend-chart-grid {
+    grid-template-columns: 1fr;
 }
 
 .modal {
