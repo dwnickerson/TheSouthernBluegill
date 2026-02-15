@@ -375,8 +375,11 @@ export function renderForecast(data) {
     const precipNowMm = weather.forecast.current.precipitation || 0;
     const precipProb = getCurrentPrecipProbability(weather.forecast);
     const precipIcon = precipNowMm > 0 ? 'Likely' : getPrecipIcon(precipProb);
+    const todayPrecipMm = weather.forecast.daily?.precipitation_sum?.[0] || 0;
+    const todayPrecipIn = todayPrecipMm / 25.4;
     const todayHighTemp = cToF(weather.forecast.daily.temperature_2m_max[0]);
     const todayLowTemp = cToF(weather.forecast.daily.temperature_2m_min[0]);
+    const feelsLikeTemp = cToF(weather.forecast.current.apparent_temperature);
     const surfaceTemp = waterTemp.toFixed(1);
     const temp2ft = estimateTempByDepth(waterTemp, waterType, 2, new Date()).toFixed(1);
     const temp4ft = estimateTempByDepth(waterTemp, waterType, 4, new Date()).toFixed(1);
@@ -384,6 +387,8 @@ export function renderForecast(data) {
     const temp20ft = estimateTempByDepth(waterTemp, waterType, 20, new Date()).toFixed(1);
     const todaySummary = `${getWeatherDescription(weather.forecast.current.weather_code)} with a ${precipProb}% rain chance. ` +
         `Air ranges from ${todayLowTemp.toFixed(0)}°F to ${todayHighTemp.toFixed(0)}°F. ` +
+        `Feels like ${feelsLikeTemp.toFixed(0)}°F. ` +
+        `Expected precipitation: ${todayPrecipIn.toFixed(2)} in. ` +
         `Water temps: Surface ${surfaceTemp}°F | 2ft ${temp2ft}°F | 4ft ${temp4ft}°F | 10ft ${temp10ft}°F | 20ft ${temp20ft}°F. ` +
         `Wind: ${windSpeed.toFixed(0)} mph from the ${windDir}. ` +
         `Pressure trend: ${pTrend}.`;
@@ -423,7 +428,8 @@ export function renderForecast(data) {
             <div class="rating ${currentScore.colorClass}">${currentScore.rating}</div>
             <div class="summary-grid">
                 <div class="summary-card"><div class="label">Conditions</div><div class="value weather-condition-value"><span class="weather-symbol">${weatherIcon.icon}</span><span>${weatherIcon.label}</span></div></div>
-                <div class="summary-card"><div class="label">Air range</div><div class="value">${todayLowTemp.toFixed(0)}°F to ${todayHighTemp.toFixed(0)}°F</div></div>
+                <div class="summary-card"><div class="label">Air temp range</div><div class="value">${todayLowTemp.toFixed(0)}°F to ${todayHighTemp.toFixed(0)}°F</div></div>
+                <div class="summary-card"><div class="label">Feels like</div><div class="value">${feelsLikeTemp.toFixed(0)}°F</div></div>
                 <div class="summary-card"><div class="label">Water surface</div><div class="value">${surfaceTemp}°F</div></div>
                 <div class="summary-card"><div class="label">Wind</div><div class="value">${windSpeed.toFixed(0)} mph ${windDir}</div></div>
             </div>
@@ -497,7 +503,7 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Precipitation</span>
                     <span class="detail-value">
-                        ${precipIcon} ${precipProb}% chance
+                        ${precipIcon} ${precipProb}% chance (${todayPrecipIn.toFixed(2)} in expected)
                     </span>
                 </div>
             </div>
