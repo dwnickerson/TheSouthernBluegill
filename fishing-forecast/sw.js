@@ -1,88 +1,82 @@
 // FishCast Service Worker
-const CACHE_NAME = 'fishcast-v3';
+const CACHE_NAME = 'fishcast-v4';
 const APP_PATH = '/fishing-forecast/';
 
 const urlsToCache = [
   APP_PATH,
-  APP_PATH + 'index.html',
-  APP_PATH + 'manifest.json',
-  'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap',
-  'https://fonts.gstatic.com/s/cinzel/v23/8vIU7ww63mVu7gtL-KM.woff2',
-  'https://fonts.gstatic.com/s/lato/v24/S6uyw4BMUTPHjx4wXg.woff2'
+  `${APP_PATH}index.html`,
+  `${APP_PATH}manifest.json`,
+  `${APP_PATH}icon-192.png`,
+  `${APP_PATH}icon-512.png`
 ];
 
-// Install event - cache resources
+// Install event - cache core app shell
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
-      .then(() => self.skipWaiting()) // Activate immediately
+      .then(cache => cache.addAll(urlsToCache))
+      .then(() => self.skipWaiting())
   );
 });
 
 // Activate event - clean up old caches
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => self.clients.claim()) // Take control immediately
+    caches.keys().then(cacheNames => Promise.all(
+      cacheNames.map(cacheName => {
+        if (cacheName !== CACHE_NAME) {
+          return caches.delete(cacheName);
+        }
+        return Promise.resolve();
+      })
+    )).then(() => self.clients.claim())
   );
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - app shell offline first, API network only
 self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   const url = new URL(event.request.url);
-  
-  // Don't cache API requests to external services
-  if (url.hostname === 'api.open-meteo.com' || 
-      url.hostname === 'nominatim.openstreetmap.org' ||
-      url.hostname === 'script.google.com') {
-    // Network only for API calls
+
+  // Keep API calls network-only so we don't serve stale forecast data
+  if (
+    url.hostname === 'api.open-meteo.com' ||
+    url.hostname === 'nominatim.openstreetmap.org' ||
+    url.hostname === 'script.google.com'
+  ) {
     event.respondWith(fetch(event.request));
     return;
   }
-  
-  // For app resources, try cache first, then network
+
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        if (response) {
-          // Cache hit - return cached version
-          return response;
-        }
-        
-        // Not in cache - fetch from network
-        return fetch(event.request).then(response => {
-          // Don't cache if not a valid response
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
+    caches.match(event.request).then(cachedResponse => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      return fetch(event.request)
+        .then(networkResponse => {
+          if (!networkResponse || networkResponse.status !== 200) {
+            return networkResponse;
           }
-          
-          // Clone the response
-          const responseToCache = response.clone();
-          
-          // Cache the fetched resource
+
+          const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then(cache => {
             cache.put(event.request, responseToCache);
           });
-          
-          return response;
-        }).catch(() => {
-          // Network failed - if it's a navigation request, return cached index.html
+
+          return networkResponse;
+        })
+        .catch(() => {
           if (event.request.mode === 'navigate') {
-            return caches.match(APP_PATH + 'index.html');
+            return caches.match(`${APP_PATH}index.html`);
           }
+
+          return caches.match(event.request);
         });
-      })
+    })
   );
 });
