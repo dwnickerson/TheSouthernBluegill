@@ -33,6 +33,8 @@ function init() {
    
     storage.runMigrations();
 
+    applyStoredTheme();
+
     // Render favorites
     renderFavorites();
    
@@ -62,6 +64,12 @@ function init() {
     debugLog('FishCast ready');
 }
 
+
+
+function applyStoredTheme() {
+    const theme = storage.getTheme();
+    document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+}
 
 // Load default form values
 function loadDefaults() {

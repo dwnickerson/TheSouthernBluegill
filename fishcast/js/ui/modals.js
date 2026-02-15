@@ -1133,15 +1133,21 @@ export function submitCatchLog(event) {
 }
 
 export function openSettings() {
+    const existingModal = document.getElementById('settingsModal');
+    if (existingModal) {
+        existingModal.classList.add('show');
+        return;
+    }
+
     const darkModeEnabled = storage.getTheme() === 'dark';
     const stats = getUserStats();
-    
+
     const modalHTML = `
         <div class="modal show" id="settingsModal" onclick="if(event.target === this) window.closeSettings()">
             <div class="modal-content" onclick="event.stopPropagation()">
                 <div class="modal-header">
                     <span class="modal-close" onclick="window.closeSettings()">×</span>
-                    Settings Settings
+                    Settings
                 </div>
                 
                 <div style="padding: 20px;">
@@ -1270,7 +1276,7 @@ export function saveSettings() {
         }
     }
     
-    showNotification('Settings Settings saved!', 'success');
+    showNotification('Settings saved!', 'success');
     closeSettings();
 }
 
@@ -1307,6 +1313,12 @@ export function clearAllData() {
 }
 
 export function openAbout() {
+    const existingModal = document.getElementById('aboutModal');
+    if (existingModal) {
+        existingModal.classList.add('show');
+        return;
+    }
+
     const modalHTML = `
         <div class="modal show" id="aboutModal" onclick="if(event.target === this) window.closeAbout()">
             <div class="modal-content" onclick="event.stopPropagation()" style="max-height: 90vh; overflow-y: auto;">
