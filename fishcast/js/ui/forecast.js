@@ -3,7 +3,7 @@
 import { SPECIES_DATA } from '../config/species.js';
 import { cToF, kmhToMph, getWindDirection } from '../utils/math.js';
 import { formatDate, formatDateShort } from '../utils/date.js';
-import { calculateFishingScore, getTechniqueTips, getPressureTrend } from '../models/fishingScore.js';
+import { calculateFishingScore, getPressureTrend } from '../models/fishingScore.js';
 import { calculateSolunar } from '../models/solunar.js';
 import { estimateTempByDepth } from '../models/waterTemp.js';
 import { WATER_BODIES_V2 } from '../config/waterBodies.js';
@@ -20,16 +20,16 @@ function getSpeciesData(species) {
     return SPECIES_DATA[species] || SPECIES_DATA['bluegill']; // Default to bluegill
 }
 
-// Get weather icon based on code
+// Get weather icon + label based on code
 function getWeatherIcon(code) {
-    if (code === 0) return 'Clear';
-    if (code <= 3) return 'Partly cloudy';
-    if (code <= 48) return 'Fog';
-    if (code <= 67) return 'Rain';
-    if (code <= 77) return 'Snow';
-    if (code <= 82) return 'Showers';
-    if (code >= 95) return 'Storm';
-    return 'Cloudy';
+    if (code === 0) return { icon: '☀️', label: 'Clear' };
+    if (code <= 3) return { icon: '⛅', label: 'Partly cloudy' };
+    if (code <= 48) return { icon: '🌫️', label: 'Fog' };
+    if (code <= 67) return { icon: '🌧️', label: 'Rain' };
+    if (code <= 77) return { icon: '❄️', label: 'Snow' };
+    if (code <= 82) return { icon: '🌦️', label: 'Showers' };
+    if (code >= 95) return { icon: '⛈️', label: 'Storm' };
+    return { icon: '☁️', label: 'Cloudy' };
 }
 
 // Get moon phase icon
@@ -292,7 +292,6 @@ export function renderForecast(data) {
     
     const windSpeed = kmhToMph(weather.forecast.current.wind_speed_10m);
     const windDir = getWindDirection(weather.forecast.current.wind_direction_10m);
-    const tips = getTechniqueTips(currentScore.score, waterTemp, windSpeed, weather.forecast, speciesKey, currentScore.clarity);
     const pTrend = getPressureTrend(weather.forecast.hourly.surface_pressure.slice(0, 6));
     
     // Weather icon
@@ -348,7 +347,7 @@ export function renderForecast(data) {
             <div class="score-display ${currentScore.colorClass}">${currentScore.score}</div>
             <div class="rating ${currentScore.colorClass}">${currentScore.rating}</div>
             <div class="summary-grid">
-                <div class="summary-card"><div class="label">Conditions</div><div class="value">${weatherIcon}</div></div>
+                <div class="summary-card"><div class="label">Conditions</div><div class="value weather-condition-value"><span class="weather-symbol">${weatherIcon.icon}</span><span>${weatherIcon.label}</span></div></div>
                 <div class="summary-card"><div class="label">Air range</div><div class="value">${todayLowTemp.toFixed(0)}°F to ${todayHighTemp.toFixed(0)}°F</div></div>
                 <div class="summary-card"><div class="label">Water surface</div><div class="value">${surfaceTemp}°F</div></div>
                 <div class="summary-card"><div class="label">Wind</div><div class="value">${windSpeed.toFixed(0)} mph ${windDir}</div></div>
@@ -361,11 +360,6 @@ export function renderForecast(data) {
         
         <div class="action-buttons">
             <button class="action-btn" onclick="window.shareForecast()" aria-label="Share forecast">Share</button>
-        </div>
-
-        <div class="tips-card">
-            <h3>Tactical guidance</h3>
-            ${tips.map(tip => `<div class="tip-item">${tip}</div>`).join('')}
         </div>
         
         <div class="details-grid">
@@ -394,7 +388,7 @@ export function renderForecast(data) {
                 <h3><span class="cloud-icon"></span>Weather</h3>
                 <div class="detail-row">
                     <span class="detail-label">Conditions</span>
-                    <span class="detail-value">${weatherIcon} ${getWeatherDescription(weather.forecast.current.weather_code)}</span>
+                    <span class="detail-value"><span class="weather-symbol">${weatherIcon.icon}</span> ${getWeatherDescription(weather.forecast.current.weather_code)}</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Air Temperature</span>
@@ -593,7 +587,7 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
         html += `
             <div class="forecast-day-card" onclick="window.showDayDetails(${i}, '${date}')" data-day="${i}">
                 <div class="day-header">${formatDateShort(date)}</div>
-                <div style="font-size: 2rem; margin: 10px 0;">${weatherIcon}</div>
+                <div class="day-weather-icon" title="${weatherIcon.label}">${weatherIcon.icon}</div>
                 <div class="day-score ${scoreClass}"title="Estimated fishing score">${Math.round(estimatedScore)}</div>
                 <div class="day-temp">${minTemp.toFixed(0)}° → ${maxTemp.toFixed(0)}°</div>
                 <div class="day-precip">${getPrecipIcon(precipProb)} ${precipProb}%</div>
@@ -665,12 +659,12 @@ window.showDayDetails = function(dayIndex, date) {
             <div class="modal-content" onclick="event.stopPropagation()">
                 <div class="modal-header">
                     <span class="modal-close" onclick="document.getElementById('dayDetailModal').classList.remove('show')">×</span>
-                    ${weatherIcon} ${formatDate(date)}
+                    ${weatherIcon.icon} ${formatDate(date)}
                 </div>
                 <div style="padding: 20px 0;">
                     <div class="detail-row">
                         <span class="detail-label">Conditions</span>
-                        <span class="detail-value">${weatherIcon} ${weatherDesc}</span>
+                        <span class="detail-value"><span class="weather-symbol">${weatherIcon.icon}</span> ${weatherDesc}</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Air Temp (High / Low)</span>

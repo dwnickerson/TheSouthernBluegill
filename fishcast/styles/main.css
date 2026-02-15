@@ -199,7 +199,7 @@ button[type="submit"]:hover,
 }
 
 .score-header {
-    text-align: left;
+    text-align: center;
     margin: 24px 0 16px;
     padding: 24px;
     border-radius: 26px;
@@ -257,12 +257,67 @@ button[type="submit"]:hover,
     padding: 11px;
 }
 
+
+.score-header h2 {
+    margin-bottom: 6px;
+}
+
+.summary-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+}
+
+.summary-card .label {
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.summary-card .value {
+    font-weight: 600;
+}
+
+.weather-condition-value {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.weather-symbol {
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+.day-weather-icon {
+    font-size: 2rem;
+    margin: 10px 0;
+}
+
 .tips-card,
 .weather-radar-card,
 .trend-charts-card {
     margin: 18px 0;
     border-radius: 24px;
     padding: 22px;
+}
+
+.weather-radar-card {
+    text-align: center;
+}
+
+.weather-radar-card p {
+    margin-bottom: 14px;
+}
+
+.weather-radar-frame {
+    width: min(100%, 860px);
+    height: 500px;
+    border: 0;
+    border-radius: 16px;
+    margin: 0 auto;
+    display: block;
 }
 
 .detail-card {
@@ -504,6 +559,10 @@ footer a { color: var(--text-secondary); text-decoration: none; }
     .weather-radar-card,
     .trend-charts-card,
     .favorites-section { border-radius: 22px; }
+
+    .weather-radar-frame {
+        height: 420px;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
