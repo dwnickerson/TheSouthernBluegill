@@ -1335,7 +1335,7 @@ export function openAbout() {
                         We don't just guess water temps—we calculate them using thermal physics:
                     </p>
                     <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px; margin-bottom: 15px;">
-                        <li><strong>Thermal Lag:</strong> Water resists temperature change based on water body size (ponds (≤5 acres): 6 days, lakes (>5 acres): 9 days, reservoirs: 14 days)</li>
+                        <li><strong>Thermal Lag:</strong> Water resists temperature change based on water body size (ponds: 5 days, lakes: 10 days, reservoirs: 14 days)</li>
                         <li><strong>Solar Radiation:</strong> Clear skies warm water faster; cloudy days slow warming</li>
                         <li><strong>Wind Mixing:</strong> Strong winds cool warm water through evaporation and mix temperature layers</li>
                         <li><strong>Depth Stratification:</strong> Estimates temperature at 4ft, 10ft, and 20ft depths using thermocline modeling</li>

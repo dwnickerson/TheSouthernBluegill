@@ -75,8 +75,8 @@ function calculateWaterTempEvolution(initialWaterTemp, forecastData, waterType, 
         
         // 1. Thermal Inertia Effect (water resists change)
         const tempDelta = airTemp - currentWaterTemp;
-        const baseInertia = body.thermal_inertia_base ?? (body.thermal_lag_days === 5 ? 0.15 : 
-                           body.thermal_lag_days === 10 ? 0.08 : 0.05);
+        const baseInertia = body.thermal_lag_days === 5 ? 0.15 : 
+                           body.thermal_lag_days === 10 ? 0.08 : 0.05;
         
         // Use hyperbolic tangent for realistic saturation
         const responseFactor = Math.tanh(Math.abs(tempDelta) / 15);

@@ -1,30 +1,26 @@
 // Water body thermal properties and characteristics
 export const WATER_BODIES_V2 = {
     pond: {
-        // Re-tuned for 0-5 acre ponds (less volatile than tiny farm ponds)
-        thermal_lag_days: 6,           // Responds quickly, but not instantly
-        thermal_inertia_base: 0.13,    // Faster response than lakes
-        seasonal_lag_days: 12,         // Peak temp lags solar by ~12 days
-        annual_amplitude: 22,          // Broader than lakes, reduced vs micro-ponds
-        thermocline_depth: 9,          // Feet - shallow but somewhat stable layering
-        max_daily_change: 2.5,         // Max °F change per day
-        deep_stable_temp: 54,          // Bottom temp in summer
-        mixing_wind_threshold: 6       // mph - when wind starts mixing layers
+        // Tuned for very small impoundments (roughly <= 5 acres)
+        thermal_lag_days: 5,           // Responds quickly to weather
+        seasonal_lag_days: 10,         // Peak temp lags solar by ~10 days
+        annual_amplitude: 24,          // 24°F swing from winter to summer
+        thermocline_depth: 8,          // Feet - where temp drops rapidly
+        max_daily_change: 3,           // Max °F change per day
+        deep_stable_temp: 55,          // Bottom temp in summer
+        mixing_wind_threshold: 5       // mph - when wind starts mixing layers
     },
     lake: {
-        // Re-tuned for lakes just above the 5 acre boundary and larger
-        thermal_lag_days: 9,
-        thermal_inertia_base: 0.09,
-        seasonal_lag_days: 22,
-        annual_amplitude: 21,
-        thermocline_depth: 13,
-        max_daily_change: 2.2,
-        deep_stable_temp: 52,
-        mixing_wind_threshold: 7
+        thermal_lag_days: 10,
+        seasonal_lag_days: 25,
+        annual_amplitude: 20,
+        thermocline_depth: 15,
+        max_daily_change: 2,
+        deep_stable_temp: 50,
+        mixing_wind_threshold: 8
     },
     reservoir: {
         thermal_lag_days: 14,
-        thermal_inertia_base: 0.05,
         seasonal_lag_days: 35,
         annual_amplitude: 18,
         thermocline_depth: 25,

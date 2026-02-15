@@ -79,8 +79,7 @@ function calculateAirTempInfluence(airTemps, waterType) {
 // Calculate thermal inertia coefficient
 function getThermalInertiaCoefficient(waterType, currentWaterTemp, recentAirAvg) {
     const delta = recentAirAvg - currentWaterTemp;
-    const body = WATER_BODIES_V2[waterType];
-    const baseInertia = body.thermal_inertia_base ?? (waterType === 'pond' ? 0.15 : waterType === 'lake' ? 0.08 : 0.05);
+    const baseInertia = waterType === 'pond' ? 0.15 : waterType === 'lake' ? 0.08 : 0.05;
     // Response grows with air-water thermal gradient but should never flip sign;
     // the sign is already represented by delta itself.
     const responseFactor = Math.tanh(Math.abs(delta) / 15);
