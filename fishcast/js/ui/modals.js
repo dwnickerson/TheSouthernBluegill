@@ -1134,14 +1134,13 @@ export function submitCatchLog(event) {
 
 export function openSettings() {
     const darkModeEnabled = storage.getTheme() === 'dark';
-    const stats = getUserStats();
     
     const modalHTML = `
         <div class="modal show" id="settingsModal" onclick="if(event.target === this) window.closeSettings()">
             <div class="modal-content" onclick="event.stopPropagation()">
                 <div class="modal-header">
                     <span class="modal-close" onclick="window.closeSettings()">×</span>
-                    Settings Settings
+                    Settings
                 </div>
                 
                 <div style="padding: 20px;">
@@ -1156,37 +1155,6 @@ export function openSettings() {
                             <input type="checkbox" id="darkModeToggle" ${darkModeEnabled ? 'checked' : ''}>
                             <span class="toggle-slider"></span>
                         </label>
-                    </div>
-                    
-                    <h4 style="margin-top: 30px; color: var(--text-primary);">📊 Your Stats</h4>
-                    
-                    <div style="background: var(--bg-primary); padding: 15px; border-radius: 8px; margin: 15px 0;">
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div>
-                                <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent);">${stats.totalReports}</div>
-                                <div style="color: var(--text-secondary); font-size: 0.9rem;">Water Temp Reports</div>
-                            </div>
-                            <div>
-                                <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent);">${stats.helpedAnglers}</div>
-                                <div style="color: var(--text-secondary); font-size: 0.9rem;">Anglers Helped</div>
-                            </div>
-                        </div>
-                        
-                        ${stats.badges.length > 0 ? `
-                            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border);">
-                                <div style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 8px;">Badges Earned:</div>
-                                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                                    ${stats.badges.map(badge => {
-                                        const badges = {
-                                            'first_reporter': 'First Report',
-                                            'dedicated': 'Dedicated',
-                                            'expert': 'Expert'
-                                        };
-                                        return `<span style="background: var(--accent); color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.85rem;">${badges[badge] || badge}</span>`;
-                                    }).join('')}
-                                </div>
-                            </div>
-                        ` : ''}
                     </div>
                     
                     <h4 style="margin-top: 30px; color: var(--text-primary);">💾 Data</h4>
@@ -1270,7 +1238,7 @@ export function saveSettings() {
         }
     }
     
-    showNotification('Settings Settings saved!', 'success');
+    showNotification('Settings saved!', 'success');
     closeSettings();
 }
 
