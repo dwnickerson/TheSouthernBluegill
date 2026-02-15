@@ -70,6 +70,21 @@ function toRating(score) {
     return { rating: 'BAD', colorClass: 'bad' };
 }
 
+function getFishPhaseLabel(speciesData, waterTempF) {
+    if (!speciesData?.phases || typeof waterTempF !== 'number') {
+        return 'Unknown';
+    }
+
+    for (const [phaseName, phaseData] of Object.entries(speciesData.phases)) {
+        const [min, max] = phaseData.temp_range;
+        if (waterTempF >= min && waterTempF < max) {
+            return phaseName.replaceAll('_', ' ');
+        }
+    }
+
+    return 'Unknown';
+}
+
 function buildTrendLineSvg(values, {
     width = 680,
     height = 250,
@@ -301,6 +316,7 @@ export function renderForecast(data) {
         debug: debugScoring
     });
     const currentScore = { ...toRating(currentDayScore.score), score: currentDayScore.score, clarity: 'clear' };
+    const currentPhaseLabel = getFishPhaseLabel(speciesData, waterTemp);
     
     const windSpeed = kmhToMph(weather.forecast.current.wind_speed_10m);
     const windDir = getWindDirection(weather.forecast.current.wind_direction_10m);
@@ -392,7 +408,7 @@ export function renderForecast(data) {
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Fish Phase</span>
-                    <span class="detail-value">${currentScore.phase.replace('_', ' ')}</span>
+                    <span class="detail-value">${currentPhaseLabel}</span>
                 </div>
             </div>
             
@@ -628,14 +644,7 @@ window.showDayDetails = function(dayIndex, date) {
     
     // Get fish phase based on estimated water temp
     const speciesData = SPECIES_DATA[data.speciesKey];
-    let fishPhase = 'Unknown';
-    for (const [phaseName, phaseData] of Object.entries(speciesData.phases)) {
-        const [min, max] = phaseData.temp_range;
-        if (waterTempEstimate >= min && waterTempEstimate < max) {
-            fishPhase = phaseName.replace('_', ' ');
-            break;
-        }
-    }
+    const fishPhase = getFishPhaseLabel(speciesData, waterTempEstimate);
     
     // Estimate depth temps
     const temp2ft = estimateTempByDepth(waterTempEstimate, data.waterType, 2, new Date(date));
