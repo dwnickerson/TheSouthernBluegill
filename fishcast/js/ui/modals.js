@@ -574,8 +574,8 @@ export function openTempReportModal() {
                             <label for="tempReportWaterBody">Water Body Type</label>
                             <select id="tempReportWaterBody" required>
                                 <option value="">Select type</option>
-                                <option value="pond">Pond (< 20 acres)</option>
-                                <option value="lake">Lake (> 20 acres)</option>
+                                <option value="pond">Pond (≤ 5 acres)</option>
+                                <option value="lake">Lake (> 5 acres)</option>
                                 <option value="river">River/Stream</option>
                                 <option value="reservoir">Reservoir</option>
                             </select>
