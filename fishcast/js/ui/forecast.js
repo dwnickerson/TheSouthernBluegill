@@ -564,6 +564,12 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
         const dayCode = dailyData.weather_code[i];
         const dayPrecipProb = dailyData.precipitation_probability_max?.[i] || 0;
 
+        // Use trailing precipitation totals up to this forecast day (plus recent historical rain)
+        // so clarity scoring remains stable from one day to the next.
+        const recentHistoricalPrecip = weather.historical?.daily?.precipitation_sum || [];
+        const forecastPrecipThroughDay = (dailyData.precipitation_sum || []).slice(0, i + 1);
+        const precipWindow = [...recentHistoricalPrecip, ...forecastPrecipThroughDay].slice(-3);
+
         const scoreWeather = {
             current: {
                 surface_pressure: dayPressure,
@@ -576,7 +582,7 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
                 precipitation_probability: [dayPrecipProb]
             },
             daily: {
-                precipitation_sum: dailyData.precipitation_sum || []
+                precipitation_sum: precipWindow
             }
         };
 
