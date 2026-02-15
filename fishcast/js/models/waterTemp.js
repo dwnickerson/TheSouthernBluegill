@@ -15,22 +15,30 @@ function getSeasonalBaseTemp(latitude, dayOfYear, waterType) {
     const radians = (2 * Math.PI * (dayOfYear - peakDay)) / 365;
     const seasonalTemp = annualMean + (amplitude * Math.cos(radians));
 
-    // Seasonal size/depth correction:
-    // - In winter, shallow ponds tend to warm faster on sunny runs.
-    // - Large/deep reservoirs keep stronger cold-water inertia.
-    // This keeps cold-season ranking from unrealistically favoring reservoirs.
+    // Physics-based size/depth correction:
+    // Use thermocline depth as a proxy for effective mixed-water thermal mass.
+    // Larger/deeper systems exchange heat more slowly and stay cooler in winter/shoulder seasons.
+    const pondReferenceDepth = WATER_BODIES_V2.pond.thermocline_depth;
+    const depthMassDelta = Math.log1p(body.thermocline_depth) - Math.log1p(pondReferenceDepth);
+
     const winterDistance = Math.min(
         Math.abs(dayOfYear - 15),
         Math.abs(dayOfYear + 365 - 15),
         Math.abs(dayOfYear - 365 - 15)
     );
     const winterFactor = Math.max(0, 1 - (winterDistance / 95));
-    const winterTypeAdjustment =
-        waterType === 'pond' ? 9.0 :
-        waterType === 'lake' ? 2.0 :
-        -3.0;
 
-    return seasonalTemp + (winterTypeAdjustment * winterFactor);
+    const shoulderDistance = Math.min(
+        Math.abs(dayOfYear - 75),
+        Math.abs(dayOfYear + 365 - 75),
+        Math.abs(dayOfYear - 365 - 75)
+    );
+    const shoulderFactor = Math.max(0, 1 - (shoulderDistance / 110));
+
+    // Deeper water bodies are progressively cooler than ponds during cold/transition periods.
+    const coldSeasonCooling = depthMassDelta * (7.0 * winterFactor + 3.0 * shoulderFactor);
+
+    return seasonalTemp - coldSeasonCooling;
 }
 
 // Calculate solar radiation effect from cloud cover
