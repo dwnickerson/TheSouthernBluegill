@@ -273,6 +273,12 @@ function renderMainView(data) {
 
     const hourlyItems = buildHourlyItems(data);
     const dailyRows = buildDailyRows(data);
+    const sunrise = daily.sunrise?.[0]
+        ? new Date(daily.sunrise[0]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : 'N/A';
+    const sunset = daily.sunset?.[0]
+        ? new Date(daily.sunset[0]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : 'N/A';
     applyWeatherBackdrop(weather.forecast.current.weather_code);
 
     resultsDiv.innerHTML = `
@@ -348,7 +354,9 @@ function renderMainView(data) {
                     <h3>Moon &amp; Light</h3>
                     ${renderMoonGraphic(solunar.moon_phase_percent)}
                     <p class="metric-value">${moonLabel(solunar.moon_phase_percent)}</p>
-                    <p class="metric-note">${solunar.moon_phase_percent}% illumination this evening. Major: ${solunar.major_periods[0]}.</p>
+                    <p class="metric-note">Sunrise: ${sunrise} · Sunset: ${sunset}</p>
+                    <p class="metric-note">Major periods: ${solunar.major_periods.join(' · ')}</p>
+                    <p class="metric-note">Minor periods: ${solunar.minor_periods.join(' · ')}</p>
                 </article>
             </section>
         </main>
