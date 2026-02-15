@@ -1,9 +1,11 @@
 // FishCast Main Application
 // Entry point and coordinator for all modules
-// Debug logging for module loading
-console.log('🚀 Starting FishCast V2.0...');
-console.log('📍 Current URL:', window.location.href);
-console.log('🔧 Module import starting...');
+const DEBUG = false;
+const debugLog = (...args) => {
+    if (DEBUG) console.log(...args);
+};
+
+debugLog('FishCast starting', window.location.href);
 
 import { storage } from './services/storage.js';
 import { getLocation } from './services/geocoding.js';
@@ -29,7 +31,7 @@ import { cToF } from './utils/math.js';
 
 // Initialize application
 function init() {
-    console.log('🎣 FishCast V2.0 Initializing...');
+    debugLog('FishCast initializing');
    
     storage.runMigrations();
 
@@ -51,7 +53,7 @@ function init() {
     // Register service worker
     registerServiceWorker();
    
-    console.log('✅ FishCast V2.0 Ready!');
+    debugLog('FishCast ready');
 }
 
 // Theme management
@@ -61,7 +63,7 @@ function initTheme() {
    
     const themeToggle = document.getElementById('themeToggle');
     if (themeToggle) {
-        themeToggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+        themeToggle.textContent = theme === 'dark' ? '◑' : '◐';
     }
 }
 
@@ -74,7 +76,7 @@ function toggleTheme() {
    
     const themeToggle = document.getElementById('themeToggle');
     if (themeToggle) {
-        themeToggle.textContent = next === 'dark' ? '☀️' : '🌙';
+        themeToggle.textContent = next === 'dark' ? '◑' : '◐';
     }
 }
 
@@ -106,7 +108,7 @@ function initSpeciesMemory() {
         const option = speciesSelect.querySelector(`option[value="${lastSpecies}"]`);
         if (option) {
             speciesSelect.value = lastSpecies;
-            console.log(`🐟 Restored last species: ${lastSpecies}`);
+            debugLog(`Restored last species: ${lastSpecies}`);
         }
     }
     
@@ -116,7 +118,7 @@ function initSpeciesMemory() {
             const selectedSpecies = e.target.value;
             if (selectedSpecies) {
                 storage.setLastSelectedSpecies(selectedSpecies);
-                console.log(`🐟 Saved species preference: ${selectedSpecies}`);
+                debugLog(`Saved species preference: ${selectedSpecies}`);
             }
         });
     }
@@ -141,13 +143,13 @@ async function generateForecast(event) {
         // Get location coordinates
         const coords = await getLocation(location);
         if (coords.stale) {
-            showNotification(`⚠️ Using cached location data. ${coords.staleReason || ''}`.trim(), 'warning');
+            showNotification(`Using cached location data. ${coords.staleReason || ''}`.trim(), 'warning');
         }
 
         // Fetch weather data
         const weather = await getWeather(coords.lat, coords.lon, days);
         if (weather.stale) {
-            showNotification(`⚠️ Using cached weather data. ${weather.staleReason || ''}`.trim(), 'warning');
+            showNotification(`Using cached weather data. ${weather.staleReason || ''}`.trim(), 'warning');
         }
        
         // Convert historical temps to Fahrenheit
@@ -189,12 +191,12 @@ async function generateForecast(event) {
 // Geolocation
 async function useCurrentLocation() {
     const btn = document.getElementById('geolocateBtn');
-    btn.textContent = '⏳';
+    btn.textContent = '…';
     btn.disabled = true;
    
     if (!navigator.geolocation) {
         showNotification('Geolocation not supported by your browser', 'error');
-        btn.textContent = '📍';
+        btn.textContent = '◎';
         btn.disabled = false;
         return;
     }
@@ -225,13 +227,13 @@ async function useCurrentLocation() {
             } catch (error) {
                 showNotification('Could not determine location name', 'error');
             } finally {
-                btn.textContent = '📍';
+                btn.textContent = '◎';
                 btn.disabled = false;
             }
         },
         (error) => {
             showNotification('Could not get location: ' + error.message, 'error');
-            btn.textContent = '📍';
+            btn.textContent = '◎';
             btn.disabled = false;
         }
     );
@@ -263,14 +265,22 @@ function setupEventListeners() {
         e.preventDefault();
         openAbout();
     });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        closeTempReport();
+        closeSettings();
+        closeAbout();
+    });
 }
+
 
 // Service worker registration
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/fishcast/sw.js')
-            .then(() => console.log('✅ Service Worker registered'))
-            .catch(err => console.log('❌ Service Worker registration failed:', err));
+            .then(() => debugLog('Service Worker registered'))
+            .catch(err => debugLog('Service Worker registration failed:', err));
     }
 }
 

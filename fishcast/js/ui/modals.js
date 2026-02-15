@@ -1,8 +1,12 @@
 // Modal Handlers with Gamification - VERSION 3.5.0
-console.log('📦 modals.js VERSION 3.5.0 loaded - Multiple Favorites + Quick Report + Fixes');
 
 import { storage } from '../services/storage.js';
 import { renderFavorites } from './favorites.js';
+
+const DEBUG = false;
+const debugLog = (...args) => {
+    if (DEBUG) console.log(...args);
+};
 
 
 function escapeHTML(value = '') {
@@ -42,7 +46,7 @@ function saveFavorites() {
         waterBodyFavorites = waterBodyFavorites.slice(0, 10);
     }
     storage.saveWaterBodyFavorites(waterBodyFavorites);
-    console.log(`💾 Saved ${waterBodyFavorites.length} favorites`);
+    debugLog(`Saved ${waterBodyFavorites.length} favorites`);
 }
 
 // Add new favorite
@@ -56,7 +60,7 @@ function addFavorite(name, location, waterType) {
     if (exists) {
         // Update lastUsed
         exists.lastUsed = new Date().toISOString();
-        showNotification('⭐ Favorite updated!', 'success');
+        showNotification('Favorite updated.', 'success');
     } else {
         // Add new
         const favorite = {
@@ -67,7 +71,7 @@ function addFavorite(name, location, waterType) {
             lastUsed: new Date().toISOString()
         };
         waterBodyFavorites.unshift(favorite);
-        showNotification('⭐ Added to favorites!', 'success');
+        showNotification('Added to favorites.', 'success');
     }
     
     saveFavorites();
@@ -79,7 +83,7 @@ function removeFavorite(id) {
     waterBodyFavorites = waterBodyFavorites.filter(f => f.id !== id);
     saveFavorites();
     populateFavoriteSelector();
-    showNotification('🗑️ Favorite removed', 'success');
+    showNotification('Favorite removed.', 'success');
 }
 
 // Populate dropdown
@@ -94,7 +98,7 @@ function populateFavoriteSelector() {
     waterBodyFavorites.forEach(fav => {
         const option = document.createElement('option');
         option.value = fav.id;
-        option.textContent = `🌊 ${fav.name} (${fav.location})`;
+        option.textContent = `${fav.name} (${fav.location})`;
         selector.appendChild(option);
     });
     
@@ -134,7 +138,7 @@ function onFavoriteSelected(favoriteId) {
             favorite.lastUsed = new Date().toISOString();
             saveFavorites();
             
-            console.log(`🌊 Loaded favorite: ${favorite.name}`);
+            debugLog(`Loaded favorite: ${favorite.name}`);
         }
     } else {
         // Nothing selected - show manual fields
@@ -150,7 +154,7 @@ function openManageFavoritesModal() {
         <div id="manageFavoritesModal" class="modal" style="display: flex;">
             <div class="modal-content" style="max-width: 500px;">
                 <div class="modal-header">
-                    <h2>⭐ Manage Favorites</h2>
+                    <h2>Manage saved locations</h2>
                     <button class="close-btn" onclick="closeManageFavorites()">×</button>
                 </div>
                 
@@ -188,10 +192,10 @@ function renderFavoritesList() {
     return waterBodyFavorites.map(fav => `
         <div class="favorite-item">
             <div class="favorite-info">
-                <strong>🌊 ${escapeHTML(fav.name)}</strong>
+                <strong>${escapeHTML(fav.name)}</strong>
                 <small>${escapeHTML(fav.location)} · ${escapeHTML(fav.waterType.charAt(0).toUpperCase() + fav.waterType.slice(1))}</small>
             </div>
-            <button class="delete-btn" onclick="deleteFavoriteFromModal('${fav.id}')">🗑️</button>
+            <button class="delete-btn" onclick="deleteFavoriteFromModal('${fav.id}')" aria-label="Remove saved location">Remove</button>
         </div>
     `).join('');
 }
@@ -289,14 +293,14 @@ function getQuickReportLocations() {
 
 // Open Quick Report Modal
 export function openQuickReportModal() {
-    console.log('⚡ Opening Quick Report modal...');
+    debugLog('Opening Quick Report modal...');
     
     // Get available locations
     const locations = getQuickReportLocations();
     
     if (locations.length === 0) {
         // No saved locations - redirect to full form
-        showNotification('ℹ️ No saved locations. Use full form for first report.', 'info');
+        showNotification('No saved locations yet. Use full report for your first entry.', 'info');
         setTimeout(() => {
             openTempReportModal();
         }, 1000);
@@ -308,7 +312,7 @@ export function openQuickReportModal() {
         <div id="quickReportModal" class="modal" style="display: flex;">
             <div class="modal-content quick-report">
                 <div class="modal-header">
-                    <h2>⚡ Quick Report</h2>
+                    <h2>Quick report</h2>
                     <button class="close-btn" onclick="closeQuickReport()">×</button>
                 </div>
                 
@@ -360,14 +364,14 @@ export function openQuickReportModal() {
                     
                     <!-- Auto-filled Info -->
                     <div class="auto-info">
-                        ✓ Date/Time: Now (${new Date().toLocaleString()})
+                        Date/time: Now (${new Date().toLocaleString()})
                     </div>
                 </div>
                 
                 <div class="modal-footer">
                     <button class="action-btn secondary" onclick="closeQuickReport()">Cancel</button>
                     <button class="action-btn success" onclick="submitQuickReport()">
-                        ⚡ Submit Report
+                        Submit report
                     </button>
                 </div>
             </div>
@@ -407,7 +411,7 @@ function updateQuickReportHelper() {
     const helper = document.getElementById('locationHelper');
     
     if (selected && helper) {
-        helper.textContent = `🌊 ${selected.dataset.name}, ${selected.dataset.location} · ${selected.dataset.watertype}`;
+        helper.textContent = `${selected.dataset.name}, ${selected.dataset.location} · ${selected.dataset.watertype}`;
     }
 }
 
@@ -422,7 +426,7 @@ window.submitQuickReport = async function() {
     
     // Validate temperature
     if (!temperature || isNaN(temperature)) {
-        showNotification('❌ Please enter water temperature', 'error');
+        showNotification('Enter water temperature.', 'error');
         return;
     }
     
@@ -455,7 +459,7 @@ window.closeQuickReport = function() {
     }
 };
 
-console.log('✅ Multiple Favorites & Quick Report features loaded');
+debugLog('Multiple Favorites & Quick Report features loaded');
 
 
 // Get user's report statistics
@@ -479,15 +483,15 @@ function updateUserStats() {
     // Check for badges
     if (stats.totalReports === 1 && !stats.badges.includes('first_reporter')) {
         stats.badges.push('first_reporter');
-        showBadgeEarned('🏆 First Report!', 'You contributed to the community!');
+        showBadgeEarned('First Report!', 'You contributed to the community!');
     }
     if (stats.totalReports === 10 && !stats.badges.includes('dedicated')) {
         stats.badges.push('dedicated');
-        showBadgeEarned('🌟 Dedicated Reporter!', 'You\'ve submitted 10 reports!');
+        showBadgeEarned('Dedicated Reporter!', 'You\'ve submitted 10 reports!');
     }
     if (stats.totalReports === 50 && !stats.badges.includes('expert')) {
         stats.badges.push('expert');
-        showBadgeEarned('💎 Expert Contributor!', 'You\'ve submitted 50 reports!');
+        showBadgeEarned('Expert Contributor!', 'You\'ve submitted 50 reports!');
     }
     
     storage.set('userStats', stats);
@@ -515,24 +519,24 @@ function showBadgeEarned(title, message) {
 
 // Water temperature report modal
 export function openTempReportModal() {
-    console.log('🔵 openTempReportModal called');
+    debugLog('openTempReportModal called');
     
     const userStats = getUserStats();
-    console.log('📊 User stats:', userStats);
+    debugLog('User stats', userStats);
     
     const modalHTML = `
         <div class="modal show" id="tempReportModal" onclick="if(event.target === this) window.closeTempReport()">
             <div class="modal-content" onclick="event.stopPropagation()">
                 <div class="modal-header">
                     <span class="modal-close" onclick="window.closeTempReport()">×</span>
-                    🌡️ Submit Water Temperature
+                    Submit water temperature
                 </div>
                 
                 <div style="background: var(--bg-primary); padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
                     <div style="font-size: 2rem; font-weight: 700; color: var(--accent);">${userStats.helpedAnglers}</div>
-                    <div style="color: var(--text-secondary); font-size: 0.9rem;">anglers helped by your ${userStats.totalReports} reports! 🎣</div>
-                    ${userStats.totalReports >= 10 ? '<div style="margin-top: 8px;">🌟 Dedicated Reporter</div>' : ''}
-                    ${userStats.totalReports >= 50 ? '<div>💎 Expert Contributor</div>' : ''}
+                    <div style="color: var(--text-secondary); font-size: 0.9rem;">anglers helped by your ${userStats.totalReports} reports.</div>
+                    ${userStats.totalReports >= 10 ? '<div style="margin-top: 8px;">Dedicated Reporter</div>' : ''}
+                    ${userStats.totalReports >= 50 ? '<div>Expert Contributor</div>' : ''}
                 </div>
                 
                 <form id="tempReportForm" action="" onsubmit="event.preventDefault(); return false;">
@@ -543,8 +547,8 @@ export function openTempReportModal() {
                             <select id="favoriteSelector" style="flex: 1;">
                                 <option value="">Select a favorite or add new...</option>
                             </select>
-                            <button type="button" id="manageFavoritesBtn" class="icon-btn" title="Manage favorites">
-                                ⚙️
+                            <button type="button" id="manageFavoritesBtn" class="icon-btn" title="Manage favorites" aria-label="Manage favorites">
+                                Settings
                             </button>
                         </div>
                     </div>
@@ -561,7 +565,7 @@ export function openTempReportModal() {
                             <label for="tempReportLocation">Location (City, State)</label>
                             <div style="display: flex; gap: 10px;">
                                 <input type="text" id="tempReportLocation" placeholder="e.g., Counce, TN" required style="flex: 1;">
-                                <button type="button" id="tempReportGeoBtn" style="width: 56px; height: 42px; padding: 8px;">📍</button>
+                                <button type="button" id="tempReportGeoBtn" style="width: 56px; height: 42px; padding: 8px;" aria-label="Use current location for report">◎</button>
                             </div>
                             <small>City and state where the water body is located</small>
                         </div>
@@ -578,7 +582,7 @@ export function openTempReportModal() {
                         </div>
                         
                         <button type="button" id="saveAsFavoriteBtn" class="action-btn secondary" style="width: 100%; margin-top: 10px;">
-                            ⭐ Save as Favorite
+                            Save as favorite
                         </button>
                     </div>
                     
@@ -632,9 +636,9 @@ export function openTempReportModal() {
         </div>
     `;
     
-    console.log('🔵 Inserting modal HTML into page...');
+    debugLog('🔵 Inserting modal HTML into page...');
     document.body.insertAdjacentHTML('beforeend', modalHTML);
-    console.log('✅ Modal HTML inserted');
+    
     
     // Set default date and time to NOW
     const now = new Date();
@@ -652,7 +656,7 @@ export function openTempReportModal() {
     const minutes = String(now.getMinutes()).padStart(2, '0');
     timeInput.value = `${hours}:${minutes}`;
     
-    console.log(`🕐 Default measurement time set to: ${dateInput.value} ${timeInput.value}`);
+    debugLog(`🕐 Default measurement time set to: ${dateInput.value} ${timeInput.value}`);
     
     // Initialize favorites
     loadFavorites();
@@ -685,22 +689,22 @@ export function openTempReportModal() {
             if (name && location && waterType) {
                 addFavorite(name, location, waterType);
             } else {
-                showNotification('⚠️ Please fill in all fields first', 'error');
+                showNotification('Please fill in all fields first', 'error');
             }
         });
     }
     
     // Check if form exists
     const form = document.getElementById('tempReportForm');
-    console.log('🔵 Form element:', form);
+    debugLog('🔵 Form element:', form);
     
     if (!form) {
-        console.error('❌ ERROR: Form not found after inserting modal!');
+        console.error('ERROR: Form not found after inserting modal!');
         return;
     }
     
     // Auto-location handler
-    console.log('🔵 Attaching geo button listener...');
+    debugLog('🔵 Attaching geo button listener...');
     document.getElementById('tempReportGeoBtn').addEventListener('click', async () => {
         if (!navigator.geolocation) {
             alert('Geolocation not supported');
@@ -708,7 +712,7 @@ export function openTempReportModal() {
         }
         
         const btn = document.getElementById('tempReportGeoBtn');
-        btn.textContent = '⏳';
+        btn.textContent = '…';
         btn.disabled = true;
         
         navigator.geolocation.getCurrentPosition(async (position) => {
@@ -738,34 +742,34 @@ export function openTempReportModal() {
                 }
                 
                 document.getElementById('tempReportLocation').value = location;
-                console.log('📍 Geolocated to:', location);
+                debugLog('Geolocated to:', location);
             } catch (error) {
                 console.error('Reverse geocoding error:', error);
                 document.getElementById('tempReportLocation').value = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
             }
             
-            btn.textContent = '📍';
+            btn.textContent = '◎';
             btn.disabled = false;
         }, (error) => {
             alert('Could not get location: ' + error.message);
-            btn.textContent = '📍';
+            btn.textContent = '◎';
             btn.disabled = false;
         });
     });
     
     // Form submission
-    console.log('🔵 Attaching form submit listener...');
+    debugLog('🔵 Attaching form submit listener...');
     const formElement = document.getElementById('tempReportForm');
     if (formElement) {
         formElement.addEventListener('submit', async (e) => {
-            console.log('🔵 Form submit event fired!');
+            debugLog('🔵 Form submit event fired!');
             e.preventDefault();
-            console.log('🔵 Default prevented, calling handleTempReportSubmit...');
+            debugLog('🔵 Default prevented, calling handleTempReportSubmit...');
             await handleTempReportSubmit();
         });
-        console.log('✅ Form submit listener attached successfully');
+        debugLog('Form submit listener attached successfully');
     } else {
-        console.error('❌ ERROR: Cannot attach submit listener - form not found!');
+        console.error('ERROR: Cannot attach submit listener - form not found!');
     }
 }
 
@@ -785,11 +789,11 @@ function resetSubmitButton() {
 }
 
 export async function handleTempReportSubmit() {
-    console.log('🌡️ Water temp submission started...');
+    debugLog('Water temp submission started...');
     
     // Prevent double-submit
     if (isSubmitting) {
-        console.warn('⚠️ Submission already in progress, ignoring duplicate click');
+        console.warn('Submission already in progress, ignoring duplicate click');
         return;
     }
     
@@ -820,7 +824,7 @@ export async function handleTempReportSubmit() {
         // Validate date/time
         if (!measurementDate || !measurementTime) {
             resetSubmitButton();
-            showNotification('❌ Please enter the date and time of your measurement', 'error');
+            showNotification('Please enter the date and time of your measurement', 'error');
             return;
         }
         
@@ -831,7 +835,7 @@ export async function handleTempReportSubmit() {
         // Validate not in the future (allow 5 minute grace period for clock differences)
         if (measurementDateTime.getTime() > now.getTime() + (5 * 60 * 1000)) {
             resetSubmitButton();
-            showNotification('❌ Measurement time cannot be in the future', 'error');
+            showNotification('Measurement time cannot be in the future', 'error');
             return;
         }
         
@@ -839,13 +843,13 @@ export async function handleTempReportSubmit() {
         const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
         if (measurementDateTime.getTime() < thirtyDaysAgo.getTime()) {
             resetSubmitButton();
-            showNotification('⚠️ Measurements older than 30 days may not be accurate. Please submit recent data.', 'error');
+            showNotification('Measurements older than 30 days may not be accurate. Please submit recent data.', 'error');
             return;
         }
         
-        console.log('Form data:', { waterbodyName, location, waterBody, temperature, depth, clarity, notes, measurementDate, measurementTime });
-        console.log('Measurement timestamp:', measurementDateTime.toISOString());
-        console.log('Form data types:', {
+        debugLog('Form data:', { waterbodyName, location, waterBody, temperature, depth, clarity, notes, measurementDate, measurementTime });
+        debugLog('Measurement timestamp:', measurementDateTime.toISOString());
+        debugLog('Form data types:', {
             waterbodyName: typeof waterbodyName,
             waterBody: typeof waterBody,
             clarity: typeof clarity,
@@ -855,32 +859,32 @@ export async function handleTempReportSubmit() {
         // Validate location format
         if (!location || location.trim().length < 3) {
             resetSubmitButton();
-            showNotification('❌ Please enter a valid location (City, State)', 'error');
+            showNotification('Please enter a valid location (City, State).', 'error');
             return;
         }
         
         // Check for comma (suggests "City, State" format)
         if (!location.includes(',') && !location.includes(' ')) {
             resetSubmitButton();
-            showNotification('⚠️ Location should be in "City, State" format (e.g., "Memphis, TN")', 'error');
+            showNotification('Use "City, State" format (example: "Memphis, TN").', 'error');
             return;
         }
         
         if (isNaN(depth) || depth < 0) {
             console.warn('Invalid depth:', depth);
             resetSubmitButton();
-            showNotification('❌ Please enter a valid depth (0 or greater)', 'error');
+            showNotification('Please enter a valid depth (0 or greater).', 'error');
             return;
         }
         
         // Geocode the location to get lat/long
-        console.log('🗺️ Geocoding location:', location);
+        debugLog('Geocoding location', location);
         let lat = null, lon = null;
         
         // Try geocoding with retry logic
         for (let attempt = 1; attempt <= 2; attempt++) {
             try {
-                console.log(`Geocoding attempt ${attempt}...`);
+                debugLog(`Geocoding attempt ${attempt}...`);
                 const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`;
                 const geocodeResponse = await fetch(geocodeUrl);
                 
@@ -893,23 +897,23 @@ export async function handleTempReportSubmit() {
                 if (geocodeData && geocodeData.length > 0) {
                     lat = parseFloat(geocodeData[0].lat);
                     lon = parseFloat(geocodeData[0].lon);
-                    console.log('✅ Geocoded:', { lat, lon });
+                    debugLog('Geocoded:', { lat, lon });
                     break; // Success! Exit retry loop
                 } else {
-                    console.warn(`⚠️ No results for location: "${location}"`);
+                    console.warn(`No results for location: "${location}"`);
                     if (attempt === 2) {
                         // Last attempt failed
                         resetSubmitButton();
-                        showNotification('❌ Could not find location. Please enter "City, State" format (e.g., "Memphis, TN")', 'error');
+                        showNotification('Location not found. Please use "City, State" format.', 'error');
                         return;
                     }
                 }
             } catch (error) {
-                console.error(`❌ Geocoding error (attempt ${attempt}):`, error);
+                console.error(`Geocoding error (attempt ${attempt}):`, error);
                 if (attempt === 2) {
                     // Last attempt failed
                     resetSubmitButton();
-                    showNotification('❌ Geocoding failed. Please check your internet connection and try again.', 'error');
+                    showNotification('Geocoding failed. Check connection and try again.', 'error');
                     return;
                 }
                 // Wait 1 second before retry
@@ -919,9 +923,9 @@ export async function handleTempReportSubmit() {
         
         // Final check - don't submit without coordinates
         if (lat === null || lon === null) {
-            console.error('🚫 Geocoding failed completely. Not submitting.');
+            console.error('Geocoding failed completely. Not submitting.');
             resetSubmitButton();
-            showNotification('❌ Cannot submit without location coordinates. Please try again.', 'error');
+            showNotification('Cannot submit without location coordinates.', 'error');
             return;
         }
         
@@ -940,14 +944,14 @@ export async function handleTempReportSubmit() {
             userAgent: navigator.userAgent            // K
         };
         
-        console.log('Submitting data:', data);
+        debugLog('Submitting data:', data);
         
         const jsonBody = JSON.stringify(data);
-        console.log('📦 JSON body:', jsonBody);
-        console.log('📦 JSON length:', jsonBody.length);
+        debugLog('📦 JSON body:', jsonBody);
+        debugLog('📦 JSON length:', jsonBody.length);
         
         // Send to Google Sheets
-        console.log('📤 Sending to Google Sheets...');
+        debugLog('Sending to Google Sheets...');
         const response = await fetch('https://script.google.com/macros/s/AKfycbxmuReDxhNFGjFC_LaEcCiTB8R7uI9lJxMbMsEWSoIp_VRegLarMnnILlvk-2K7ghDYeg/exec', {
             method: 'POST',
             mode: 'no-cors', // Google Apps Script requires this
@@ -957,11 +961,11 @@ export async function handleTempReportSubmit() {
             body: jsonBody
         });
         
-        console.log('✅ Data sent to Google Sheets');
+        debugLog('Data sent to Google Sheets');
         
-        console.log('Updating stats...');
+        debugLog('Updating stats...');
         const updatedStats = updateUserStats();
-        console.log('Updated stats:', updatedStats);
+        debugLog('Updated stats:', updatedStats);
         
         // Track for quick report recent locations
         trackRecentReport({
@@ -986,12 +990,12 @@ export async function handleTempReportSubmit() {
             : `Your ${updatedStats.totalReports} reports have helped ${updatedStats.helpedAnglers} anglers!`;
         
         // Show notification FIRST
-        console.log('Showing notification...');
-        showNotification(`✅ Report submitted! ${impactMsg}`, 'success');
+        debugLog('Showing notification...');
+        showNotification(`Report submitted successfully. ${impactMsg}`, 'success');
         
         // Add closing animation and close modal
         setTimeout(() => {
-            console.log('Closing modal...');
+            debugLog('Closing modal...');
             const modal = document.getElementById('tempReportModal');
             if (modal) {
                 // Add fade-out animation
@@ -1008,7 +1012,7 @@ export async function handleTempReportSubmit() {
         }, 500);
         
     } catch (error) {
-        console.error('❌ Error submitting to Google Sheets:', error);
+        console.error('Error submitting to Google Sheets:', error);
         resetSubmitButton();
         // Still show success to user since data is saved locally
         // The webhook will retry or admin can check logs
@@ -1017,7 +1021,7 @@ export async function handleTempReportSubmit() {
             ? 'Thank you for your first report! Data saved locally.' 
             : `Your ${updatedStats.totalReports} reports saved! (Sheet sync pending)`;
         
-        showNotification(`⚠️ Report saved locally! ${impactMsg}`, 'success');
+        showNotification(`Report saved locally. ${impactMsg}`, 'success');
         
         setTimeout(() => {
             resetSubmitButton();
@@ -1027,18 +1031,18 @@ export async function handleTempReportSubmit() {
 }
 
 export function closeTempReportModal() {
-    console.log('🔵 closeTempReportModal called');
+    debugLog('🔵 closeTempReportModal called');
     
     // CRITICAL: Reset submission flag when modal closes
     isSubmitting = false;
     
     const modal = document.getElementById('tempReportModal');
-    console.log('🔵 Modal element found:', modal);
+    debugLog('🔵 Modal element found:', modal);
     if (modal) {
         modal.remove();
-        console.log('✅ Modal removed');
+        debugLog('Modal removed');
     } else {
-        console.error('❌ Modal element not found! Cannot close.');
+        console.error('Modal element not found! Cannot close.');
     }
 }
 
@@ -1125,7 +1129,7 @@ export function submitCatchLog(event) {
 
     document.getElementById('catchLogForm')?.reset();
     closeCatchLog();
-    showNotification(`✅ Catch logged (${count} ${species})`, 'success');
+    showNotification(`Catch log saved (${count} ${species})`, 'success');
 }
 
 export function openSettings() {
@@ -1137,7 +1141,7 @@ export function openSettings() {
             <div class="modal-content" onclick="event.stopPropagation()">
                 <div class="modal-header">
                     <span class="modal-close" onclick="window.closeSettings()">×</span>
-                    ⚙️ Settings
+                    Settings Settings
                 </div>
                 
                 <div style="padding: 20px;">
@@ -1174,9 +1178,9 @@ export function openSettings() {
                                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                                     ${stats.badges.map(badge => {
                                         const badges = {
-                                            'first_reporter': '🏆 First Report',
-                                            'dedicated': '🌟 Dedicated',
-                                            'expert': '💎 Expert'
+                                            'first_reporter': 'First Report',
+                                            'dedicated': 'Dedicated',
+                                            'expert': 'Expert'
                                         };
                                         return `<span style="background: var(--accent); color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.85rem;">${badges[badge] || badge}</span>`;
                                     }).join('')}
@@ -1189,10 +1193,10 @@ export function openSettings() {
                     
                     <div style="display: flex; gap: 10px; margin: 15px 0;">
                         <button class="action-btn" onclick="window.exportUserData()" style="flex: 1;">
-                            📤 Export My Data
+                            Export My Data
                         </button>
                         <button class="action-btn" onclick="if(confirm('Clear all your local data? This cannot be undone.')) window.clearUserData()" style="flex: 1;">
-                            🗑️ Clear All Data
+                            Clear All Data
                         </button>
                     </div>
                     
@@ -1247,7 +1251,7 @@ export function saveSettings() {
         const validSpecies = new Set(Array.from(document.querySelectorAll('#species option')).map(option => option.value));
 
         if (speciesValue && !validSpecies.has(speciesValue)) {
-            showNotification('❌ Invalid default species selection.', 'error');
+            showNotification('Invalid default species selection.', 'error');
             return;
         }
 
@@ -1266,7 +1270,7 @@ export function saveSettings() {
         }
     }
     
-    showNotification('⚙️ Settings saved!', 'success');
+    showNotification('Settings Settings saved!', 'success');
     closeSettings();
 }
 
@@ -1291,12 +1295,12 @@ export function exportAllData() {
     a.click();
     URL.revokeObjectURL(url);
     
-    showNotification('📤 Data exported successfully!', 'success');
+    showNotification('Data exported successfully!', 'success');
 }
 
 export function clearAllData() {
     storage.clearAll();
-    showNotification('🗑️ All data cleared!', 'success');
+    showNotification('All local data cleared.', 'success');
     setTimeout(() => {
         window.location.reload();
     }, 1500);
@@ -1308,7 +1312,7 @@ export function openAbout() {
             <div class="modal-content" onclick="event.stopPropagation()" style="max-height: 90vh; overflow-y: auto;">
                 <div class="modal-header">
                     <span class="modal-close" onclick="window.closeAbout()">×</span>
-                    🎣 About FishCast
+                    About
                 </div>
                 
                 <div style="padding: 20px;">
@@ -1390,7 +1394,7 @@ export function openAbout() {
                     </ul>
                     
                     <p style="color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px;">
-                        <strong style="color: var(--accent);">🚀 Future: Machine Learning Models</strong><br>
+                        <strong style="color: var(--accent);">Future: machine learning models</strong><br>
                         We're building ML models trained on community data to:
                     </p>
                     <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px; margin-bottom: 15px;">
@@ -1434,20 +1438,20 @@ export function openAbout() {
                         <strong>What We DON'T Do:</strong>
                     </p>
                     <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px; margin-bottom: 15px;">
-                        <li>❌ Sell or share your data with third parties</li>
-                        <li>❌ Track you across websites (no cookies or tracking pixels)</li>
-                        <li>❌ Collect precise GPS coordinates of your fishing spots</li>
-                        <li>❌ Require accounts, logins, or personal information</li>
-                        <li>❌ Send marketing emails or spam</li>
+                        <li>Sell or share your data with third parties</li>
+                        <li>Track you across websites (no cookies or tracking pixels)</li>
+                        <li>Collect precise GPS coordinates of your fishing spots</li>
+                        <li>Require accounts, logins, or personal information</li>
+                        <li>Send marketing emails or spam</li>
                     </ul>
                     
                     <p style="background: #1a472a; padding: 15px; border-left: 4px solid #4ade80; border-radius: 4px; color: var(--text-secondary); line-height: 1.7; margin-top: 15px;">
-                        <strong>🛡️ Our Commitment:</strong> Your data powers better forecasts for the entire fishing community, but your privacy is paramount. All data is anonymized, aggregated, and used solely to improve fishing forecasts. We're anglers too—we respect your secret spots!
+                        <strong>Our Commitment:</strong> Your data powers better forecasts for the entire fishing community, but your privacy is paramount. All data is anonymized, aggregated, and used solely to improve fishing forecasts. We're anglers too—we respect your secret spots!
                     </p>
                     
                     <!-- Current Features -->
                     <h4 style="color: var(--text-primary); margin-top: 25px; border-bottom: 2px solid var(--accent); padding-bottom: 8px;">
-                        ✨ Current Features
+                        Current Features
                     </h4>
                     <ul style="color: var(--text-secondary); line-height: 1.8; margin-left: 20px;">
                         <li><strong>17 Species:</strong> 12 Sunfish (Bluegill, Redear, Green Sunfish, Longear, Pumpkinseed, Redbreast, Warmouth, Rock Bass, Flier, Spotted Sunfish, Shadow Bass, Sacramento Perch) + 3 Bass (Largemouth, Smallmouth, Spotted) + 2 Crappie (Black, White)</li>
@@ -1534,7 +1538,7 @@ export function shareForecast() {
     }
 
     const shareText = [
-        '🎣 FishCast Forecast',
+        'FishCast Forecast',
         `${location || 'My spot'} · ${speciesLabel || 'Fishing'}`,
         `Score: ${score} (${rating})`,
         `Check yours: ${window.location.href}`
@@ -1583,7 +1587,7 @@ export function saveFavorite(locationData) {
     );
 
     if (duplicate) {
-        window.showNotification('⭐ Location is already in favorites.', 'info');
+        window.showNotification('Location is already saved.', 'info');
         return;
     }
 
@@ -1595,7 +1599,7 @@ export function saveFavorite(locationData) {
     });
 
     renderFavorites();
-    window.showNotification('⭐ Location saved to favorites!', 'success');
+    window.showNotification('Location saved.', 'success');
 }
 
 // Aliases for compatibility

@@ -8,6 +8,11 @@ import { calculateSolunar } from '../models/solunar.js';
 import { estimateTempByDepth } from '../models/waterTemp.js';
 import { WATER_BODIES_V2 } from '../config/waterBodies.js';
 
+const DEBUG = false;
+const debugLog = (...args) => {
+    if (DEBUG) console.log(...args);
+};
+
 // ============================================
 // HELPER: Get species data
 // ============================================
@@ -17,27 +22,27 @@ function getSpeciesData(species) {
 
 // Get weather icon based on code
 function getWeatherIcon(code) {
-    if (code === 0) return '☀️';
-    if (code <= 3) return '⛅';
-    if (code <= 48) return '🌫️';
-    if (code <= 67) return '🌧️';
-    if (code <= 77) return '🌨️';
-    if (code <= 82) return '🌦️';
-    if (code >= 95) return '⛈️';
-    return '☁️';
+    if (code === 0) return 'Clear';
+    if (code <= 3) return 'Partly cloudy';
+    if (code <= 48) return 'Fog';
+    if (code <= 67) return 'Rain';
+    if (code <= 77) return 'Snow';
+    if (code <= 82) return 'Showers';
+    if (code >= 95) return 'Storm';
+    return 'Cloudy';
 }
 
 // Get moon phase icon
 function getMoonIcon(phase) {
-    if (phase.includes('New')) return '🌑';
-    if (phase.includes('Waxing Crescent')) return '🌒';
-    if (phase.includes('First Quarter')) return '🌓';
-    if (phase.includes('Waxing Gibbous')) return '🌔';
-    if (phase.includes('Full')) return '🌕';
-    if (phase.includes('Waning Gibbous')) return '🌖';
-    if (phase.includes('Last Quarter')) return '🌗';
-    if (phase.includes('Waning Crescent')) return '🌘';
-    return '🌙';
+    if (phase.includes('New')) return 'New';
+    if (phase.includes('Waxing Crescent')) return 'Waxing crescent';
+    if (phase.includes('First Quarter')) return 'First quarter';
+    if (phase.includes('Waxing Gibbous')) return 'Waxing gibbous';
+    if (phase.includes('Full')) return 'Full';
+    if (phase.includes('Waning Gibbous')) return 'Waning gibbous';
+    if (phase.includes('Last Quarter')) return 'Last quarter';
+    if (phase.includes('Waning Crescent')) return 'Waning crescent';
+    return 'Moon';
 }
 
 // Get pressure trend indicator
@@ -49,9 +54,9 @@ function getPressureIndicator(trend) {
 
 // Get precipitation icon based on percentage
 function getPrecipIcon(percentage) {
-    if (percentage >= 40) return '🌧️'; // Rain Likely
-    if (percentage >= 1) return '🌦️';  // Chance of Rain
-    return '☀️'; // Clear (0% only)
+    if (percentage >= 40) return 'Likely';
+    if (percentage >= 1) return 'Possible';
+    return 'Low';
 }
 
 
@@ -128,7 +133,7 @@ function renderTrendCharts(weather) {
 
     return `
         <div class="trend-charts-card">
-            <h3>📈 Hourly Trends (next 24h)</h3>
+            <h3>Hourly trends (next 24h)</h3>
             <div class="trend-chart-grid">
                 <div class="trend-panel">
                     <div class="trend-title">Air Temperature</div>
@@ -147,7 +152,7 @@ function renderTrendCharts(weather) {
 function renderWeatherRadar(coords) {
     return `
         <div class="weather-radar-card">
-            <h3>📡 Weather Radar</h3>
+            <h3>Weather radar</h3>
             <p>Live radar centered on ${coords.name}.</p>
             <iframe
                 class="weather-radar-frame"
@@ -264,7 +269,7 @@ export function renderForecast(data) {
     const moonIcon = getMoonIcon(solunar.moon_phase);
     const precipNowMm = weather.forecast.current.precipitation || 0;
     const precipProb = getCurrentPrecipProbability(weather.forecast);
-    const precipIcon = precipNowMm > 0 ? '🌧️' : getPrecipIcon(precipProb);
+    const precipIcon = precipNowMm > 0 ? 'Likely' : getPrecipIcon(precipProb);
     const todayHighTemp = cToF(weather.forecast.daily.temperature_2m_max[0]);
     const todayLowTemp = cToF(weather.forecast.daily.temperature_2m_min[0]);
     const surfaceTemp = waterTemp.toFixed(1);
@@ -280,45 +285,55 @@ export function renderForecast(data) {
     
     // NEW: Water clarity badge
     const clarityIcons = {
-        clear: '💎 Clear',
-        slightly_stained: '🌊 Slightly Stained',
-        stained: '💧 Stained',
-        muddy: '🌫️ Muddy'
+        clear: 'Clear',
+        slightly_stained: 'Slightly stained',
+        stained: 'Stained',
+        muddy: 'Muddy'
     };
-    const clarityBadge = clarityIcons[currentScore.clarity] || '💧 Normal';
+    const clarityBadge = clarityIcons[currentScore.clarity] || 'Normal';
 
     const degradedNotices = [];
     if (coords.stale) {
-        degradedNotices.push(`📍 Location fallback in use (${coords.staleReason || 'cached result'})`);
+        degradedNotices.push(`Location fallback in use (${coords.staleReason || 'cached result'})`);
     }
     if (weather.stale) {
-        degradedNotices.push(`🌤️ Weather fallback in use (${weather.staleReason || 'cached result'})`);
+        degradedNotices.push(`Weather fallback in use (${weather.staleReason || 'cached result'})`);
     }
+
+    const confidence = degradedNotices.length ? 'Moderate confidence' : 'High confidence';
+    const freshness = weather.stale ? 'Cached weather' : 'Live weather';
 
     // Start building HTML
     let html = `
-        ${degradedNotices.length ? `<div class="tips-card" style="border-left: 4px solid #f39c12;"><h3>⚠️ Degraded Data Mode</h3>${degradedNotices.map((notice) => `<div class="tip-item">${notice}</div>`).join('')}</div>` : ''}
+        ${degradedNotices.length ? `<div class="tips-card" style="border-left: 4px solid #b45309;"><h3>Data notice</h3>${degradedNotices.map((notice) => `<div class="tip-item">${notice}</div>`).join('')}</div>` : ''}
         <div class="score-header">
-            <h2>${weatherIcon} Today's Forecast</h2>
+            <h2>Forecast summary</h2>
+            <div class="summary-meta">
+                <span class="meta-chip ${degradedNotices.length ? 'warn' : 'good'}">Confidence · ${confidence}</span>
+                <span class="meta-chip ${weather.stale ? 'warn' : 'good'}">Freshness · ${freshness}</span>
+                <span class="meta-chip">${speciesData.name}</span>
+                <span class="meta-chip">${coords.name}</span>
+            </div>
             <div class="score-display ${currentScore.colorClass}">${currentScore.score}</div>
             <div class="rating ${currentScore.colorClass}">${currentScore.rating}</div>
-            <div class="location-info">
-                📍 ${coords.name} | 🐟 ${speciesData.name}
+            <div class="summary-grid">
+                <div class="summary-card"><div class="label">Conditions</div><div class="value">${weatherIcon}</div></div>
+                <div class="summary-card"><div class="label">Air range</div><div class="value">${todayLowTemp.toFixed(0)}°F to ${todayHighTemp.toFixed(0)}°F</div></div>
+                <div class="summary-card"><div class="label">Water surface</div><div class="value">${surfaceTemp}°F</div></div>
+                <div class="summary-card"><div class="label">Wind</div><div class="value">${windSpeed.toFixed(0)} mph ${windDir}</div></div>
             </div>
-            <div class="location-info">
-                📝 ${todaySummary}
-            </div>
+            <div class="location-info">${todaySummary}</div>
         </div>
 
         ${renderTrendCharts(weather)}
         ${renderWeatherRadar(coords)}
         
         <div class="action-buttons">
-            <button class="action-btn" onclick="window.shareForecast()">📱 Share</button>
+            <button class="action-btn" onclick="window.shareForecast()" aria-label="Share forecast">Share</button>
         </div>
 
         <div class="tips-card">
-            <h3>🎣 Fishing Tips for Today</h3>
+            <h3>Tactical guidance</h3>
             ${tips.map(tip => `<div class="tip-item">${tip}</div>`).join('')}
         </div>
         
@@ -328,9 +343,9 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Water Temperature</span>
                     <span class="detail-value">
-                        🌡️ Surface: ${waterTemp.toFixed(1)}°F<br>
+                        Surface: ${waterTemp.toFixed(1)}°F<br>
                         <small style="color: var(--text-secondary);">
-                            📏 2ft: ${temp2ft}°F | 4ft: ${temp4ft}°F | 10ft: ${temp10ft}°F | 20ft: ${temp20ft}°F
+                            Depth: 2ft ${temp2ft}°F | 4ft: ${temp4ft}°F | 10ft: ${temp10ft}°F | 20ft: ${temp20ft}°F
                         </small>
                     </span>
                 </div>
@@ -340,7 +355,7 @@ export function renderForecast(data) {
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Fish Phase</span>
-                    <span class="detail-value">🐠 ${currentScore.phase.replace('_', ' ')}</span>
+                    <span class="detail-value">${currentScore.phase.replace('_', ' ')}</span>
                 </div>
             </div>
             
@@ -353,17 +368,17 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Air Temperature</span>
                     <span class="detail-value">
-                        🌡️ ${cToF(weather.forecast.current.temperature_2m).toFixed(1)}°F 
+                        ${cToF(weather.forecast.current.temperature_2m).toFixed(1)}°F 
                         <small>(feels like ${cToF(weather.forecast.current.apparent_temperature).toFixed(1)}°F)</small>
                     </span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Today's Air Range</span>
-                    <span class="detail-value">🌡️ ${todayLowTemp.toFixed(1)}°F → ${todayHighTemp.toFixed(1)}°F</span>
+                    <span class="detail-value">${todayLowTemp.toFixed(1)}°F → ${todayHighTemp.toFixed(1)}°F</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Barometric Pressure</span>
-                    <span class="detail-value">📊 ${(weather.forecast.current.surface_pressure * 0.02953).toFixed(2)} inHg</span>
+                    <span class="detail-value">${(weather.forecast.current.surface_pressure * 0.02953).toFixed(2)} inHg</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Pressure Trend</span>
@@ -373,15 +388,15 @@ export function renderForecast(data) {
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Wind</span>
-                    <span class="detail-value">💨 ${windSpeed.toFixed(1)} mph ${windDir}</span>
+                    <span class="detail-value">${windSpeed.toFixed(1)} mph ${windDir}</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Humidity</span>
-                    <span class="detail-value">💧 ${weather.forecast.current.relative_humidity_2m}%</span>
+                    <span class="detail-value">${weather.forecast.current.relative_humidity_2m}%</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Cloud Cover</span>
-                    <span class="detail-value">☁️ ${weather.forecast.current.cloud_cover}%</span>
+                    <span class="detail-value">${weather.forecast.current.cloud_cover}%</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Precipitation</span>
@@ -395,20 +410,20 @@ export function renderForecast(data) {
                 <h3><span class="moon-icon"></span>Solunar</h3>
                 <div class="detail-row">
                     <span class="detail-label">Moon Phase</span>
-                    <span class="detail-value">${moonIcon} ${solunar.moon_phase} (${solunar.moon_phase_percent}%)</span>
+                    <span class="detail-value">${moonIcon} (${solunar.moon_phase_percent}%)</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Major Periods</span>
                     <span class="detail-value" style="line-height: 1.8;">
-                        🌟 ${solunar.major_periods[0]}<br>
-                        🌟 ${solunar.major_periods[1]}
+                        ${solunar.major_periods[0]}<br>
+                        ${solunar.major_periods[1]}
                     </span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Minor Periods</span>
                     <span class="detail-value" style="line-height: 1.8;">
-                        ⭐ ${solunar.minor_periods[0]}<br>
-                        ⭐ ${solunar.minor_periods[1]}
+                        ${solunar.minor_periods[0]}<br>
+                        ${solunar.minor_periods[1]}
                     </span>
                 </div>
             </div>
@@ -487,7 +502,7 @@ function getCurrentPrecipProbability(forecast) {
 }
 
 function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialWaterTemp, moonPhasePercent = 50) {
-    let html = '<div class="multi-day-forecast"><h3>📅 Extended Forecast</h3><div class="forecast-days">';
+    let html = '<div class="multi-day-forecast"><h3>Extended forecast</h3><div class="forecast-days">';
     
     const dailyData = weather.forecast.daily;
     
@@ -502,7 +517,7 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
     // Store globally for day detail modal
     window.waterTempsEvolution = waterTemps;
     
-    console.log('🌡️ Water temp evolution (physics):', waterTemps.map(t => t.toFixed(1) + '°F').join(' → '));
+    debugLog('Water temp evolution (physics):', waterTemps.map(t => t.toFixed(1) + '°F').join(' → '));
     
     // Start from day 1 (tomorrow) instead of day 0 (today)
     for (let i = 1; i < dailyData.time.length; i++) {
@@ -551,8 +566,8 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
                 <div class="day-score ${scoreClass}"title="Estimated fishing score">${Math.round(estimatedScore)}</div>
                 <div class="day-temp">${minTemp.toFixed(0)}° → ${maxTemp.toFixed(0)}°</div>
                 <div class="day-precip">${getPrecipIcon(precipProb)} ${precipProb}%</div>
-                <div style="font-size: 0.85em; color: #888; margin-top: 4px;">💧 ${waterTemps[i].toFixed(1)}°F</div>
-                <div style="font-size: 0.85em; color: #888;">💨 ${windSpeed.toFixed(0)} mph ${windDir}</div>
+                <div style="font-size: 0.85em; color: #888; margin-top: 4px;">${waterTemps[i].toFixed(1)}°F</div>
+                <div style="font-size: 0.85em; color: #888;">${windSpeed.toFixed(0)} mph ${windDir}</div>
             </div>
         `;
     }
@@ -628,12 +643,12 @@ window.showDayDetails = function(dayIndex, date) {
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Air Temp (High / Low)</span>
-                        <span class="detail-value">🌡️ ${maxTemp.toFixed(1)}°F / ${minTemp.toFixed(1)}°F</span>
+                        <span class="detail-value">${maxTemp.toFixed(1)}°F / ${minTemp.toFixed(1)}°F</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Water Temperature</span>
                         <span class="detail-value">
-                            💧 Surface: ${waterTempEstimate.toFixed(1)}°F<br>
+                            Surface: ${waterTempEstimate.toFixed(1)}°F<br>
                             <small style="color: var(--text-secondary);">
                                 2ft: ${temp2ft.toFixed(1)}°F | 4ft: ${temp4ft.toFixed(1)}°F | 10ft: ${temp10ft.toFixed(1)}°F | 20ft: ${temp20ft.toFixed(1)}°F
                             </small>
@@ -641,7 +656,7 @@ window.showDayDetails = function(dayIndex, date) {
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Fish Phase</span>
-                        <span class="detail-value">🐠 ${fishPhase}</span>
+                        <span class="detail-value">${fishPhase}</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Precipitation</span>
@@ -649,11 +664,11 @@ window.showDayDetails = function(dayIndex, date) {
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Wind</span>
-                        <span class="detail-value">💨 ${windSpeed.toFixed(1)} mph ${windDir}</span>
+                        <span class="detail-value">${windSpeed.toFixed(1)} mph ${windDir}</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Sunrise / Sunset</span>
-                        <span class="detail-value">🌅 ${sunrise} / 🌇 ${sunset}</span>
+                        <span class="detail-value">${sunrise} / ${sunset}</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Moon Phase</span>
@@ -662,15 +677,15 @@ window.showDayDetails = function(dayIndex, date) {
                     <div class="detail-row">
                         <span class="detail-label">Major Periods</span>
                         <span class="detail-value" style="line-height: 1.8;">
-                            🌟 ${daySolunar.major_periods[0]}<br>
-                            🌟 ${daySolunar.major_periods[1]}
+                            ${daySolunar.major_periods[0]}<br>
+                            ${daySolunar.major_periods[1]}
                         </span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Minor Periods</span>
                         <span class="detail-value" style="line-height: 1.8;">
-                            ⭐ ${daySolunar.minor_periods[0]}<br>
-                            ⭐ ${daySolunar.minor_periods[1]}
+                            ${daySolunar.minor_periods[0]}<br>
+                            ${daySolunar.minor_periods[1]}
                         </span>
                     </div>
                     <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid var(--border-color);">
@@ -727,14 +742,14 @@ function getFishingTipForDay(maxTemp, minTemp, precipProb, windSpeed) {
 
 export function showLoading() {
     const resultsDiv = document.getElementById('results');
-    resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>🎣 Analyzing conditions...</p></div>';
+    resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Analyzing conditions...</p></div>'; 
 }
 
 export function showError(message) {
     const resultsDiv = document.getElementById('results');
     resultsDiv.innerHTML = `
         <div class="error-card" style="background: var(--bg-card); padding: 40px; border-radius: 16px; text-align: center; margin: 40px 0;">
-            <h3 style="font-size: 2rem; margin-bottom: 20px;">⚠️ Error</h3>
+            <h3 style="font-size: 2rem; margin-bottom: 20px;">Error</h3>
             <p id="errorMessage" style="font-size: 1.1rem; margin-bottom: 20px;"></p>
             <p style="color: var(--text-secondary);">Please try again or contact support if the problem persists.</p>
         </div>
