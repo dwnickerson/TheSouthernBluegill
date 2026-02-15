@@ -23,10 +23,10 @@ let waterBodyFavorites = [];
 
 // Load favorites from localStorage
 function loadFavorites() {
-    const stored = localStorage.getItem('waterBodyFavorites');
-    if (stored) {
+    const stored = storage.getWaterBodyFavorites();
+    if (stored && Array.isArray(stored)) {
         try {
-            waterBodyFavorites = JSON.parse(stored);
+            waterBodyFavorites = [...stored];
             // Sort by lastUsed (most recent first)
             waterBodyFavorites.sort((a, b) => 
                 new Date(b.lastUsed) - new Date(a.lastUsed)
@@ -45,7 +45,7 @@ function saveFavorites() {
     if (waterBodyFavorites.length > 10) {
         waterBodyFavorites = waterBodyFavorites.slice(0, 10);
     }
-    localStorage.setItem('waterBodyFavorites', JSON.stringify(waterBodyFavorites));
+    storage.setWaterBodyFavorites(waterBodyFavorites);
     console.log(`💾 Saved ${waterBodyFavorites.length} favorites`);
 }
 
@@ -234,7 +234,7 @@ window.closeManageFavorites = function() {
 
 // Track recent reports in localStorage
 function trackRecentReport(reportData) {
-    let recentReports = JSON.parse(localStorage.getItem('recentReports') || '[]');
+    let recentReports = storage.getRecentReports();
     
     // Add new report
     recentReports.unshift({
@@ -247,12 +247,12 @@ function trackRecentReport(reportData) {
     // Keep only last 10
     recentReports = recentReports.slice(0, 10);
     
-    localStorage.setItem('recentReports', JSON.stringify(recentReports));
+    storage.setRecentReports(recentReports);
 }
 
 // Get recent reports
 function getRecentReports() {
-    return JSON.parse(localStorage.getItem('recentReports') || '[]');
+    return storage.getRecentReports();
 }
 
 // Get locations for quick report (favorites + recent)
@@ -1247,10 +1247,18 @@ export function saveSettings() {
     }
 
     if (defaultSpeciesInput) {
-        storage.setDefaultSpecies(defaultSpeciesInput.value);
+        const selectedSpecies = defaultSpeciesInput.value;
         const speciesInput = document.getElementById('species');
-        if (speciesInput && defaultSpeciesInput.value) {
-            speciesInput.value = defaultSpeciesInput.value;
+        const isValidSpecies = !selectedSpecies || (speciesInput && !!speciesInput.querySelector(`option[value="${selectedSpecies}"]`));
+
+        if (!isValidSpecies) {
+            showNotification('⚠️ Invalid default species selected.', 'error');
+            return;
+        }
+
+        storage.setDefaultSpecies(selectedSpecies);
+        if (speciesInput && selectedSpecies) {
+            speciesInput.value = selectedSpecies;
         }
     }
 

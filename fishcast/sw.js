@@ -60,6 +60,7 @@ self.addEventListener('fetch', event => {
   // Keep API calls network-only so we don't serve stale forecast data
   if (
     url.hostname === 'api.open-meteo.com' ||
+    url.hostname === 'archive-api.open-meteo.com' ||
     url.hostname === 'nominatim.openstreetmap.org' ||
     url.hostname === 'script.google.com'
   ) {
