@@ -88,6 +88,31 @@ function getBestWindowText(score, windMph, precipProb) {
     return 'Fair Morning';
 }
 
+function getHourlyScore(data, hourIndex) {
+    const { weather, waterTemp, speciesKey, coords } = data;
+    const hourly = weather.forecast.hourly;
+    const current = weather.forecast.current;
+    const moon = calculateSolunar(coords.lat, coords.lon, new Date(hourly.time[hourIndex] || current.time)).moon_phase_percent;
+
+    const pseudoWeather = {
+        current: {
+            surface_pressure: hourly.surface_pressure[hourIndex] ?? current.surface_pressure,
+            wind_speed_10m: hourly.wind_speed_10m[hourIndex] ?? current.wind_speed_10m,
+            cloud_cover: hourly.cloud_cover[hourIndex] ?? current.cloud_cover,
+            weather_code: hourly.weather_code[hourIndex] ?? current.weather_code
+        },
+        hourly: {
+            surface_pressure: hourly.surface_pressure.slice(hourIndex, hourIndex + 6),
+            precipitation_probability: [hourly.precipitation_probability[hourIndex] ?? 0]
+        },
+        daily: {
+            precipitation_sum: weather.forecast.daily.precipitation_sum || []
+        }
+    };
+
+    return calculateFishingScore(pseudoWeather, waterTemp, speciesKey, moon).score;
+}
+
 function getDayScore(data, dayIndex, moonPhasePercent) {
     const { weather, waterTemp, speciesKey } = data;
     const daily = weather.forecast.daily;
@@ -130,33 +155,15 @@ function getDayScore(data, dayIndex, moonPhasePercent) {
 }
 
 function buildHourlyItems(data, dateFilter) {
-    const { weather, waterTemp, speciesKey, coords } = data;
-    const hourly = weather.forecast.hourly;
-    const current = weather.forecast.current;
-    const moon = calculateSolunar(coords.lat, coords.lon, new Date()).moon_phase_percent;
+    const hourly = data.weather.forecast.hourly;
+    const current = data.weather.forecast.current;
     const items = [];
 
     for (let idx = 0; idx < hourly.time.length; idx++) {
         if (dateFilter && !hourly.time[idx].startsWith(dateFilter)) continue;
         if (!dateFilter && items.length >= 6) break;
 
-        const pseudoWeather = {
-            current: {
-                surface_pressure: hourly.surface_pressure[idx] ?? current.surface_pressure,
-                wind_speed_10m: hourly.wind_speed_10m[idx] ?? current.wind_speed_10m,
-                cloud_cover: hourly.cloud_cover[idx] ?? current.cloud_cover,
-                weather_code: hourly.weather_code[idx] ?? current.weather_code
-            },
-            hourly: {
-                surface_pressure: hourly.surface_pressure.slice(idx, idx + 6),
-                precipitation_probability: [hourly.precipitation_probability[idx] ?? 0]
-            },
-            daily: {
-                precipitation_sum: weather.forecast.daily.precipitation_sum || []
-            }
-        };
-
-        const score = calculateFishingScore(pseudoWeather, waterTemp, speciesKey, moon).score;
+        const score = getHourlyScore(data, idx);
         items.push({
             iso: hourly.time[idx],
             time: getHourLabel(hourly.time[idx], current.time),
@@ -262,6 +269,7 @@ function renderMainView(data) {
     const pressureRatio = normalizeGauge(28.7, 30.6, Number(pressureCurrent));
     const windRatio = normalizeGauge(0, 40, windMph);
     const precipProb = weather.forecast.hourly.precipitation_probability?.[0] || weather.forecast.daily.precipitation_probability_max?.[0] || 0;
+    const precipMm = weather.forecast.current.precipitation ?? weather.forecast.hourly.precipitation?.[0] ?? 0;
     const radarUrl = `https://embed.windy.com/embed2.html?lat=${coords.lat.toFixed(3)}&lon=${coords.lon.toFixed(3)}&detailLat=${coords.lat.toFixed(3)}&detailLon=${coords.lon.toFixed(3)}&zoom=7&level=surface&overlay=radar&product=radar&menu=&message=&marker=true&calendar=now`;
 
     const hourlyItems = buildHourlyItems(data);
@@ -282,6 +290,7 @@ function renderMainView(data) {
                 <p class="hero-index">${currentScore.score}</p>
                 <p class="pill ${state.className}">${state.label}</p>
                 <p class="hero-explanation">${createExplanation({ precipProb, pressureTrend: pressureAnalysis.trend, windMph })}</p>
+                <p class="metric-note">Precipitation: ${precipMm.toFixed(2)} mm/h · ${precipProb}% chance</p>
             </section>
 
             <section class="card timeline-card" aria-label="Hourly activity timeline">
@@ -412,6 +421,13 @@ function renderDayDetailView(data, day) {
                 <h2 class="card-header">Conditions Overview</h2>
                 <p><strong>Temperature:</strong> ${cToF(daily.temperature_2m_min?.[dayIndex] || 0).toFixed(0)}°–${cToF(daily.temperature_2m_max?.[dayIndex] || 0).toFixed(0)}°F</p>
                 <p><strong>Precipitation:</strong> ${daily.precipitation_probability_max?.[dayIndex] ?? 'N/A'}% probability, ${daily.precipitation_sum?.[dayIndex] ?? 0} mm total</p>
+                <p><strong>Hourly rainfall:</strong> ${(() => {
+                    const vals = hourly.precipitation.filter((_, i) => hourly.time[i].startsWith(day)).filter(Number.isFinite);
+                    if (!vals.length) return 'N/A';
+                    const peak = Math.max(...vals).toFixed(2);
+                    const avg = (vals.reduce((s, v) => s + v, 0) / vals.length).toFixed(2);
+                    return `${avg} mm/h avg · ${peak} mm/h peak`;
+                })()}</p>
                 <p><strong>Wind:</strong> ${windMph.toFixed(0)} mph ${windDir}</p>
                 ${pressureAvg ? `<p><strong>Pressure:</strong> ${pressureAvg} inHg avg (${pressureMin}-${pressureMax})</p>` : ''}
                 ${daily.cloud_cover_mean?.[dayIndex] !== undefined ? `<p><strong>Cloud Cover:</strong> ${daily.cloud_cover_mean[dayIndex]}%</p>` : ''}
