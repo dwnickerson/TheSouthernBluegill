@@ -155,8 +155,11 @@ export function renderForecast(data) {
     // Weather icon
     const weatherIcon = getWeatherIcon(weather.forecast.current.weather_code);
     const moonIcon = getMoonIcon(solunar.moon_phase);
-    const precipProb = weather.forecast.hourly.precipitation_probability[0] || 0;
-    const precipIcon = getPrecipIcon(precipProb);
+    const precipNowMm = weather.forecast.current.precipitation || 0;
+    const rawPrecipProb = weather.forecast.hourly.precipitation_probability[0] || 0;
+    // If rain is actively observed, avoid showing a misleading 0% rain chance.
+    const precipProb = precipNowMm > 0 ? Math.max(rawPrecipProb, 95) : rawPrecipProb;
+    const precipIcon = precipNowMm > 0 ? '🌧️' : getPrecipIcon(precipProb);
     const todayHighTemp = cToF(weather.forecast.daily.temperature_2m_max[0]);
     const todayLowTemp = cToF(weather.forecast.daily.temperature_2m_min[0]);
     const surfaceTemp = waterTemp.toFixed(1);
