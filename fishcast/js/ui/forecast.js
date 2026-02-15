@@ -2,34 +2,81 @@ import { cToF, kmhToMph, getWindDirection } from '../utils/math.js';
 import { calculateFishingScore, getPressureRate } from '../models/fishingScore.js';
 import { calculateSolunar } from '../models/solunar.js';
 
+let latestForecastData = null;
+let savedMainScroll = 0;
+
 function normalizeState(score) {
     if (score >= 80) return { label: 'Good', className: 'state-good' };
     if (score >= 60) return { label: 'Fair', className: 'state-fair' };
     return { label: 'Poor', className: 'state-poor' };
 }
 
-function getStartIndex(hourlyTimes = [], currentTime) {
-    if (!currentTime || !hourlyTimes.length) return 0;
-    const index = hourlyTimes.indexOf(currentTime);
-    return index >= 0 ? index : 0;
+function describePressureTrend(trend) {
+    if (trend === 'rapid_fall' || trend === 'falling') return 'falling pressure';
+    if (trend === 'rapid_rise' || trend === 'rising') return 'rising pressure';
+    return 'stable pressure';
 }
 
-function getHourLabel(isoString, offset = 0) {
-    if (offset === 0) return 'Now';
-    const date = new Date(isoString);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+function createExplanation({ precipProb, pressureTrend, windMph }) {
+    const pressure = describePressureTrend(pressureTrend);
+    if (windMph > 16) return `${pressure} with stronger wind may limit shallow activity after midday.`;
+    if (precipProb >= 50) return `Light rain and ${pressure} favor active feeding through the morning.`;
+    return `${pressure} and manageable wind support steady fishing windows today.`;
 }
 
-function buildHourlyItems(weather, waterTemp, speciesKey, moonPhasePercent) {
-    const { hourly, current, daily } = weather.forecast;
-    const startIndex = getStartIndex(hourly.time, current.time);
-    const recentPrecip = weather.historical?.daily?.precipitation_sum?.slice(-3) || [];
-    const precipWindow = recentPrecip.length ? recentPrecip : (daily.precipitation_sum || []);
+function getHourLabel(isoString, nowIso) {
+    if (isoString === nowIso) return 'Now';
+    return new Date(isoString).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
 
+function getDailyLabel(dateString, index) {
+    if (index === 0) return 'Today';
+    return new Date(`${dateString}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' });
+}
+
+function getBestWindowText(score, windMph, precipProb) {
+    if (score >= 82) return 'Best: Morning';
+    if (score >= 74) return 'All Day Stable';
+    if (precipProb > 55) return 'Best: Early';
+    if (windMph > 14) return 'Best: Sheltered';
+    return 'Fair Morning';
+}
+
+function getDayScore(data, dayIndex, moonPhasePercent) {
+    const { weather, waterTemp, speciesKey } = data;
+    const daily = weather.forecast.daily;
+
+    const weatherSlice = {
+        current: {
+            surface_pressure: daily.surface_pressure_mean?.[dayIndex] ?? weather.forecast.current.surface_pressure,
+            wind_speed_10m: daily.wind_speed_10m_max?.[dayIndex] ?? weather.forecast.current.wind_speed_10m,
+            cloud_cover: daily.cloud_cover_mean?.[dayIndex] ?? weather.forecast.current.cloud_cover,
+            weather_code: daily.weather_code?.[dayIndex] ?? weather.forecast.current.weather_code
+        },
+        hourly: {
+            surface_pressure: [daily.surface_pressure_mean?.[dayIndex] ?? weather.forecast.current.surface_pressure],
+            precipitation_probability: [daily.precipitation_probability_max?.[dayIndex] ?? 0]
+        },
+        daily: {
+            precipitation_sum: (weather.historical?.daily?.precipitation_sum || [])
+                .concat((daily.precipitation_sum || []).slice(0, dayIndex + 1))
+                .slice(-3)
+        }
+    };
+
+    return calculateFishingScore(weatherSlice, waterTemp, speciesKey, moonPhasePercent).score;
+}
+
+function buildHourlyItems(data, dateFilter) {
+    const { weather, waterTemp, speciesKey, coords } = data;
+    const hourly = weather.forecast.hourly;
+    const current = weather.forecast.current;
+    const moon = calculateSolunar(coords.lat, coords.lon, new Date()).moon_phase_percent;
     const items = [];
-    for (let i = 0; i < 6; i++) {
-        const idx = startIndex + i;
-        if (!hourly.time[idx]) break;
+
+    for (let idx = 0; idx < hourly.time.length; idx++) {
+        if (dateFilter && !hourly.time[idx].startsWith(dateFilter)) continue;
+        if (!dateFilter && items.length >= 6) break;
 
         const pseudoWeather = {
             current: {
@@ -43,77 +90,38 @@ function buildHourlyItems(weather, waterTemp, speciesKey, moonPhasePercent) {
                 precipitation_probability: [hourly.precipitation_probability[idx] ?? 0]
             },
             daily: {
-                precipitation_sum: precipWindow
+                precipitation_sum: weather.forecast.daily.precipitation_sum || []
             }
         };
 
-        const hourScore = calculateFishingScore(pseudoWeather, waterTemp, speciesKey, moonPhasePercent);
+        const score = calculateFishingScore(pseudoWeather, waterTemp, speciesKey, moon).score;
         items.push({
-            time: getHourLabel(hourly.time[idx], i),
-            score: hourScore.score,
-            state: normalizeState(hourScore.score)
+            iso: hourly.time[idx],
+            time: getHourLabel(hourly.time[idx], current.time),
+            score,
+            state: normalizeState(score)
         });
     }
 
-    return items;
+    return dateFilter ? items : items.slice(0, 6);
 }
 
-function describePressureTrend(trend) {
-    if (trend === 'rapid_fall' || trend === 'falling') return 'falling pressure';
-    if (trend === 'rapid_rise' || trend === 'rising') return 'rising pressure';
-    return 'stable pressure';
-}
+function buildDailyRows(data) {
+    const daily = data.weather.forecast.daily;
+    const solunar = calculateSolunar(data.coords.lat, data.coords.lon, new Date());
 
-function createExplanation({ precipProb, pressureTrend, windMph }) {
-    const rainText = precipProb >= 60 ? 'Higher rain chances' : precipProb >= 25 ? 'Light rain potential' : 'Mostly dry skies';
-    const pressureText = describePressureTrend(pressureTrend);
-    const windText = windMph > 16 ? 'stronger wind' : windMph > 8 ? 'moderate wind' : 'lighter wind';
-    return `${rainText} and ${pressureText} with ${windText} shape activity today.`;
-}
-
-function getBestWindowText(score, windMph, precipProb) {
-    if (score >= 80) return 'Best: Morning';
-    if (score >= 70) return 'All Day Stable';
-    if (windMph > 14) return 'Sheltered Banks';
-    if (precipProb > 55) return 'Before Rain Peaks';
-    return 'Fair Late Morning';
-}
-
-function buildDailyRows(data, waterTemp, moonPhasePercent) {
-    const { weather, speciesKey } = data;
-    const daily = weather.forecast.daily;
-    const rows = [];
-
-    for (let i = 0; i < Math.min(daily.time.length, 5); i++) {
-        const weatherSlice = {
-            current: {
-                surface_pressure: daily.surface_pressure_mean?.[i] ?? weather.forecast.current.surface_pressure,
-                wind_speed_10m: daily.wind_speed_10m_max?.[i] ?? weather.forecast.current.wind_speed_10m,
-                cloud_cover: daily.cloud_cover_mean?.[i] ?? weather.forecast.current.cloud_cover,
-                weather_code: daily.weather_code?.[i] ?? weather.forecast.current.weather_code
-            },
-            hourly: {
-                surface_pressure: [daily.surface_pressure_mean?.[i] ?? weather.forecast.current.surface_pressure],
-                precipitation_probability: [daily.precipitation_probability_max?.[i] ?? 0]
-            },
-            daily: {
-                precipitation_sum: (weather.historical?.daily?.precipitation_sum || []).concat((daily.precipitation_sum || []).slice(0, i + 1)).slice(-3)
-            }
-        };
-
-        const score = calculateFishingScore(weatherSlice, waterTemp, speciesKey, moonPhasePercent).score;
-        const windMph = kmhToMph(daily.wind_speed_10m_max?.[i] || 0);
-        const precipProb = daily.precipitation_probability_max?.[i] || 0;
-        const date = new Date(`${daily.time[i]}T12:00:00`);
-        rows.push({
-            day: i === 0 ? 'Today' : date.toLocaleDateString('en-US', { weekday: 'short' }),
+    return daily.time.slice(0, 5).map((date, index) => {
+        const score = getDayScore(data, index, solunar.moon_phase_percent);
+        const windMph = kmhToMph(daily.wind_speed_10m_max?.[index] || 0);
+        const precipProb = daily.precipitation_probability_max?.[index] || 0;
+        return {
+            date,
+            dayLabel: getDailyLabel(date, index),
             score,
             state: normalizeState(score),
             window: getBestWindowText(score, windMph, precipProb)
-        });
-    }
-
-    return rows;
+        };
+    });
 }
 
 function moonLabel(percent) {
@@ -123,20 +131,51 @@ function moonLabel(percent) {
     return 'Waning Crescent';
 }
 
-export function renderForecast(data) {
-    const { coords, waterTemp, weather, speciesKey } = data;
+function getRouteDay() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('day');
+}
+
+function setRouteDay(day) {
+    const url = new URL(window.location.href);
+    if (day) {
+        url.searchParams.set('day', day);
+    } else {
+        url.searchParams.delete('day');
+    }
+    window.history.pushState({}, '', url);
+}
+
+function renderTimeline(items) {
+    return `
+        <div class="timeline" role="list">
+            ${items.map((item) => `
+                <article class="timeline-item" role="listitem">
+                    <p class="timeline-time">${item.time}</p>
+                    <span class="timeline-glyph" aria-hidden="true"></span>
+                    <p class="timeline-score ${item.state.className}">${item.score}</p>
+                    <p class="timeline-state">${item.state.label}</p>
+                </article>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderMainView(data) {
+    const { coords, weather } = data;
     const resultsDiv = document.getElementById('results');
-    const solunar = calculateSolunar(coords.lat, coords.lon, new Date());
+    const daily = weather.forecast.daily;
 
     const scoreWeather = {
         ...weather.forecast,
         daily: {
-            ...weather.forecast.daily,
-            precipitation_sum: weather.historical?.daily?.precipitation_sum?.slice(-3) || weather.forecast.daily.precipitation_sum || []
+            ...daily,
+            precipitation_sum: weather.historical?.daily?.precipitation_sum?.slice(-3) || daily.precipitation_sum || []
         }
     };
 
-    const currentScore = calculateFishingScore(scoreWeather, waterTemp, speciesKey, solunar.moon_phase_percent);
+    const solunar = calculateSolunar(coords.lat, coords.lon, new Date());
+    const currentScore = calculateFishingScore(scoreWeather, data.waterTemp, data.speciesKey, solunar.moon_phase_percent);
     const state = normalizeState(currentScore.score);
 
     const pressureSeries = weather.forecast.hourly.surface_pressure.slice(0, 6);
@@ -147,100 +186,210 @@ export function renderForecast(data) {
     const windMph = kmhToMph(weather.forecast.current.wind_speed_10m);
     const windDir = getWindDirection(weather.forecast.current.wind_direction_10m);
     const windGust = kmhToMph(weather.forecast.current.wind_gusts_10m || weather.forecast.current.wind_speed_10m);
-    const precipProbNow = weather.forecast.hourly.precipitation_probability?.[0] || weather.forecast.daily.precipitation_probability_max?.[0] || 0;
+    const precipProb = weather.forecast.hourly.precipitation_probability?.[0] || weather.forecast.daily.precipitation_probability_max?.[0] || 0;
 
-    const explanation = createExplanation({
-        precipProb: precipProbNow,
-        pressureTrend: pressureAnalysis.trend,
-        windMph
-    });
-
-    const hourlyItems = buildHourlyItems(weather, waterTemp, speciesKey, solunar.moon_phase_percent);
-    const dailyRows = buildDailyRows(data, waterTemp, solunar.moon_phase_percent);
-
-    const trendDirection = pressureAnalysis.rate <= 0 ? '↓' : '↑';
-    const trendPhrase = pressureAnalysis.rate <= 0 ? 'increasing activity early' : 'steady midday movement';
+    const hourlyItems = buildHourlyItems(data);
+    const dailyRows = buildDailyRows(data);
 
     resultsDiv.innerHTML = `
-        <section class="fishcast-shell" aria-label="Fishing conditions summary">
-            <section class="hero-card glass-card" aria-live="polite">
+        <main class="fishcast-shell" aria-label="Fishing conditions overview">
+            <section class="card hero-card" aria-live="polite">
                 <p class="hero-location">${coords.name}</p>
-                <h2 class="hero-title">Fishing Conditions</h2>
+                <h1 class="hero-title">Fishing Conditions</h1>
                 <p class="hero-index">${currentScore.score}</p>
-                <p class="state-pill ${state.className}">${state.label}</p>
-                <p class="hero-explanation">${explanation}</p>
+                <p class="pill ${state.className}">${state.label}</p>
+                <p class="hero-explanation">${createExplanation({ precipProb, pressureTrend: pressureAnalysis.trend, windMph })}</p>
             </section>
 
-            <section class="glass-card hourly-card" aria-label="Hourly timeline">
-                <div class="hourly-track" aria-hidden="true"></div>
-                <div class="hourly-scroll" role="list">
-                    ${hourlyItems.map((item) => `
-                        <article class="hourly-item" role="listitem">
-                            <p class="hourly-time">${item.time}</p>
-                            <span class="hourly-glyph" aria-hidden="true"></span>
-                            <p class="hourly-score ${item.state.className}">${item.score}</p>
-                            <p class="hourly-state">${item.state.label}</p>
-                        </article>
-                    `).join('')}
-                </div>
+            <section class="card timeline-card" aria-label="Hourly activity timeline">
+                <div class="timeline-track" aria-hidden="true"></div>
+                ${renderTimeline(hourlyItems)}
             </section>
 
-            <section class="glass-card daily-card" aria-label="Daily forecast">
-                <div class="daily-header-row">
-                    <h3>Daily Forecast</h3>
-                </div>
-                <div class="daily-rows">
+            <section class="card daily-card" aria-label="Daily forecast">
+                <h2 class="card-header">Daily Forecast</h2>
+                <ul class="daily-list">
                     ${dailyRows.map((row) => `
-                        <article class="daily-row">
-                            <p class="daily-day">${row.day}</p>
-                            <p class="daily-window ${row.state.className}">${row.window}</p>
-                            <p class="daily-score-value">${row.score}</p>
-                        </article>
+                        <li>
+                            <button type="button" class="daily-row" data-day="${row.date}" aria-label="Open details for ${row.dayLabel}, ${row.date}">
+                                <span class="daily-day">${row.dayLabel}</span>
+                                <span class="daily-window">${row.window}</span>
+                                <span class="daily-bar ${row.state.className}"></span>
+                                <span class="daily-score">${row.score}</span>
+                            </button>
+                        </li>
                     `).join('')}
-                </div>
+                </ul>
             </section>
 
             <section class="metrics-grid" aria-label="Condition metrics">
-                <article class="glass-card metric-card">
-                    <h4>Fish Activity Trend</h4>
-                    <p class="metric-value">${pressureCurrent} ${trendDirection} <span>inHg</span></p>
-                    <p class="metric-note">Trend indicates ${trendPhrase}.</p>
+                <article class="card metric-card">
+                    <h3>Fish Activity Trend</h3>
+                    <p class="metric-value">${pressureCurrent} inHg</p>
+                    <p class="metric-note">${pressureAnalysis.rate <= 0 ? 'Pressure is easing, with stronger early movement expected.' : 'Rising pressure supports steadier midday behavior.'}</p>
                 </article>
-                <article class="glass-card metric-card">
-                    <h4>Pressure Change</h4>
-                    <p class="metric-value">${pressureDelta} <span>inHg</span></p>
-                    <p class="metric-note">${describePressureTrend(pressureAnalysis.trend)} supports feeding shifts.</p>
+                <article class="card metric-card">
+                    <h3>Pressure Change</h3>
+                    <p class="metric-value">${pressureDelta} inHg</p>
+                    <p class="metric-note">${describePressureTrend(pressureAnalysis.trend)} over the next several hours.</p>
                 </article>
-                <article class="glass-card metric-card">
-                    <h4>Wind Conditions</h4>
-                    <p class="metric-value">${windMph.toFixed(0)} <span>mph ${windDir}</span></p>
-                    <p class="metric-note">Gusts around ${windGust.toFixed(0)} mph today.</p>
+                <article class="card metric-card">
+                    <h3>Wind Conditions</h3>
+                    <p class="metric-value">${windMph.toFixed(0)} mph ${windDir}</p>
+                    <p class="metric-note">Gust potential near ${windGust.toFixed(0)} mph.</p>
                 </article>
-                <article class="glass-card metric-card">
-                    <h4>Moon &amp; Light</h4>
+                <article class="card metric-card">
+                    <h3>Moon &amp; Light</h3>
                     <p class="metric-value">${moonLabel(solunar.moon_phase_percent)}</p>
-                    <p class="metric-note">${solunar.moon_phase_percent}% illumination can alter shallow bites.</p>
+                    <p class="metric-note">${solunar.moon_phase_percent}% illumination this evening.</p>
                 </article>
             </section>
-        </section>
+        </main>
     `;
 
-    resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    resultsDiv.querySelectorAll('.daily-row').forEach((rowButton) => {
+        rowButton.addEventListener('click', () => {
+            savedMainScroll = window.scrollY;
+            const day = rowButton.dataset.day;
+            setRouteDay(day);
+            renderDayDetailView(data, day);
+        });
+    });
+}
+
+function renderDayDetailView(data, day) {
+    const dayIndex = data.weather.forecast.daily.time.indexOf(day);
+    if (dayIndex < 0) {
+        renderMainView(data);
+        return;
+    }
+
+    const resultsDiv = document.getElementById('results');
+    const daily = data.weather.forecast.daily;
+    const hourly = data.weather.forecast.hourly;
+    const solunar = calculateSolunar(data.coords.lat, data.coords.lon, new Date(`${day}T12:00:00`));
+    const score = getDayScore(data, dayIndex, solunar.moon_phase_percent);
+    const state = normalizeState(score);
+    const hourlyItems = buildHourlyItems(data, day);
+
+    const dayPressures = hourly.surface_pressure.filter((_, i) => hourly.time[i].startsWith(day));
+    const pressureMin = dayPressures.length ? (Math.min(...dayPressures) * 0.02953).toFixed(2) : null;
+    const pressureMax = dayPressures.length ? (Math.max(...dayPressures) * 0.02953).toFixed(2) : null;
+    const pressureAvg = dayPressures.length ? (dayPressures.reduce((sum, val) => sum + val, 0) / dayPressures.length * 0.02953).toFixed(2) : null;
+
+    const dayName = new Date(`${day}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' });
+    const dayDate = new Date(`${day}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const windMph = kmhToMph(daily.wind_speed_10m_max?.[dayIndex] || 0);
+    const windDir = getWindDirection(daily.wind_direction_10m_dominant?.[dayIndex] || data.weather.forecast.current.wind_direction_10m);
+
+    resultsDiv.innerHTML = `
+        <main class="fishcast-shell" aria-label="Day detail view">
+            <section class="card detail-header">
+                <button type="button" class="back-btn" id="backToMain">Back</button>
+                <p class="hero-location">${data.coords.name}</p>
+                <h1 class="detail-title">${dayName}, ${dayDate}</h1>
+                <p class="hero-index">${score}</p>
+                <p class="pill ${state.className}">${state.label}</p>
+                <p class="hero-explanation">${getBestWindowText(score, windMph, daily.precipitation_probability_max?.[dayIndex] || 0)} with ${describePressureTrend(getPressureRate(dayPressures).trend)} supports the strongest opportunity.</p>
+            </section>
+
+            <section class="card timeline-card">
+                <h2 class="card-header">Hourly Activity</h2>
+                <div class="timeline-track" aria-hidden="true"></div>
+                ${renderTimeline(hourlyItems)}
+            </section>
+
+            <section class="card detail-grid">
+                <h2 class="card-header">Conditions Overview</h2>
+                <p><strong>Temperature:</strong> ${cToF(daily.temperature_2m_min?.[dayIndex] || 0).toFixed(0)}°–${cToF(daily.temperature_2m_max?.[dayIndex] || 0).toFixed(0)}°F</p>
+                <p><strong>Precipitation:</strong> ${daily.precipitation_probability_max?.[dayIndex] ?? 'N/A'}% probability, ${daily.precipitation_sum?.[dayIndex] ?? 0} mm total</p>
+                <p><strong>Wind:</strong> ${windMph.toFixed(0)} mph ${windDir}</p>
+                ${pressureAvg ? `<p><strong>Pressure:</strong> ${pressureAvg} inHg avg (${pressureMin}-${pressureMax})</p>` : ''}
+                ${daily.cloud_cover_mean?.[dayIndex] !== undefined ? `<p><strong>Cloud Cover:</strong> ${daily.cloud_cover_mean[dayIndex]}%</p>` : ''}
+                ${data.weather.forecast.current.relative_humidity_2m !== undefined ? `<p><strong>Humidity:</strong> ${data.weather.forecast.current.relative_humidity_2m}% (latest reading)</p>` : ''}
+            </section>
+
+            <section class="card detail-grid">
+                <h2 class="card-header">Sun &amp; Moon</h2>
+                <p><strong>Sunrise:</strong> ${daily.sunrise?.[dayIndex] ? new Date(daily.sunrise[dayIndex]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}</p>
+                <p><strong>Sunset:</strong> ${daily.sunset?.[dayIndex] ? new Date(daily.sunset[dayIndex]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}</p>
+                <p><strong>Moon:</strong> ${moonLabel(solunar.moon_phase_percent)}, ${solunar.moon_phase_percent}% illumination</p>
+            </section>
+
+            <section class="card detail-grid">
+                <h2 class="card-header">Fishing Interpretation</h2>
+                <ul class="interpretation-list">
+                    <li>Best window: ${getBestWindowText(score, windMph, daily.precipitation_probability_max?.[dayIndex] || 0).replace('Best: ', '')}.</li>
+                    <li>Pressure trend is ${describePressureTrend(getPressureRate(dayPressures).trend)}, which can shift feeding confidence.</li>
+                    <li>${windMph > 15 ? 'Focus on protected structure as wind strengthens.' : 'Wind remains manageable for open-water presentations.'}</li>
+                </ul>
+            </section>
+        </main>
+    `;
+
+    document.getElementById('backToMain')?.addEventListener('click', () => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('day')) {
+            window.history.back();
+        } else {
+            setRouteDay(null);
+            renderMainView(data);
+            window.scrollTo({ top: savedMainScroll, behavior: 'instant' });
+        }
+    });
+}
+
+export function renderForecast(data) {
+    latestForecastData = data;
     window.currentForecastData = data;
+    sessionStorage.setItem('fishcast-last-forecast', JSON.stringify(data));
+
+    const routeDay = getRouteDay();
+    if (routeDay) {
+        renderDayDetailView(data, routeDay);
+    } else {
+        renderMainView(data);
+    }
+}
+
+export function rerenderFromRoute() {
+    if (!latestForecastData) return;
+    const routeDay = getRouteDay();
+    if (routeDay) {
+        renderDayDetailView(latestForecastData, routeDay);
+    } else {
+        renderMainView(latestForecastData);
+        window.scrollTo({ top: savedMainScroll, behavior: 'instant' });
+    }
+}
+
+export function restoreLastForecast() {
+    if (latestForecastData) return true;
+    const serialized = sessionStorage.getItem('fishcast-last-forecast');
+    if (!serialized) return false;
+
+    try {
+        latestForecastData = JSON.parse(serialized);
+        window.currentForecastData = latestForecastData;
+        return true;
+    } catch (error) {
+        sessionStorage.removeItem('fishcast-last-forecast');
+        return false;
+    }
 }
 
 export function showLoading() {
     const resultsDiv = document.getElementById('results');
     resultsDiv.innerHTML = `
         <section class="fishcast-shell" aria-label="Loading forecast">
-            <section class="glass-card skeleton skeleton-hero"></section>
-            <section class="glass-card skeleton skeleton-hourly"></section>
-            <section class="glass-card skeleton skeleton-daily"></section>
+            <section class="card skeleton skeleton-hero"></section>
+            <section class="card skeleton skeleton-hourly"></section>
+            <section class="card skeleton skeleton-daily"></section>
             <section class="metrics-grid">
-                <div class="glass-card skeleton skeleton-metric"></div>
-                <div class="glass-card skeleton skeleton-metric"></div>
-                <div class="glass-card skeleton skeleton-metric"></div>
-                <div class="glass-card skeleton skeleton-metric"></div>
+                <div class="card skeleton skeleton-metric"></div>
+                <div class="card skeleton skeleton-metric"></div>
+                <div class="card skeleton skeleton-metric"></div>
+                <div class="card skeleton skeleton-metric"></div>
             </section>
         </section>
     `;
@@ -249,10 +398,20 @@ export function showLoading() {
 export function showError(message) {
     const resultsDiv = document.getElementById('results');
     resultsDiv.innerHTML = `
-        <section class="glass-card error-card" role="alert">
-            <h3>Unable to load forecast</h3>
-            <p>${message}</p>
+        <section class="card error-card" role="alert">
+            <h2>Forecast unavailable</h2>
+            <p>${message || 'We were unable to load forecast data for this request.'}</p>
             <button type="button" class="retry-btn" onclick="window.retryForecast()">Retry</button>
+        </section>
+    `;
+}
+
+export function showEmptyState() {
+    const resultsDiv = document.getElementById('results');
+    resultsDiv.innerHTML = `
+        <section class="card empty-card">
+            <h2>Set a location to begin</h2>
+            <p>Generate a forecast to view daily scoring, hourly activity, and condition details.</p>
         </section>
     `;
 }

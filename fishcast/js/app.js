@@ -11,7 +11,7 @@ import { storage } from './services/storage.js';
 import { getLocation } from './services/geocoding.js';
 import { getWeather } from './services/weatherAPI.js';
 import { estimateWaterTemp } from './models/waterTemp.js';
-import { renderForecast, showLoading, showError } from './ui/forecast.js';
+import { renderForecast, showLoading, showError, showEmptyState, restoreLastForecast, rerenderFromRoute } from './ui/forecast.js';
 import { renderFavorites } from './ui/favorites.js';
 import {
     openSettings,
@@ -47,7 +47,18 @@ function init() {
    
     // Register service worker
     registerServiceWorker();
-   
+
+    // Restore previous forecast for deep links and refreshes
+    if (restoreLastForecast()) {
+        rerenderFromRoute();
+    } else {
+        showEmptyState();
+    }
+
+    window.addEventListener('popstate', () => {
+        rerenderFromRoute();
+    });
+
     debugLog('FishCast ready');
 }
 
