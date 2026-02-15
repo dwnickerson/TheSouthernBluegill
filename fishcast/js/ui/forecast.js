@@ -364,12 +364,6 @@ export function renderForecast(data) {
                         ${precipIcon} ${precipProb}% chance
                     </span>
                 </div>
-                <div class="detail-row">
-                    <span class="detail-label">Weather Radar</span>
-                    <span class="detail-value">
-                        <button class="action-btn" type="button" onclick="window.openWeatherRadar()">📡 Open Radar</button>
-                    </span>
-                </div>
             </div>
             
             <div class="detail-card">
@@ -393,6 +387,19 @@ export function renderForecast(data) {
                     </span>
                 </div>
             </div>
+        </div>
+
+        <div class="weather-radar-card">
+            <h3>📡 Weather Radar</h3>
+            <p>Live radar centered on ${coords.name}.</p>
+            <iframe
+                class="weather-radar-frame"
+                title="Weather radar for ${coords.name}"
+                src="${getRadarEmbedUrl(coords.lat, coords.lon)}"
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"
+                allowfullscreen>
+            </iframe>
         </div>
     `;
 
@@ -681,18 +688,11 @@ window.showDayDetails = function(dayIndex, date) {
     document.body.insertAdjacentHTML('beforeend', modalHTML);
 };
 
-window.openWeatherRadar = function() {
-    const data = window.currentForecastData;
-    if (!data?.coords) {
-        window.showNotification?.('Generate a forecast first to view radar.', 'info');
-        return;
-    }
-
-    const { lat, lon, name } = data.coords;
-    const radarUrl = `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&detailLat=${lat}&detailLon=${lon}&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1`;
-    window.open(radarUrl, '_blank', 'noopener,noreferrer');
-    window.showNotification?.(`Opening radar for ${name}`, 'success');
-};
+function getRadarEmbedUrl(lat, lon) {
+    const safeLat = Number(lat).toFixed(4);
+    const safeLon = Number(lon).toFixed(4);
+    return `https://embed.windy.com/embed2.html?lat=${safeLat}&lon=${safeLon}&detailLat=${safeLat}&detailLon=${safeLon}&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1`;
+}
 
 // Helper function to provide fishing tips for specific day
 function getFishingTipForDay(maxTemp, minTemp, precipProb, windSpeed) {

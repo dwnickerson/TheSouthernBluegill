@@ -387,6 +387,33 @@ button:disabled {
     vertical-align: middle;
 }
 
+
+.weather-radar-card {
+    background: var(--bg-card);
+    border-radius: 16px;
+    padding: 30px;
+    margin: 30px 0;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-color);
+}
+
+.weather-radar-card h3 {
+    font-size: 1.3rem;
+    margin-bottom: 10px;
+}
+
+.weather-radar-card p {
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.weather-radar-frame {
+    width: 100%;
+    min-height: 420px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+}
+
 /* Hourly trend charts */
 .trend-charts-card {
     background: var(--bg-card);
