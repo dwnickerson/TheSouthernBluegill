@@ -25,7 +25,6 @@ import {
     shareForecast,
     saveFavorite
 } from './ui/modals.js';
-import { cToF } from './utils/math.js';
 
 // Initialize application
 function init() {
@@ -124,21 +123,19 @@ async function generateForecast(event) {
             showNotification(`Using cached weather data. ${weather.staleReason || ''}`.trim(), 'warning');
         }
        
-        // Convert historical temps to Fahrenheit
-        const historical_F = {
-            daily: {
-                temperature_2m_mean: weather.historical.daily.temperature_2m_mean.map(t => cToF(t)),
-                cloud_cover_mean: weather.historical.daily.cloud_cover,
-                wind_speed_10m_max: weather.historical.daily.wind_speed_10m_max
-            }
+        // weatherAPI now requests explicit imperial units from Open-Meteo.
+        const weatherForWaterModel = {
+            daily: weather.historical?.daily || {},
+            forecast: weather.forecast || {},
+            meta: weather.meta || {}
         };
-       
+
         // Estimate water temperature
         const waterTemp = await estimateWaterTemp(
             coords,
             waterType,
             new Date(),
-            historical_F
+            weatherForWaterModel
         );
        
         // Render the forecast

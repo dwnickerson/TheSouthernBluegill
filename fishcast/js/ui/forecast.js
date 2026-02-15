@@ -1,7 +1,7 @@
 // Enhanced Forecast UI Rendering with Weather Icons & Clickable Days - v3.4.1 WEATHER FIX
 // Physics-based water temp evolution + Wind display on forecast cards
 import { SPECIES_DATA } from '../config/species.js';
-import { cToF, kmhToMph, getWindDirection } from '../utils/math.js';
+import { getWindDirection } from '../utils/math.js';
 import { formatDate, formatDateShort } from '../utils/date.js';
 import { getPressureTrend } from '../models/fishingScore.js';
 import { calculateSpeciesAwareDayScore } from '../models/forecastEngine.js';
@@ -19,6 +19,22 @@ const debugLog = (...args) => {
 // ============================================
 function getSpeciesData(species) {
     return SPECIES_DATA[species] || SPECIES_DATA['bluegill']; // Default to bluegill
+}
+
+
+function toTempF(value, weather) {
+    if (!Number.isFinite(value)) return 0;
+    const units = String(weather?.forecast?.hourly_units?.temperature_2m || weather?.forecast?.current_units?.temperature_2m || 'celsius').toLowerCase();
+    return units.includes('f') ? value : ((value * 9) / 5 + 32);
+}
+
+function toWindMph(value, weather) {
+    if (!Number.isFinite(value)) return 0;
+    const units = String(weather?.forecast?.hourly_units?.wind_speed_10m || weather?.forecast?.current_units?.wind_speed_10m || 'kmh').toLowerCase();
+    if (units.includes('mph')) return value;
+    if (units.includes('m/s') || units.includes('ms')) return value * 2.23694;
+    if (units.includes('kn')) return value * 1.15078;
+    return value * 0.621371;
 }
 
 // Get weather icon + label based on code
@@ -91,7 +107,7 @@ function buildHourlyTrendByDate(hourlyForecast) {
         const trend = dailyTrends.get(dayKey);
         const tempC = hourlyTemps[index];
         if (typeof tempC === 'number') {
-            const tempF = cToF(tempC);
+            const tempF = toTempF(tempC, { forecast: { hourly_units: hourlyForecast?.hourly_units || {} } });
             trend.minTempF = Math.min(trend.minTempF, tempF);
             trend.maxTempF = Math.max(trend.maxTempF, tempF);
         }
@@ -118,9 +134,9 @@ function getHourlyDetailRowsForDate(hourlyForecast, targetDate) {
         const hour12 = safeHour24 % 12 || 12;
         const meridiem = safeHour24 >= 12 ? 'PM' : 'AM';
 
-        const tempF = cToF(hourlyTemps[index]);
+        const tempF = toTempF(hourlyTemps[index], { forecast: { hourly_units: hourlyForecast?.hourly_units || {} } });
         const precipChance = Number.isFinite(hourlyPrecip[index]) ? hourlyPrecip[index] : 0;
-        const windMph = Number.isFinite(hourlyWindSpeed[index]) ? kmhToMph(hourlyWindSpeed[index]) : 0;
+        const windMph = Number.isFinite(hourlyWindSpeed[index]) ? toWindMph(hourlyWindSpeed[index], { forecast: { hourly_units: hourlyForecast?.hourly_units || {} } }) : 0;
 
         detailRows.push({
             index: detailRows.length,
@@ -377,10 +393,10 @@ function calculateWaterTempEvolution(initialWaterTemp, forecastData, waterType, 
     // For each future day, calculate water temp change using physics
     for (let day = 0; day < 7; day++) {
         const currentWaterTemp = temps[temps.length - 1];
-        const airTemp = cToF(airTemps[day]);
+        const airTemp = toTempF(airTemps[day], data.weather);
         const clouds = cloudCover[day] || 50;
         const windKmh = windSpeeds[day] || 0;
-        const windMph = windKmh * 0.621371;
+        const windMph = toWindMph(windKmh, data.weather);
         
         // 1. Thermal Inertia Effect (water resists change)
         const tempDelta = airTemp - currentWaterTemp;
@@ -459,7 +475,7 @@ export function renderForecast(data) {
     const currentScore = { ...toRating(currentDayScore.score), score: currentDayScore.score, clarity: 'clear' };
     const currentPhaseLabel = getFishPhaseLabel(speciesData, waterTemp);
     
-    const windSpeed = kmhToMph(weather.forecast.current.wind_speed_10m);
+    const windSpeed = toWindMph(weather.forecast.current.wind_speed_10m, weather);
     const windDir = getWindDirection(weather.forecast.current.wind_direction_10m);
     const pTrend = getPressureTrend(weather.forecast.hourly.surface_pressure.slice(0, 6));
     
@@ -477,9 +493,9 @@ export function renderForecast(data) {
     const precipIcon = precipNowMm > 0 ? 'Likely' : getPrecipIcon(precipProb);
     const todayPrecipMm = weather.forecast.daily?.precipitation_sum?.[0] || 0;
     const todayPrecipIn = todayPrecipMm / 25.4;
-    const todayHighTemp = cToF(weather.forecast.daily.temperature_2m_max[0]);
-    const todayLowTemp = cToF(weather.forecast.daily.temperature_2m_min[0]);
-    const feelsLikeTemp = cToF(weather.forecast.current.apparent_temperature);
+    const todayHighTemp = toTempF(weather.forecast.daily.temperature_2m_max[0], weather);
+    const todayLowTemp = toTempF(weather.forecast.daily.temperature_2m_min[0], weather);
+    const feelsLikeTemp = toTempF(weather.forecast.current.apparent_temperature, weather);
     const surfaceTemp = waterTemp.toFixed(1);
     const temp2ft = estimateTempByDepth(waterTemp, waterType, 2, new Date()).toFixed(1);
     const temp4ft = estimateTempByDepth(waterTemp, waterType, 4, new Date()).toFixed(1);
@@ -570,8 +586,8 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Air Temperature</span>
                     <span class="detail-value">
-                        ${cToF(weather.forecast.current.temperature_2m).toFixed(1)}°F 
-                        <small>(feels like ${cToF(weather.forecast.current.apparent_temperature).toFixed(1)}°F)</small>
+                        ${toTempF(weather.forecast.current.temperature_2m, weather).toFixed(1)}°F 
+                        <small>(feels like ${toTempF(weather.forecast.current.apparent_temperature, weather).toFixed(1)}°F)</small>
                     </span>
                 </div>
                 <div class="detail-row">
@@ -735,8 +751,8 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
     // Start from day 1 (tomorrow) instead of day 0 (today)
     for (let i = 1; i < dailyData.time.length; i++) {
         const date = dailyData.time[i];
-        const maxTemp = cToF(dailyData.temperature_2m_max[i]);
-        const minTemp = cToF(dailyData.temperature_2m_min[i]);
+        const maxTemp = toTempF(dailyData.temperature_2m_max[i], weather);
+        const minTemp = toTempF(dailyData.temperature_2m_min[i], weather);
         const precipProb = dailyData.precipitation_probability_max[i];
         const weatherCode = dailyData.weather_code[i];
         const weatherIcon = getWeatherIcon(weatherCode);
@@ -746,7 +762,7 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
             : 'Not available';
         
         // Get wind data for the day
-        const windSpeed = dailyData.wind_speed_10m_max ? kmhToMph(dailyData.wind_speed_10m_max[i]) : 0;
+        const windSpeed = dailyData.wind_speed_10m_max ? toWindMph(dailyData.wind_speed_10m_max[i], weather) : 0;
         const windDir = dailyData.wind_direction_10m_dominant ? getWindDirection(dailyData.wind_direction_10m_dominant[i]) : '';
         
         const dayScore = calculateSpeciesAwareDayScore({
@@ -786,12 +802,12 @@ window.showDayDetails = function(dayIndex, date) {
     
     const dailyData = data.weather.forecast.daily;
     const weatherCode = dailyData.weather_code[dayIndex];
-    const maxTemp = cToF(dailyData.temperature_2m_max[dayIndex]);
-    const minTemp = cToF(dailyData.temperature_2m_min[dayIndex]);
+    const maxTemp = toTempF(dailyData.temperature_2m_max[dayIndex], data.weather);
+    const minTemp = toTempF(dailyData.temperature_2m_min[dayIndex], data.weather);
     const avgAirTemp = (maxTemp + minTemp) / 2;
     const precipProb = dailyData.precipitation_probability_max[dayIndex];
     const precipSum = dailyData.precipitation_sum ? dailyData.precipitation_sum[dayIndex] : 0;
-    const windSpeed = dailyData.wind_speed_10m_max ? kmhToMph(dailyData.wind_speed_10m_max[dayIndex]) : 0;
+    const windSpeed = dailyData.wind_speed_10m_max ? toWindMph(dailyData.wind_speed_10m_max[dayIndex], data.weather) : 0;
     const windDir = dailyData.wind_direction_10m_dominant ? getWindDirection(dailyData.wind_direction_10m_dominant[dayIndex]) : 'N';
     const sunrise = dailyData.sunrise ? new Date(dailyData.sunrise[dayIndex]).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'N/A';
     const sunset = dailyData.sunset ? new Date(dailyData.sunset[dayIndex]).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'N/A';

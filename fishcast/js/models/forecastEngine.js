@@ -4,6 +4,7 @@ import { storage } from '../services/storage.js';
 const TZ = 'America/Chicago';
 const FREEZE_HOUR_LOCAL = 19;
 const OPEN_METEO_DEFAULT_WIND_UNITS = 'kmh'; // Open-Meteo defaults to km/h unless wind_speed_unit is requested.
+const OPEN_METEO_DEFAULT_TEMP_UNITS = 'celsius';
 
 const PHASE_PRIORITY = [
     'spawn',
@@ -128,8 +129,11 @@ function clamp(num, min, max) {
     return Math.max(min, Math.min(max, num));
 }
 
-function cToF(c) {
-    return (c * 9) / 5 + 32;
+function normalizeTempToF(tempValue, tempUnits = OPEN_METEO_DEFAULT_TEMP_UNITS) {
+    if (!Number.isFinite(tempValue)) return null;
+    const units = String(tempUnits || OPEN_METEO_DEFAULT_TEMP_UNITS).toLowerCase();
+    if (units.includes('f')) return tempValue;
+    return (tempValue * 9) / 5 + 32;
 }
 
 function getFamilyFromSpecies(speciesKey) {
@@ -297,7 +301,7 @@ function computeDeltas(current, previous) {
         wind_mph: Math.abs(((current.windAvgKmh ?? 0) - (previous.windAvgKmh ?? 0)) * 0.621371),
         precip_prob: Math.abs((current.precipProbAvg ?? 0) - (previous.precipProbAvg ?? 0)),
         cloud_cover: Math.abs((current.cloudAvg ?? 0) - (previous.cloudAvg ?? 0)),
-        air_temp_f: Math.abs(cToF(current.tempAvgC ?? 0) - cToF(previous.tempAvgC ?? 0)),
+        air_temp_f: Math.abs((current.tempAvgF ?? 0) - (previous.tempAvgF ?? 0)),
         water_temp_f: Math.abs((current.waterTempF ?? 0) - (previous.waterTempF ?? 0))
     };
 }
@@ -315,6 +319,7 @@ export function buildDayWindows(weather, dayKey) {
     }
 
     const windUnits = weather.forecast?.hourly_units?.wind_speed_10m || OPEN_METEO_DEFAULT_WIND_UNITS;
+    const tempUnits = weather.forecast?.hourly_units?.temperature_2m || weather.forecast?.current_units?.temperature_2m || OPEN_METEO_DEFAULT_TEMP_UNITS;
 
     const dayPressures = dayIndexes.map((i) => hourly.surface_pressure[i]).filter(Number.isFinite);
     const dayWindsKmh = dayIndexes
@@ -322,15 +327,23 @@ export function buildDayWindows(weather, dayKey) {
         .filter(Number.isFinite);
     const dayClouds = dayIndexes.map((i) => hourly.cloud_cover[i]).filter(Number.isFinite);
     const dayPrecipProb = dayIndexes.map((i) => hourly.precipitation_probability[i]).filter(Number.isFinite);
-    const dayTempsC = dayIndexes.map((i) => hourly.temperature_2m[i]).filter(Number.isFinite);
+    const dayTempsF = dayIndexes
+        .map((i) => normalizeTempToF(hourly.temperature_2m[i], tempUnits))
+        .filter(Number.isFinite);
 
     const firstIdx = dayIndexes[0] ?? 0;
     const pastStart = Math.max(0, firstIdx - PRESSURE_TREND_WINDOW_HOURS);
     const pastPressures = hourly.surface_pressure.slice(pastStart, firstIdx).filter(Number.isFinite);
 
-    const airHistoryC = (weather.historical?.daily?.temperature_2m_mean || []).filter(Number.isFinite);
-    const airForecastC = (weather.forecast?.daily?.temperature_2m_mean || []).filter(Number.isFinite);
-    const tempTrendCPerDay = computeLinearTrend(airHistoryC.slice(-2).concat(airForecastC.slice(0, 3)));
+    const historyTempUnits = weather.historical?.daily_units?.temperature_2m_mean || tempUnits;
+    const forecastTempUnits = weather.forecast?.daily_units?.temperature_2m_mean || tempUnits;
+    const airHistoryF = (weather.historical?.daily?.temperature_2m_mean || [])
+        .map((v) => normalizeTempToF(v, historyTempUnits))
+        .filter(Number.isFinite);
+    const airForecastF = (weather.forecast?.daily?.temperature_2m_mean || [])
+        .map((v) => normalizeTempToF(v, forecastTempUnits))
+        .filter(Number.isFinite);
+    const tempTrendFPerDay = computeLinearTrend(airHistoryF.slice(-2).concat(airForecastF.slice(0, 3)));
 
     return {
         dayIndexes,
@@ -340,8 +353,8 @@ export function buildDayWindows(weather, dayKey) {
             windUnits: 'kmh',
             cloudAvg: average(dayClouds),
             precipProbAvg: average(dayPrecipProb),
-            tempAvgC: average(dayTempsC),
-            airTempTrendFPerDay: Number.isFinite(tempTrendCPerDay) ? tempTrendCPerDay * 1.8 : null,
+            tempAvgF: average(dayTempsF),
+            airTempTrendFPerDay: tempTrendFPerDay,
             pressureTrend: calculatePressureTrend(pastPressures.concat(dayPressures.slice(0, 3))),
             precip3DayMm: (weather.historical?.daily?.precipitation_sum || [])
                 .slice(-2)

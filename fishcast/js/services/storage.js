@@ -179,16 +179,16 @@ export const storage = {
         return this.set(`${CACHE_KEYS.GEOCODE_CACHE_PREFIX}${String(input).toLowerCase().trim()}`, value);
     },
 
-    getWeatherCacheKey(lat, lon, days) {
-        return `${CACHE_KEYS.WEATHER_CACHE_PREFIX}${Number(lat).toFixed(4)}_${Number(lon).toFixed(4)}_${days}`;
+    getWeatherCacheKey(lat, lon, days, variant = 'default') {
+        return `${CACHE_KEYS.WEATHER_CACHE_PREFIX}${Number(lat).toFixed(4)}_${Number(lon).toFixed(4)}_${days}_${variant}`;
     },
 
-    getWeatherCache(lat, lon, days) {
-        return this.get(this.getWeatherCacheKey(lat, lon, days));
+    getWeatherCache(lat, lon, days, variant = 'default') {
+        return this.get(this.getWeatherCacheKey(lat, lon, days, variant));
     },
 
-    setWeatherCache(lat, lon, days, value) {
-        return this.set(this.getWeatherCacheKey(lat, lon, days), value);
+    setWeatherCache(lat, lon, days, value, variant = 'default') {
+        return this.set(this.getWeatherCacheKey(lat, lon, days, variant), value);
     },
 
     getWaterTempMemoKey(lat, lon, waterType) {

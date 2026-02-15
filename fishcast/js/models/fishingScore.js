@@ -2,7 +2,6 @@
 // Includes: moon phase, water clarity, pressure trend stability improvements
 
 import { SPECIES_DATA } from '../config/species.js';
-import { kmhToMph } from '../utils/math.js';
 
 const PHASE_PRIORITY = [
     'spawn',
@@ -33,6 +32,16 @@ function getPhasePriority(phaseName) {
 
 function getSafeNumber(value, fallback = 0) {
     return Number.isFinite(value) ? value : fallback;
+}
+
+
+function toWindMph(value, units = 'kmh') {
+    if (!Number.isFinite(value)) return 0;
+    const unitText = String(units || 'kmh').toLowerCase();
+    if (unitText.includes('mph')) return value;
+    if (unitText.includes('m/s') || unitText.includes('ms')) return value * 2.23694;
+    if (unitText.includes('kn')) return value * 1.15078;
+    return value * 0.621371;
 }
 
 function parseTimeToMillis(timeValue) {
@@ -353,7 +362,8 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
         factors.push({ name: `Water clarity (${clarity})`, value: clarityEffect });
     }
 
-    const windSpeed = kmhToMph(getSafeNumber(weather?.current?.wind_speed_10m, 0));
+    const windUnits = weather?.current_units?.wind_speed_10m || weather?.hourly_units?.wind_speed_10m || 'kmh';
+    const windSpeed = toWindMph(getSafeNumber(weather?.current?.wind_speed_10m, 0), windUnits);
     const windIdeal = getWindIdealRange(speciesKey, prefs, isCrappie, isSunfish, isBass);
     const windEffect = computeWindEffect(windSpeed, windIdeal);
     if (windEffect !== 0) {
