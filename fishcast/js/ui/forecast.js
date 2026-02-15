@@ -66,12 +66,45 @@ function renderMoonGraphic(percent) {
 function buildDepthTemperatureFigures(surfaceTemp, waterType, sampleDate) {
     if (!Number.isFinite(surfaceTemp) || !waterType) return 'N/A';
 
-    return [4, 10, 20]
+    return [0, 2, 4, 10, 20]
         .map((depthFt) => {
             const tempAtDepth = estimateTempByDepth(surfaceTemp, waterType, depthFt, sampleDate);
-            return `${depthFt}ft: ${tempAtDepth.toFixed(1)}°F`;
+            const depthLabel = depthFt === 0 ? 'Surface' : `${depthFt}ft`;
+            return `${depthLabel}: ${tempAtDepth.toFixed(1)}°F`;
         })
         .join(' · ');
+}
+
+function renderTrendSvg(values = [], unit = '', decimals = 0) {
+    if (!Array.isArray(values) || !values.length) {
+        return '<p class="trend-empty">No hourly data available.</p>';
+    }
+
+    const safeValues = values.map(v => Number(v)).filter(Number.isFinite);
+    if (!safeValues.length) {
+        return '<p class="trend-empty">No hourly data available.</p>';
+    }
+
+    const min = Math.min(...safeValues);
+    const max = Math.max(...safeValues);
+    const range = max - min || 1;
+    const width = 100;
+    const height = 42;
+
+    const points = safeValues.map((value, index) => {
+        const x = safeValues.length === 1 ? 0 : (index / (safeValues.length - 1)) * width;
+        const y = height - ((value - min) / range) * height;
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(' ');
+
+    const latest = safeValues[safeValues.length - 1];
+
+    return `
+        <svg class="trend-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
+            <polyline class="trend-line" points="${points}"></polyline>
+        </svg>
+        <p class="trend-caption">Low ${min.toFixed(decimals)}${unit} · High ${max.toFixed(decimals)}${unit} · Latest ${latest.toFixed(decimals)}${unit}</p>
+    `;
 }
 
 function renderGauge({ valueLabel, scaleLabelLow, scaleLabelHigh, ratio = 0, unitLabel = '', direction = null, summaryLabel = '' }) {
@@ -442,6 +475,27 @@ function renderDayDetailView(data, day) {
     const windDir = getWindDirection(daily.wind_direction_10m_dominant?.[dayIndex] || data.weather.forecast.current.wind_direction_10m);
     const uvDay = daily.uv_index_max?.[dayIndex] ?? null;
     const depthFiguresLabel = buildDepthTemperatureFigures(data.waterTemp, data.waterType, new Date(`${day}T12:00:00`));
+    const dayHourIndexes = hourly.time
+        .map((iso, i) => ({ iso, i }))
+        .filter(entry => entry.iso.startsWith(day))
+        .slice(0, 24)
+        .map(entry => entry.i);
+
+    const hourlyAirTempF = dayHourIndexes.map((i) => cToF(hourly.temperature_2m?.[i])).filter(Number.isFinite);
+    const dayAirAverageF = hourlyAirTempF.length
+        ? hourlyAirTempF.reduce((sum, value) => sum + value, 0) / hourlyAirTempF.length
+        : cToF(daily.temperature_2m_mean?.[dayIndex] ?? 0);
+    const hourlyWaterSurfaceF = hourlyAirTempF.map((airTemp) => {
+        const swing = (airTemp - dayAirAverageF) * 0.2;
+        return Number.isFinite(data.waterTemp) ? data.waterTemp + swing : NaN;
+    }).filter(Number.isFinite);
+    const hourlyWater2FtF = hourlyWaterSurfaceF.map((surfaceTemp) => estimateTempByDepth(surfaceTemp, data.waterType, 2, new Date(`${day}T12:00:00`)));
+    const hourlyPrecipMm = dayHourIndexes.map((i) => hourly.precipitation?.[i]).filter(Number.isFinite);
+    const surfaceTempLabel = Number.isFinite(data.waterTemp) ? `${data.waterTemp.toFixed(1)}°F` : 'N/A';
+    const twoFootTemp = Number.isFinite(data.waterTemp)
+        ? estimateTempByDepth(data.waterTemp, data.waterType, 2, new Date(`${day}T12:00:00`))
+        : null;
+    const twoFootTempLabel = twoFootTemp !== null ? `${twoFootTemp.toFixed(1)}°F` : 'N/A';
 
     resultsDiv.innerHTML = `
         <main class="fishcast-shell" aria-label="Day detail view">
@@ -472,12 +526,33 @@ function renderDayDetailView(data, day) {
                     return `${avg} mm/h avg · ${peak} mm/h peak`;
                 })()}</p>
                 <p><strong>Wind:</strong> ${windMph.toFixed(0)} mph ${windDir}</p>
-                <p><strong>Water Temp:</strong> ${Number.isFinite(data.waterTemp) ? `${data.waterTemp.toFixed(1)}°F` : 'N/A'}</p>
+                <p><strong>Water Temp Surface:</strong> ${surfaceTempLabel}</p>
+                <p><strong>Water Temp 2ft:</strong> ${twoFootTempLabel}</p>
                 <p><strong>Depth Figures:</strong> ${depthFiguresLabel}</p>
                 <p><strong>UV Index:</strong> ${uvDay !== null ? Number(uvDay).toFixed(1) : 'N/A'} (daily max)</p>
                 ${pressureAvg ? `<p><strong>Pressure:</strong> ${pressureAvg} inHg avg (${pressureMin}-${pressureMax})</p>` : ''}
                 ${daily.cloud_cover_mean?.[dayIndex] !== undefined ? `<p><strong>Cloud Cover:</strong> ${daily.cloud_cover_mean[dayIndex]}%</p>` : ''}
                 ${data.weather.forecast.current.relative_humidity_2m !== undefined ? `<p><strong>Humidity:</strong> ${data.weather.forecast.current.relative_humidity_2m}% (latest reading)</p>` : ''}
+            </section>
+
+            <section class="card detail-grid">
+                <h2 class="card-header">24-Hour Trends</h2>
+                <div class="trend-block">
+                    <h3>Air Temperature (°F)</h3>
+                    ${renderTrendSvg(hourlyAirTempF, '°F', 1)}
+                </div>
+                <div class="trend-block">
+                    <h3>Water Temperature Surface (°F)</h3>
+                    ${renderTrendSvg(hourlyWaterSurfaceF, '°F', 1)}
+                </div>
+                <div class="trend-block">
+                    <h3>Water Temperature 2ft (°F)</h3>
+                    ${renderTrendSvg(hourlyWater2FtF, '°F', 1)}
+                </div>
+                <div class="trend-block">
+                    <h3>Precipitation (mm/hr)</h3>
+                    ${renderTrendSvg(hourlyPrecipMm, ' mm/h', 2)}
+                </div>
             </section>
 
             <section class="card detail-grid">

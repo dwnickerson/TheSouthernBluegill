@@ -9,6 +9,21 @@ const debugLog = (...args) => {
 };
 
 
+function closePanelRoute(panelName) {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('panel') !== panelName) return;
+
+    if (window.history.length > 1) {
+        window.history.back();
+        return;
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete('panel');
+    window.history.replaceState({}, '', url);
+}
+
+
 function escapeHTML(value = '') {
     return String(value)
         .replace(/&/g, '&amp;')
@@ -1226,6 +1241,7 @@ export function openSettings() {
 export function closeSettings() {
     const modal = document.getElementById('settingsModal');
     if (modal) modal.remove();
+    closePanelRoute('settings');
 }
 
 export function saveSettings() {
@@ -1498,6 +1514,7 @@ export function openAbout() {
 export function closeAbout() {
     const modal = document.getElementById('aboutModal');
     if (modal) modal.remove();
+    closePanelRoute('about');
 }
 
 export function showNotification(message, type = 'info') {

@@ -260,6 +260,12 @@ a:focus-visible,
 .detail-grid { padding: var(--space-2); }
 .detail-grid p { color: var(--text-secondary); margin-top: 10px; font-size: var(--fs-2); }
 .detail-grid strong { color: var(--text-primary); font-weight: 550; }
+
+.trend-block { margin-top: 14px; }
+.trend-block h3 { font-size: var(--fs-2); margin-bottom: 6px; color: var(--text-primary); }
+.trend-svg { width: 100%; height: 64px; display: block; border-radius: 10px; background: rgba(148, 163, 184, 0.12); }
+.trend-line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.trend-caption, .trend-empty { margin-top: 6px; font-size: var(--fs-1); color: var(--text-secondary); }
 .interpretation-list { margin: var(--space-1) 0 0 18px; color: var(--text-secondary); display: grid; gap: 8px; }
 
 .error-card, .empty-card { padding: var(--space-3); text-align: center; margin-top: var(--space-2); }

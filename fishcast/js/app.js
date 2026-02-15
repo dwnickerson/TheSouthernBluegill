@@ -62,6 +62,7 @@ function init() {
 
     window.addEventListener('popstate', () => {
         rerenderFromRoute();
+        openPanelFromQuery();
     });
 
     debugLog('FishCast ready');
@@ -69,7 +70,21 @@ function init() {
 
 
 
+
+function setRoutePanel(panel) {
+    const url = new URL(window.location.href);
+    if (panel) {
+        url.searchParams.set('panel', panel);
+    } else {
+        url.searchParams.delete('panel');
+    }
+    window.history.pushState({}, '', url);
+}
+
 function openPanelFromQuery() {
+    document.getElementById('settingsModal')?.remove();
+    document.getElementById('aboutModal')?.remove();
+
     const params = new URLSearchParams(window.location.search);
     const panel = (params.get('panel') || '').toLowerCase();
 
@@ -258,11 +273,13 @@ function setupEventListeners() {
     // Settings links
     document.getElementById('settingsLink')?.addEventListener('click', (e) => {
         e.preventDefault();
+        setRoutePanel('settings');
         openSettings();
     });
    
     document.getElementById('aboutLink')?.addEventListener('click', (e) => {
         e.preventDefault();
+        setRoutePanel('about');
         openAbout();
     });
 
