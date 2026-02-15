@@ -307,7 +307,6 @@ export function renderForecast(data) {
         
         <div class="action-buttons">
             <button class="action-btn" onclick="window.shareForecast()">📱 Share</button>
-            <button class="action-btn" onclick="window.saveFavorite()">⭐ Save Location</button>
         </div>
 
         <div class="tips-card">
