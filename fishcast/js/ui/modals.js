@@ -10,15 +10,9 @@ const debugLog = (...args) => {
 
 
 function closePanelRoute(panelName) {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('panel') !== panelName) return;
-
-    if (window.history.length > 1) {
-        window.history.back();
-        return;
-    }
-
     const url = new URL(window.location.href);
+    if (url.searchParams.get('panel') !== panelName) return;
+
     url.searchParams.delete('panel');
     window.history.replaceState({}, '', url);
 }

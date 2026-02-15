@@ -144,6 +144,12 @@ a:focus-visible,
     color: #3f4b5c;
     font-weight: 560;
 }
+.hero-condition {
+    margin-top: 8px;
+    font-size: var(--fs-3);
+    color: var(--text-primary);
+    font-weight: 600;
+}
 .hero-explanation {
     margin-top: var(--space-2);
     color: var(--text-secondary);
@@ -263,8 +269,13 @@ a:focus-visible,
 
 .trend-block { margin-top: 14px; }
 .trend-block h3 { font-size: var(--fs-2); margin-bottom: 6px; color: var(--text-primary); }
+.trend-chart { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: stretch; }
+.trend-plot-area { display: flex; flex-direction: column; gap: 4px; }
 .trend-svg { width: 100%; height: 64px; display: block; border-radius: 10px; background: rgba(148, 163, 184, 0.12); }
 .trend-line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.trend-axis { display: flex; justify-content: space-between; color: var(--text-secondary); font-size: 0.72rem; }
+.trend-axis-y { flex-direction: column; align-items: flex-end; min-width: 52px; }
+.trend-axis-x { padding-inline: 2px; }
 .trend-caption, .trend-empty { margin-top: 6px; font-size: var(--fs-1); color: var(--text-secondary); }
 .interpretation-list { margin: var(--space-1) 0 0 18px; color: var(--text-secondary); display: grid; gap: 8px; }
 
@@ -328,45 +339,25 @@ footer a { color: var(--text-primary); }
 
 
 .gauge {
-    margin-top: 6px;
-    position: relative;
-    min-height: 136px;
+    margin-top: 8px;
 }
-.gauge-arc {
-    width: 170px;
-    height: 85px;
-    margin: 0 auto;
-    border: 8px solid rgba(148, 163, 184, 0.35);
-    border-bottom: 0;
-    border-radius: 170px 170px 0 0;
-}
-.gauge-needle {
-    position: absolute;
-    top: 34px;
-    left: 50%;
-    width: 6px;
-    height: 58px;
-    border-radius: 99px;
-    transform-origin: 50% calc(100% - 6px);
-    background: #f8fafc;
-    box-shadow: 0 0 0 2px rgba(51, 65, 85, 0.15);
-    z-index: 2;
-}
-.gauge-hub {
-    position: absolute;
-    left: 50%;
-    top: 82px;
-    width: 14px;
+.gauge-track {
     height: 14px;
-    margin-left: -7px;
-    border-radius: 50%;
-    background: rgba(30, 41, 59, 0.7);
-    box-shadow: 0 0 0 2px rgba(241, 245, 249, 0.9);
-    z-index: 3;
+    border-radius: var(--radius-pill);
+    background: rgba(148, 163, 184, 0.28);
+    overflow: hidden;
+    border: 1px solid rgba(100, 116, 139, 0.25);
 }
-.gauge-center {
+.gauge-fill {
+    width: var(--gauge-fill, 0%);
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #60a5fa 0%, #22c55e 45%, #f59e0b 100%);
+    transition: width 0.3s ease;
+}
+.gauge-value-wrap {
     text-align: center;
-    margin-top: -10px;
+    margin-top: 10px;
 }
 .gauge-summary {
     margin-top: 8px;
@@ -375,12 +366,12 @@ footer a { color: var(--text-primary); }
     font-size: 0.78rem;
 }
 .gauge-direction { font-size: var(--fs-2); color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; }
-.gauge-value { font-size: 2.5rem; color: var(--text-primary); line-height: 1; }
+.gauge-value { font-size: 2.1rem; color: var(--text-primary); line-height: 1; }
 .gauge-unit { font-size: var(--fs-2); color: var(--text-secondary); margin-top: 2px; }
 .gauge-scale {
     display: flex;
     justify-content: space-between;
-    margin-top: 10px;
+    margin-top: 8px;
     color: var(--text-secondary);
     font-size: var(--fs-1);
 }

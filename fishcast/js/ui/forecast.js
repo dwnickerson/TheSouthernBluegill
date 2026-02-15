@@ -75,7 +75,7 @@ function buildDepthTemperatureFigures(surfaceTemp, waterType, sampleDate) {
         .join(' · ');
 }
 
-function renderTrendSvg(values = [], unit = '', decimals = 0) {
+function renderTrendSvg(values = [], unit = '', decimals = 0, yLabel = 'Value', xLabel = 'Hour') {
     if (!Array.isArray(values) || !values.length) {
         return '<p class="trend-empty">No hourly data available.</p>';
     }
@@ -98,23 +98,37 @@ function renderTrendSvg(values = [], unit = '', decimals = 0) {
     }).join(' ');
 
     const latest = safeValues[safeValues.length - 1];
+    const first = safeValues[0];
 
     return `
-        <svg class="trend-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
-            <polyline class="trend-line" points="${points}"></polyline>
-        </svg>
-        <p class="trend-caption">Low ${min.toFixed(decimals)}${unit} · High ${max.toFixed(decimals)}${unit} · Latest ${latest.toFixed(decimals)}${unit}</p>
+        <div class="trend-chart" role="img" aria-label="${yLabel} trend across recent hours">
+            <div class="trend-axis trend-axis-y">
+                <span>${max.toFixed(decimals)}${unit}</span>
+                <span>${min.toFixed(decimals)}${unit}</span>
+            </div>
+            <div class="trend-plot-area">
+                <svg class="trend-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
+                    <polyline class="trend-line" points="${points}"></polyline>
+                </svg>
+                <div class="trend-axis trend-axis-x" aria-hidden="true">
+                    <span>Now</span>
+                    <span>${xLabel}</span>
+                </div>
+            </div>
+        </div>
+        <p class="trend-caption">${yLabel}: ${first.toFixed(decimals)}${unit} → ${latest.toFixed(decimals)}${unit} · Range ${min.toFixed(decimals)}${unit}-${max.toFixed(decimals)}${unit}</p>
     `;
 }
 
 function renderGauge({ valueLabel, scaleLabelLow, scaleLabelHigh, ratio = 0, unitLabel = '', direction = null, summaryLabel = '' }) {
-    const degrees = -100 + (Math.max(0, Math.min(1, ratio)) * 200);
+    const clampedRatio = Math.max(0, Math.min(1, ratio));
+    const percent = Math.round(clampedRatio * 100);
     return `
-        <div class="gauge" aria-hidden="true">
-            <div class="gauge-arc"></div>
-            <div class="gauge-needle" style="transform: translateX(-50%) rotate(${degrees}deg)"></div>
-            <div class="gauge-hub"></div>
-            <div class="gauge-center">
+        <div class="gauge" role="img" aria-label="Gauge reading ${valueLabel}${unitLabel ? ` ${unitLabel}` : ''}">
+            <div class="gauge-track" aria-hidden="true">
+                <div class="gauge-fill" style="--gauge-fill:${percent}%"></div>
+            </div>
+            <div class="gauge-value-wrap">
                 ${direction ? `<p class="gauge-direction">${direction}</p>` : ''}
                 <p class="gauge-value">${valueLabel}</p>
                 ${unitLabel ? `<p class="gauge-unit">${unitLabel}</p>` : ''}
@@ -257,11 +271,15 @@ function buildDailyRows(data) {
     });
 }
 
-function moonLabel(percent) {
-    if (percent <= 5 || percent >= 95) return 'New / Full Cycle';
-    if (percent < 50) return 'Waxing Crescent';
-    if (percent === 50) return 'Quarter Moon';
-    return 'Waning Crescent';
+function moonLabel(percent, phaseName = '') {
+    const pct = Number(percent);
+    if (phaseName) return phaseName;
+    if (!Number.isFinite(pct)) return 'Unknown';
+    if (pct <= 5) return 'New Moon';
+    if (pct >= 95) return 'Full Moon';
+    if (pct <= 45) return 'Crescent';
+    if (pct <= 55) return 'Quarter Moon';
+    return 'Gibbous';
 }
 
 
@@ -330,6 +348,10 @@ function renderMainView(data) {
     const windRatio = normalizeGauge(0, 40, windMph);
     const precipProb = weather.forecast.hourly.precipitation_probability?.[0] || weather.forecast.daily.precipitation_probability_max?.[0] || 0;
     const precipMm = weather.forecast.current.precipitation ?? weather.forecast.hourly.precipitation?.[0] ?? 0;
+    const currentWeather = getWeatherDescriptor(weather.forecast.current.weather_code);
+    const conditionLabel = precipMm > 0.05 || precipProb >= 55
+        ? `Rain likely now (${precipProb}% chance)`
+        : `${currentWeather.label} now`;
     const waterTempLabel = Number.isFinite(data.waterTemp) ? `${data.waterTemp.toFixed(1)}°F` : 'N/A';
     const uvCurrent = weather.forecast.current.uv_index ?? weather.forecast.hourly.uv_index?.[0] ?? null;
     const depthFiguresLabel = buildDepthTemperatureFigures(data.waterTemp, data.waterType, new Date());
@@ -352,6 +374,7 @@ function renderMainView(data) {
                 <h1 class="hero-title">Fishing Conditions</h1>
                 <p class="hero-index">${currentScore.score}</p>
                 <p class="pill ${state.className}">${state.label}</p>
+                <p class="hero-condition">${currentWeather.icon} ${conditionLabel}</p>
                 <p class="hero-explanation">${createExplanation({ precipProb, pressureTrend: pressureAnalysis.trend, windMph })}</p>
                 <p class="metric-note">Precipitation: ${precipMm.toFixed(2)} mm/h · ${precipProb}% chance</p>
             </section>
@@ -429,7 +452,7 @@ function renderMainView(data) {
                 <article class="card metric-card">
                     <h3>Moon &amp; Light</h3>
                     ${renderMoonGraphic(solunar.moon_phase_percent)}
-                    <p class="metric-value">${moonLabel(solunar.moon_phase_percent)}</p>
+                    <p class="metric-value">${moonLabel(solunar.moon_phase_percent, solunar.moon_phase)}</p>
                     <p class="metric-note">Sunrise: ${sunrise} · Sunset: ${sunset}</p>
                     <p class="metric-note">Major periods: ${solunar.major_periods.join(' · ')}</p>
                     <p class="metric-note">Minor periods: ${solunar.minor_periods.join(' · ')}</p>
@@ -539,19 +562,19 @@ function renderDayDetailView(data, day) {
                 <h2 class="card-header">24-Hour Trends</h2>
                 <div class="trend-block">
                     <h3>Air Temperature (°F)</h3>
-                    ${renderTrendSvg(hourlyAirTempF, '°F', 1)}
+                    ${renderTrendSvg(hourlyAirTempF, '°F', 1, 'Air Temperature', '24h')}
                 </div>
                 <div class="trend-block">
                     <h3>Water Temperature Surface (°F)</h3>
-                    ${renderTrendSvg(hourlyWaterSurfaceF, '°F', 1)}
+                    ${renderTrendSvg(hourlyWaterSurfaceF, '°F', 1, 'Water Surface Temp', '24h')}
                 </div>
                 <div class="trend-block">
                     <h3>Water Temperature 2ft (°F)</h3>
-                    ${renderTrendSvg(hourlyWater2FtF, '°F', 1)}
+                    ${renderTrendSvg(hourlyWater2FtF, '°F', 1, 'Water Temp at 2ft', '24h')}
                 </div>
                 <div class="trend-block">
                     <h3>Precipitation (mm/hr)</h3>
-                    ${renderTrendSvg(hourlyPrecipMm, ' mm/h', 2)}
+                    ${renderTrendSvg(hourlyPrecipMm, ' mm/h', 2, 'Precipitation', '24h')}
                 </div>
             </section>
 
@@ -560,7 +583,7 @@ function renderDayDetailView(data, day) {
                 <p><strong>Sunrise:</strong> ${daily.sunrise?.[dayIndex] ? new Date(daily.sunrise[dayIndex]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}</p>
                 <p><strong>Sunset:</strong> ${daily.sunset?.[dayIndex] ? new Date(daily.sunset[dayIndex]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}</p>
                 ${renderMoonGraphic(solunar.moon_phase_percent)}
-                <p><strong>Moon:</strong> ${moonLabel(solunar.moon_phase_percent)}, ${solunar.moon_phase_percent}% illumination</p>
+                <p><strong>Moon:</strong> ${moonLabel(solunar.moon_phase_percent, solunar.moon_phase)}, ${solunar.moon_phase_percent}% illumination</p>
                 <p><strong>Major periods:</strong> ${solunar.major_periods.join(' · ')}</p>
                 <p><strong>Minor periods:</strong> ${solunar.minor_periods.join(' · ')}</p>
             </section>
