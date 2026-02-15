@@ -1,14 +1,14 @@
 # FishCast Forecast Operator Guide
 
 ## Update cadence
-- Weather payload is refreshed on demand; cached for ~60 minutes.
+- Weather payload is refreshed on demand; cached for ~60 minutes (America/Chicago timezone pinned at API request).
 - If API fetch fails, cached weather is used and marked stale.
 - Water temp estimate is memoized by location+water type and constrained by max daily change.
 
 ## Scoring flow
 1. Ingest weather archive+forecast (America/Chicago timezone pinned).
 2. Build local-day windows from hourly arrays.
-3. Compute species-aware day score (bluegill native model; others use stabilized fallback).
+3. Compute species-aware day score for summary + each forecast day through `forecastEngine.js`.
 4. Apply stability controls:
    - material-change gating
    - tomorrow freeze after 7pm local (unless major shift)

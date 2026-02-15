@@ -29,17 +29,18 @@ const weatherFixture = {
   },
   forecast: {
     current: { weather_code: 1 },
-    daily: { precipitation_sum: [1, 0, 0], time: ['2026-05-01', '2026-05-02'] },
+    daily: { precipitation_sum: [1, 0, 0], time: ['2026-05-01', '2026-05-02', '2026-05-03'] },
     hourly: {
       time: [
         '2026-05-01T00:00', '2026-05-01T01:00', '2026-05-01T02:00', '2026-05-01T03:00',
-        '2026-05-02T00:00', '2026-05-02T01:00', '2026-05-02T02:00', '2026-05-02T03:00'
+        '2026-05-02T00:00', '2026-05-02T01:00', '2026-05-02T02:00', '2026-05-02T03:00',
+        '2026-05-03T00:00', '2026-05-03T01:00', '2026-05-03T02:00', '2026-05-03T03:00'
       ],
-      surface_pressure: [1014, 1013, 1012, 1011, 1011, 1010, 1009, 1008],
-      wind_speed_10m: [8, 9, 8, 7, 9, 10, 11, 10],
-      cloud_cover: [30, 35, 40, 45, 50, 55, 60, 65],
-      precipitation_probability: [10, 10, 20, 15, 20, 20, 25, 20],
-      temperature_2m: [20, 20, 19, 19, 21, 21, 22, 22]
+      surface_pressure: [1014, 1013, 1012, 1011, 1011, 1010, 1009, 1008, 1012, 1013, 1014, 1015],
+      wind_speed_10m: [8, 9, 8, 7, 9, 10, 11, 10, 10, 12, 11, 10],
+      cloud_cover: [30, 35, 40, 45, 50, 55, 60, 65, 45, 50, 55, 60],
+      precipitation_probability: [10, 10, 20, 15, 20, 20, 25, 20, 25, 30, 30, 35],
+      temperature_2m: [20, 20, 19, 19, 21, 21, 22, 22, 22, 23, 23, 24]
     }
   }
 };
@@ -77,6 +78,32 @@ test('stability gate limits non-material jumps', () => {
   assert.equal(second.score, 72);
 });
 
+test('freeze policy locks tomorrow after 7pm without major shift', () => {
+  const speciesKey = 'bluegill';
+  const locationKey = '34.000_-88.000';
+  const dateKey = '2026-05-03';
+
+  applyStabilityControls({
+    baseScore: 67,
+    inputs: { pressureAvg: 1011, windAvgKmh: 11, precipProbAvg: 28, cloudAvg: 55, tempAvgC: 22, waterTempF: 73 },
+    speciesKey,
+    locationKey,
+    dateKey,
+    now: new Date('2026-05-02T18:00:00-05:00')
+  });
+
+  const frozen = applyStabilityControls({
+    baseScore: 76,
+    inputs: { pressureAvg: 1011.5, windAvgKmh: 11.2, precipProbAvg: 27, cloudAvg: 56, tempAvgC: 22.2, waterTempF: 73.1 },
+    speciesKey,
+    locationKey,
+    dateKey,
+    now: new Date('2026-05-02T20:15:00-05:00')
+  });
+
+  assert.equal(frozen.score, 67);
+});
+
 test('deterministic score for identical inputs', () => {
   const payload = {
     weather: weatherFixture,
@@ -106,6 +133,25 @@ test('deterministic score for identical inputs', () => {
   }).score;
 
   assert.equal(run1, run2);
+});
+
+test('golden snapshot for bluegill day score', () => {
+  global.localStorage.clear();
+  const payload = {
+    weather: weatherFixture,
+    coords: { lat: 34.2, lon: -88.7 }
+  };
+
+  const output = calculateSpeciesAwareDayScore({
+    data: payload,
+    dayKey: '2026-05-02',
+    speciesKey: 'bluegill',
+    waterTempF: 72,
+    locationKey: '34.200_-88.700',
+    now: new Date('2026-05-01T10:00:00-05:00')
+  });
+
+  assert.equal(output.score, 92);
 });
 
 test('stability cache key includes location, species, and date', () => {

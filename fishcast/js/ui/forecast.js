@@ -3,7 +3,8 @@
 import { SPECIES_DATA } from '../config/species.js';
 import { cToF, kmhToMph, getWindDirection } from '../utils/math.js';
 import { formatDate, formatDateShort } from '../utils/date.js';
-import { calculateFishingScore, getPressureTrend } from '../models/fishingScore.js';
+import { getPressureTrend } from '../models/fishingScore.js';
+import { calculateSpeciesAwareDayScore } from '../models/forecastEngine.js';
 import { calculateSolunar } from '../models/solunar.js';
 import { estimateTempByDepth } from '../models/waterTemp.js';
 import { WATER_BODIES_V2 } from '../config/waterBodies.js';
@@ -59,6 +60,15 @@ function getPrecipIcon(percentage) {
     return 'Low';
 }
 
+
+
+function toRating(score) {
+    if (score >= 80) return { rating: 'EXCELLENT', colorClass: 'excellent' };
+    if (score >= 65) return { rating: 'GOOD', colorClass: 'good' };
+    if (score >= 50) return { rating: 'FAIR', colorClass: 'fair' };
+    if (score >= 35) return { rating: 'POOR', colorClass: 'poor' };
+    return { rating: 'BAD', colorClass: 'bad' };
+}
 
 function buildTrendLineSvg(values, {
     width = 680,
@@ -276,19 +286,21 @@ export function renderForecast(data) {
     // Calculate solunar first to get moon phase
     const solunar = calculateSolunar(coords.lat, coords.lon, new Date());
     
-    // Calculate today's score WITH MOON PHASE
-    // Use observed precipitation from recent historical days for clarity, not future forecast totals.
-    const recentPrecip = weather.historical?.daily?.precipitation_sum?.slice(-3) || [];
-    const scoreWeather = {
-        ...weather.forecast,
-        daily: {
-            ...weather.forecast.daily,
-            precipitation_sum: recentPrecip.length > 0
-                ? recentPrecip
-                : (weather.forecast.daily.precipitation_sum || [])
-        }
-    };
-    const currentScore = calculateFishingScore(scoreWeather, waterTemp, speciesKey, solunar.moon_phase_percent);
+    const debugScoring = localStorage.getItem('fishcast_debug_scoring') === 'true';
+    const runNow = new Date();
+    const locationKey = `${coords.lat.toFixed(4)}_${coords.lon.toFixed(4)}`;
+
+    const todayKey = weather.forecast.daily.time?.[0];
+    const currentDayScore = calculateSpeciesAwareDayScore({
+        data,
+        dayKey: todayKey,
+        speciesKey,
+        waterTempF: waterTemp,
+        locationKey,
+        now: runNow,
+        debug: debugScoring
+    });
+    const currentScore = { ...toRating(currentDayScore.score), score: currentDayScore.score, clarity: 'clear' };
     
     const windSpeed = kmhToMph(weather.forecast.current.wind_speed_10m);
     const windDir = getWindDirection(weather.forecast.current.wind_direction_10m);
@@ -458,7 +470,7 @@ export function renderForecast(data) {
 
     // Multi-day forecast if requested
     if (days > 1) {
-        html += renderMultiDayForecast(weather, speciesKey, waterType, coords, waterTemp, solunar.moon_phase_percent);
+        html += renderMultiDayForecast(data, weather, speciesKey, waterType, coords, waterTemp, runNow, debugScoring, locationKey);
     }
     
     resultsDiv.innerHTML = html;
@@ -526,7 +538,7 @@ function getCurrentPrecipProbability(forecast) {
     return Math.max(baseProb, codeFloor, activePrecipFloor);
 }
 
-function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialWaterTemp, moonPhasePercent = 50) {
+function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, initialWaterTemp, runNow, debugScoring, locationKey) {
     let html = '<div class="multi-day-forecast"><h3>Extended forecast</h3><div class="forecast-days">';
     
     const dailyData = weather.forecast.daily;
@@ -557,38 +569,17 @@ function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialW
         const windSpeed = dailyData.wind_speed_10m_max ? kmhToMph(dailyData.wind_speed_10m_max[i]) : 0;
         const windDir = dailyData.wind_direction_10m_dominant ? getWindDirection(dailyData.wind_direction_10m_dominant[i]) : '';
         
-         // Build a day-specific weather object and use the full scoring model
-        const dayPressure = dailyData.surface_pressure_mean?.[i] || weather.forecast.current.surface_pressure || 1013;
-        const dayWind = dailyData.wind_speed_10m_max?.[i] || 0;
-        const dayClouds = dailyData.cloud_cover_mean?.[i] ?? weather.forecast.current.cloud_cover ?? 50;
-        const dayCode = dailyData.weather_code[i];
-        const dayPrecipProb = dailyData.precipitation_probability_max?.[i] || 0;
-
-        // Use trailing precipitation totals up to this forecast day (plus recent historical rain)
-        // so clarity scoring remains stable from one day to the next.
-        const recentHistoricalPrecip = weather.historical?.daily?.precipitation_sum || [];
-        const forecastPrecipThroughDay = (dailyData.precipitation_sum || []).slice(0, i + 1);
-        const precipWindow = [...recentHistoricalPrecip, ...forecastPrecipThroughDay].slice(-3);
-
-        const scoreWeather = {
-            current: {
-                surface_pressure: dayPressure,
-                wind_speed_10m: dayWind,
-                cloud_cover: dayClouds,
-                weather_code: dayCode
-            },
-            hourly: {
-                surface_pressure: [dayPressure, dayPressure, dayPressure, dayPressure, dayPressure, dayPressure],
-                precipitation_probability: [dayPrecipProb]
-            },
-            daily: {
-                precipitation_sum: precipWindow
-            }
-        };
-
-        const estimated = calculateFishingScore(scoreWeather, waterTemps[i], speciesKey, moonPhasePercent);
-        const estimatedScore = estimated.score;
-        const scoreClass = estimated.colorClass;
+        const dayScore = calculateSpeciesAwareDayScore({
+            data,
+            dayKey: date,
+            speciesKey,
+            waterTempF: waterTemps[i],
+            locationKey,
+            now: runNow,
+            debug: debugScoring
+        });
+        const estimatedScore = dayScore.score;
+        const scoreClass = toRating(estimatedScore).colorClass;
         
         html += `
             <div class="forecast-day-card" onclick="window.showDayDetails(${i}, '${date}')" data-day="${i}">
