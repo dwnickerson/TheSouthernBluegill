@@ -4,22 +4,6 @@
 import { SPECIES_DATA } from '../config/species.js';
 import { kmhToMph } from '../utils/math.js';
 
-const SPECIES_SCORE_CEILINGS = {
-    bass: 90,
-    smallmouth: 88,
-    spotted: 89,
-    bluegill: 92,
-    coppernose: 93,
-    redear: 90,
-    green_sunfish: 88,
-    warmouth: 90,
-    longear: 87,
-    rock_bass: 88,
-    crappie: 91,
-    white_crappie: 91,
-    black_crappie: 92
-};
-
 // Get fish phase based on water temperature
 export function getFishPhase(waterTemp, speciesData) {
     let bestMatch = null;
@@ -271,8 +255,10 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
         score -= 10;
     }
     
-    const scoreCeiling = SPECIES_SCORE_CEILINGS[speciesKey] ?? 90;
-    score = Math.min(score, scoreCeiling);
+    // Keep non-crappie sunfish ratings realistic (they rarely sustain a true 100 day).
+    if (isSunfish && !speciesKey.includes('crappie')) {
+        score = Math.min(score, 92);
+    }
 
     // Constrain score to 0-100
     score = Math.max(0, Math.min(100, Math.round(score)));
