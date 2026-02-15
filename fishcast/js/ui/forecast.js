@@ -60,6 +60,47 @@ function getPrecipIcon(percentage) {
     return 'Low';
 }
 
+function getNextFullMoon(date = new Date()) {
+    const synodicMonthDays = 29.530588853;
+    const knownNewMoonJulian = 2451550.1;
+    const fullMoonAgeDays = synodicMonthDays / 2;
+    const julianDay = date.getTime() / 86400000 + 2440587.5;
+    const moonAge = (julianDay - knownNewMoonJulian) % synodicMonthDays;
+    const normalizedAge = moonAge < 0 ? moonAge + synodicMonthDays : moonAge;
+    const daysUntilFull = (fullMoonAgeDays - normalizedAge + synodicMonthDays) % synodicMonthDays;
+    const daysAhead = daysUntilFull === 0 ? synodicMonthDays : daysUntilFull;
+    return new Date(date.getTime() + (daysAhead * 24 * 60 * 60 * 1000));
+}
+
+function buildHourlyTrendByDate(hourlyForecast) {
+    const dailyTrends = new Map();
+    const hourlyTimes = hourlyForecast.time || [];
+    const hourlyTemps = hourlyForecast.temperature_2m || [];
+    const hourlyPrecip = hourlyForecast.precipitation_probability || [];
+
+    hourlyTimes.forEach((timestamp, index) => {
+        const dayKey = timestamp.split('T')[0];
+        if (!dailyTrends.has(dayKey)) {
+            dailyTrends.set(dayKey, {
+                minTempF: Infinity,
+                maxTempF: -Infinity,
+                maxPrecip: 0
+            });
+        }
+
+        const trend = dailyTrends.get(dayKey);
+        const tempC = hourlyTemps[index];
+        if (typeof tempC === 'number') {
+            const tempF = cToF(tempC);
+            trend.minTempF = Math.min(trend.minTempF, tempF);
+            trend.maxTempF = Math.max(trend.maxTempF, tempF);
+        }
+        trend.maxPrecip = Math.max(trend.maxPrecip, hourlyPrecip[index] || 0);
+    });
+
+    return dailyTrends;
+}
+
 
 
 function toRating(score) {
@@ -325,6 +366,12 @@ export function renderForecast(data) {
     // Weather icon
     const weatherIcon = getWeatherIcon(weather.forecast.current.weather_code);
     const moonIcon = getMoonIcon(solunar.moon_phase);
+    const nextFullMoon = getNextFullMoon(new Date());
+    const nextFullMoonLabel = nextFullMoon.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric'
+    });
     const precipNowMm = weather.forecast.current.precipitation || 0;
     const precipProb = getCurrentPrecipProbability(weather.forecast);
     const precipIcon = precipNowMm > 0 ? 'Likely' : getPrecipIcon(precipProb);
@@ -385,10 +432,6 @@ export function renderForecast(data) {
 
         ${renderTrendCharts(weather)}
         ${renderWeatherRadar(coords)}
-        
-        <div class="action-buttons">
-            <button class="action-btn" onclick="window.shareForecast()" aria-label="Share forecast">Share</button>
-        </div>
         
         <div class="details-grid">
             <div class="detail-card">
@@ -479,6 +522,10 @@ export function renderForecast(data) {
                         ${solunar.minor_periods[1]}
                     </span>
                 </div>
+                <div class="detail-row">
+                    <span class="detail-label">Next Full Moon</span>
+                    <span class="detail-value">${nextFullMoonLabel}</span>
+                </div>
             </div>
         </div>
 
@@ -488,6 +535,12 @@ export function renderForecast(data) {
     if (days > 1) {
         html += renderMultiDayForecast(data, weather, speciesKey, waterType, coords, waterTemp, runNow, debugScoring, locationKey);
     }
+
+    html += `
+        <div class="action-buttons action-buttons-bottom">
+            <button class="action-btn" onclick="window.shareForecast()" aria-label="Share forecast">Share</button>
+        </div>
+    `;
     
     resultsDiv.innerHTML = html;
     resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -558,6 +611,7 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
     let html = '<div class="multi-day-forecast"><h3>Extended forecast</h3><div class="forecast-days">';
     
     const dailyData = weather.forecast.daily;
+    const hourlyTrendsByDate = buildHourlyTrendByDate(weather.forecast.hourly || {});
     
     // 🔬 PHYSICS: Calculate water temps for all days using thermal model
     const waterTemps = calculateWaterTempEvolution(
@@ -580,6 +634,10 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
         const precipProb = dailyData.precipitation_probability_max[i];
         const weatherCode = dailyData.weather_code[i];
         const weatherIcon = getWeatherIcon(weatherCode);
+        const hourlyTrend = hourlyTrendsByDate.get(date);
+        const hourlyTrendLabel = hourlyTrend && Number.isFinite(hourlyTrend.minTempF) && Number.isFinite(hourlyTrend.maxTempF)
+            ? `${hourlyTrend.minTempF.toFixed(0)}°→${hourlyTrend.maxTempF.toFixed(0)}° · ${hourlyTrend.maxPrecip.toFixed(0)}% rain`
+            : 'Not available';
         
         // Get wind data for the day
         const windSpeed = dailyData.wind_speed_10m_max ? kmhToMph(dailyData.wind_speed_10m_max[i]) : 0;
@@ -606,6 +664,7 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
                 <div class="day-precip">${getPrecipIcon(precipProb)} ${precipProb}%</div>
                 <div style="font-size: 0.85em; color: #888; margin-top: 4px;">${waterTemps[i].toFixed(1)}°F</div>
                 <div style="font-size: 0.85em; color: #888;">${windSpeed.toFixed(0)} mph ${windDir}</div>
+                <div class="day-hourly-trend">24h trend: ${hourlyTrendLabel}</div>
             </div>
         `;
     }
