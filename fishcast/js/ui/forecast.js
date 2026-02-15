@@ -156,9 +156,7 @@ export function renderForecast(data) {
     const weatherIcon = getWeatherIcon(weather.forecast.current.weather_code);
     const moonIcon = getMoonIcon(solunar.moon_phase);
     const precipNowMm = weather.forecast.current.precipitation || 0;
-    const rawPrecipProb = weather.forecast.hourly.precipitation_probability[0] || 0;
-    // If rain is actively observed, avoid showing a misleading 0% rain chance.
-    const precipProb = precipNowMm > 0 ? Math.max(rawPrecipProb, 95) : rawPrecipProb;
+    const precipProb = getCurrentPrecipProbability(weather.forecast);
     const precipIcon = precipNowMm > 0 ? '🌧️' : getPrecipIcon(precipProb);
     const todayHighTemp = cToF(weather.forecast.daily.temperature_2m_max[0]);
     const todayLowTemp = cToF(weather.forecast.daily.temperature_2m_min[0]);
@@ -336,6 +334,37 @@ function getWeatherDescription(code) {
         99: 'Severe Thunderstorm'
     };
     return descriptions[code] || 'Unknown';
+}
+
+function getCurrentPrecipProbability(forecast) {
+    const hourlyTimes = forecast.hourly?.time || [];
+    const hourlyProbabilities = forecast.hourly?.precipitation_probability || [];
+    const currentTime = forecast.current?.time;
+    const currentCode = forecast.current?.weather_code;
+    const currentPrecipMm = forecast.current?.precipitation || 0;
+
+    const currentIndex = currentTime ? hourlyTimes.indexOf(currentTime) : -1;
+    const indexedProb = currentIndex >= 0 ? (hourlyProbabilities[currentIndex] || 0) : null;
+    const fallbackProb = hourlyProbabilities[0] || forecast.daily?.precipitation_probability_max?.[0] || 0;
+    const baseProb = indexedProb ?? fallbackProb;
+
+    // Keep wet-weather condition codes aligned with what users expect in weather apps.
+    const wetCodeMinimums = {
+        51: 60, // Light drizzle
+        53: 75, // Moderate drizzle
+        55: 85, // Dense drizzle
+        61: 65, // Slight rain
+        63: 80, // Moderate rain
+        65: 90, // Heavy rain
+        80: 70,
+        81: 80,
+        82: 90
+    };
+
+    const codeFloor = wetCodeMinimums[currentCode] || 0;
+    const activePrecipFloor = currentPrecipMm > 0 ? 95 : 0;
+
+    return Math.max(baseProb, codeFloor, activePrecipFloor);
 }
 
 function renderMultiDayForecast(weather, speciesKey, waterType, coords, initialWaterTemp, moonPhasePercent = 50) {
