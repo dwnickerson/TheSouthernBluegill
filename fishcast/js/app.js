@@ -11,9 +11,8 @@ import { storage } from './services/storage.js';
 import { getLocation } from './services/geocoding.js';
 import { getWeather } from './services/weatherAPI.js';
 import { estimateWaterTemp } from './models/waterTemp.js';
-import { renderForecast, showLoading, showError, showEmptyState, restoreLastForecast, rerenderFromRoute, parseHashRoute, setHashRoute } from './ui/forecast.js';
+import { renderForecast, showLoading, showError, showEmptyState, restoreLastForecast, rerenderFromRoute } from './ui/forecast.js';
 import { renderFavorites } from './ui/favorites.js';
-import { renderSettingsScreen, renderAboutScreen } from './ui/staticScreens.js';
 import {
     openSettings,
     closeSettings,
@@ -45,6 +44,9 @@ function init() {
     // Setup event listeners
     setupEventListeners();
 
+    // Open settings/about panel when requested by query string
+    openPanelFromQuery();
+   
     // Initialize species memory feature
     initSpeciesMemory();
    
@@ -58,11 +60,10 @@ function init() {
         showEmptyState();
     }
 
-    window.addEventListener('hashchange', () => {
-        renderCurrentRoute();
+    window.addEventListener('popstate', () => {
+        rerenderFromRoute();
+        openPanelFromQuery();
     });
-
-    renderCurrentRoute();
 
     debugLog('FishCast ready');
 }
@@ -70,21 +71,28 @@ function init() {
 
 
 
-
-function setAppViewMode(path) {
-    const isMain = path === '/';
-    document.body.dataset.view = isMain ? 'main' : 'screen';
-    document.querySelector('.favorites-section')?.style.setProperty('display', isMain ? '' : 'none');
-    document.querySelector('.form-card')?.style.setProperty('display', isMain ? '' : 'none');
-    document.querySelector('footer')?.style.setProperty('display', isMain ? '' : 'none');
+function setRoutePanel(panel) {
+    const url = new URL(window.location.href);
+    if (panel) {
+        url.searchParams.set('panel', panel);
+    } else {
+        url.searchParams.delete('panel');
+    }
+    window.history.pushState({}, '', url);
 }
 
-function renderCurrentRoute() {
-    const { path } = parseHashRoute();
-    setAppViewMode(path);
-    if (path === '/settings') return renderSettingsScreen();
-    if (path === '/about') return renderAboutScreen();
-    rerenderFromRoute();
+function openPanelFromQuery() {
+    document.getElementById('settingsModal')?.remove();
+    document.getElementById('aboutModal')?.remove();
+
+    const params = new URLSearchParams(window.location.search);
+    const panel = (params.get('panel') || '').toLowerCase();
+
+    if (panel === 'settings') {
+        openSettings();
+    } else if (panel === 'about') {
+        openAbout();
+    }
 }
 
 function applyStoredTheme() {
@@ -265,17 +273,20 @@ function setupEventListeners() {
     // Settings links
     document.getElementById('settingsLink')?.addEventListener('click', (e) => {
         e.preventDefault();
-        setHashRoute('/settings');
+        setRoutePanel('settings');
+        openSettings();
     });
    
     document.getElementById('aboutLink')?.addEventListener('click', (e) => {
         e.preventDefault();
-        setHashRoute('/about');
+        setRoutePanel('about');
+        openAbout();
     });
 
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
-        setHashRoute('/');
+        closeSettings();
+        closeAbout();
     });
 }
 
