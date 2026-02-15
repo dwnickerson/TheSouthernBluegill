@@ -62,6 +62,23 @@ function formatInches(mm, decimals = 2) {
     return inches.toFixed(decimals);
 }
 
+function getHourAxisLabels(hourStamps = []) {
+    if (!Array.isArray(hourStamps) || !hourStamps.length) {
+        return { start: '00:00', end: '23:00' };
+    }
+
+    const formatHour = (iso) => new Date(iso).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+
+    return {
+        start: formatHour(hourStamps[0]),
+        end: formatHour(hourStamps[hourStamps.length - 1])
+    };
+}
+
 
 function buildScoreDriverText(factor, data, features = {}) {
     const waterTemp = Number(data.waterTemp);
@@ -149,7 +166,7 @@ function buildDepthTemperatureFigures(surfaceTemp, waterType, sampleDate) {
         .join(' · ');
 }
 
-function renderTrendSvg(values = [], unit = '', decimals = 0, yLabel = 'Value', xLabel = 'Hour') {
+function renderTrendSvg(values = [], unit = '', decimals = 0, yLabel = 'Value', xLabel = 'Hours in Day', xAxisLabels = {}) {
     if (!Array.isArray(values) || !values.length) {
         return '<p class="trend-empty">No hourly data available.</p>';
     }
@@ -173,6 +190,8 @@ function renderTrendSvg(values = [], unit = '', decimals = 0, yLabel = 'Value', 
 
     const latest = safeValues[safeValues.length - 1];
     const first = safeValues[0];
+    const startHour = xAxisLabels.start || '00:00';
+    const endHour = xAxisLabels.end || '23:00';
 
     return `
         <div class="trend-chart" role="img" aria-label="${yLabel} trend across recent hours">
@@ -185,12 +204,12 @@ function renderTrendSvg(values = [], unit = '', decimals = 0, yLabel = 'Value', 
                     <polyline class="trend-line" points="${points}"></polyline>
                 </svg>
                 <div class="trend-axis trend-axis-x" aria-hidden="true">
-                    <span>Now</span>
-                    <span>${xLabel}</span>
+                    <span>${startHour}</span>
+                    <span>${endHour}</span>
                 </div>
             </div>
         </div>
-        <p class="trend-caption">${yLabel}: ${first.toFixed(decimals)}${unit} → ${latest.toFixed(decimals)}${unit} · Range ${min.toFixed(decimals)}${unit}-${max.toFixed(decimals)}${unit}</p>
+        <p class="trend-caption">${xLabel} · ${yLabel}: ${first.toFixed(decimals)}${unit} → ${latest.toFixed(decimals)}${unit} · Min/Max ${min.toFixed(decimals)}${unit}-${max.toFixed(decimals)}${unit}</p>
     `;
 }
 
@@ -584,6 +603,8 @@ function renderDayDetailView(data, day) {
         .filter(entry => entry.iso.startsWith(day))
         .slice(0, 24)
         .map(entry => entry.i);
+    const dayHourStamps = dayHourIndexes.map((i) => hourly.time[i]).filter(Boolean);
+    const hourAxisLabels = getHourAxisLabels(dayHourStamps);
 
     const hourlyAirTempF = dayHourIndexes.map((i) => cToF(hourly.temperature_2m?.[i])).filter(Number.isFinite);
     const dayAirAverageF = hourlyAirTempF.length
@@ -644,19 +665,19 @@ function renderDayDetailView(data, day) {
                 <h2 class="card-header">24-Hour Trends</h2>
                 <div class="trend-block">
                     <h3>Air Temperature (°F)</h3>
-                    ${renderTrendSvg(hourlyAirTempF, '°F', 1, 'Air Temperature', '24h')}
+                    ${renderTrendSvg(hourlyAirTempF, '°F', 1, 'Air Temperature', 'Hours in Day', hourAxisLabels)}
                 </div>
                 <div class="trend-block">
                     <h3>Water Temperature Surface (°F)</h3>
-                    ${renderTrendSvg(hourlyWaterSurfaceF, '°F', 1, 'Water Surface Temp', '24h')}
+                    ${renderTrendSvg(hourlyWaterSurfaceF, '°F', 1, 'Water Surface Temp', 'Hours in Day', hourAxisLabels)}
                 </div>
                 <div class="trend-block">
                     <h3>Water Temperature 2ft (°F)</h3>
-                    ${renderTrendSvg(hourlyWater2FtF, '°F', 1, 'Water Temp at 2ft', '24h')}
+                    ${renderTrendSvg(hourlyWater2FtF, '°F', 1, 'Water Temp at 2ft', 'Hours in Day', hourAxisLabels)}
                 </div>
                 <div class="trend-block">
                     <h3>Precipitation (in/hr)</h3>
-                    ${renderTrendSvg(hourlyPrecipIn, ' in/h', 2, 'Precipitation', '24h')}
+                    ${renderTrendSvg(hourlyPrecipIn, ' in/h', 2, 'Precipitation', 'Hours in Day', hourAxisLabels)}
                 </div>
             </section>
 
