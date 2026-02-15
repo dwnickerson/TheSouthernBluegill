@@ -75,6 +75,9 @@ function buildScoreDriverText(factor, data, features = {}) {
         water_temp_active: `Water temp (${waterTemp.toFixed(1)}°F) is fishable, but not in the peak feeding range.`,
         cold_stress: `Water temp (${waterTemp.toFixed(1)}°F) is too cold for peak activity, so score is reduced.`,
         heat_stress: `Water temp (${waterTemp.toFixed(1)}°F) is above the comfort range, reducing activity.`,
+        spring_activity: 'Seasonal spring patterns are boosting shallow feeding activity.',
+        fall_feed: 'Seasonal fall behavior is increasing feeding consistency.',
+        winter_slowdown: 'Seasonal winter slowdown is suppressing overall feeding activity.',
         pressure_rapid_fall: `Pressure is dropping fast (${pressureRate} hPa/hr), which usually triggers feeding.`,
         pressure_falling: `Pressure is falling (${pressureRate} hPa/hr), often improving bite windows.`,
         pressure_rising: `Pressure is rising (${pressureRate} hPa/hr), which can slow feeding.`,
@@ -106,11 +109,18 @@ function getTodayScoreDrivers(data, maxItems = 3) {
     });
 
     const contributions = modern?.debugPacket?.contributions || [];
+    const score = Number(modern?.score || 0);
     const features = modern?.debugPacket?.features || {};
+    const sorted = contributions.slice().sort((a, b) => Math.abs(b.delta || 0) - Math.abs(a.delta || 0));
 
-    return contributions
-        .slice()
-        .sort((a, b) => Math.abs(b.delta || 0) - Math.abs(a.delta || 0))
+    const leadContributions = score < 60
+        ? [
+            ...sorted.filter((item) => (item.delta || 0) < 0),
+            ...sorted.filter((item) => (item.delta || 0) >= 0)
+        ]
+        : sorted;
+
+    return leadContributions
         .map((item) => buildScoreDriverText(item.factor, data, features))
         .filter(Boolean)
         .slice(0, maxItems);
