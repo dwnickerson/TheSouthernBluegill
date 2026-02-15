@@ -91,26 +91,41 @@ function getBestWindowText(score, windMph, precipProb) {
 function getHourlyScore(data, hourIndex) {
     const { weather, waterTemp, speciesKey, coords } = data;
     const hourly = weather.forecast.hourly;
-    const current = weather.forecast.current;
-    const moon = calculateSolunar(coords.lat, coords.lon, new Date(hourly.time[hourIndex] || current.time)).moon_phase_percent;
+    const daily = weather.forecast.daily;
+    const iso = hourly.time[hourIndex] || weather.forecast.current.time;
+    const dayKey = (iso || '').split('T')[0];
+    const locationKey = `${coords.lat.toFixed(3)}_${coords.lon.toFixed(3)}`;
 
-    const pseudoWeather = {
-        current: {
-            surface_pressure: hourly.surface_pressure[hourIndex] ?? current.surface_pressure,
-            wind_speed_10m: hourly.wind_speed_10m[hourIndex] ?? current.wind_speed_10m,
-            cloud_cover: hourly.cloud_cover[hourIndex] ?? current.cloud_cover,
-            weather_code: hourly.weather_code[hourIndex] ?? current.weather_code
-        },
-        hourly: {
-            surface_pressure: hourly.surface_pressure.slice(hourIndex, hourIndex + 6),
-            precipitation_probability: [hourly.precipitation_probability[hourIndex] ?? 0]
-        },
-        daily: {
-            precipitation_sum: weather.forecast.daily.precipitation_sum || []
-        }
-    };
+    const modern = calculateSpeciesAwareDayScore({
+        data,
+        dayKey,
+        speciesKey,
+        waterTempF: waterTemp,
+        locationKey,
+        now: new Date(),
+        debug: false
+    });
 
-    return calculateFishingScore(pseudoWeather, waterTemp, speciesKey, moon).score;
+    const baseScore = Number.isFinite(modern?.score)
+        ? modern.score
+        : getDayScore(data, Math.max(0, daily.time.indexOf(dayKey)), 50);
+
+    const hourWindMph = kmhToMph(hourly.wind_speed_10m?.[hourIndex] ?? weather.forecast.current.wind_speed_10m ?? 0);
+    const hourCloud = hourly.cloud_cover?.[hourIndex] ?? weather.forecast.current.cloud_cover ?? 0;
+    const hourPrecipProb = hourly.precipitation_probability?.[hourIndex] ?? 0;
+    const uv = hourly.uv_index?.[hourIndex] ?? weather.forecast.current.uv_index ?? 0;
+
+    let adjusted = baseScore;
+    if (hourWindMph > 18) adjusted -= 7;
+    else if (hourWindMph > 14) adjusted -= 3;
+
+    if (hourPrecipProb >= 75) adjusted -= 5;
+    else if (hourPrecipProb >= 35 && hourPrecipProb <= 60) adjusted += 2;
+
+    if (hourCloud >= 30 && hourCloud <= 70) adjusted += 2;
+    if (uv >= 8) adjusted -= 2;
+
+    return Math.max(0, Math.min(99, Math.round(adjusted)));
 }
 
 function getDayScore(data, dayIndex, moonPhasePercent) {
@@ -270,6 +285,8 @@ function renderMainView(data) {
     const windRatio = normalizeGauge(0, 40, windMph);
     const precipProb = weather.forecast.hourly.precipitation_probability?.[0] || weather.forecast.daily.precipitation_probability_max?.[0] || 0;
     const precipMm = weather.forecast.current.precipitation ?? weather.forecast.hourly.precipitation?.[0] ?? 0;
+    const waterTempLabel = Number.isFinite(data.waterTemp) ? `${data.waterTemp.toFixed(1)}°F` : 'N/A';
+    const uvCurrent = weather.forecast.current.uv_index ?? weather.forecast.hourly.uv_index?.[0] ?? null;
     const radarUrl = `https://embed.windy.com/embed2.html?lat=${coords.lat.toFixed(3)}&lon=${coords.lon.toFixed(3)}&detailLat=${coords.lat.toFixed(3)}&detailLon=${coords.lon.toFixed(3)}&zoom=7&level=surface&overlay=radar&product=radar&menu=&message=&marker=true&calendar=now`;
 
     const hourlyItems = buildHourlyItems(data);
@@ -353,6 +370,16 @@ function renderMainView(data) {
                     <p class="metric-note">Gust potential near ${windGust.toFixed(0)} mph.</p>
                 </article>
                 <article class="card metric-card">
+                    <h3>Water Temp</h3>
+                    <p class="metric-value">${waterTempLabel}</p>
+                    <p class="metric-note">Estimated by water-body physics model and local weather history.</p>
+                </article>
+                <article class="card metric-card">
+                    <h3>UV Index</h3>
+                    <p class="metric-value">${uvCurrent !== null ? Number(uvCurrent).toFixed(1) : 'N/A'}</p>
+                    <p class="metric-note">Higher UV often pushes fish toward shade or deeper structure.</p>
+                </article>
+                <article class="card metric-card">
                     <h3>Moon &amp; Light</h3>
                     ${renderMoonGraphic(solunar.moon_phase_percent)}
                     <p class="metric-value">${moonLabel(solunar.moon_phase_percent)}</p>
@@ -399,6 +426,7 @@ function renderDayDetailView(data, day) {
     const dayDate = new Date(`${day}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const windMph = kmhToMph(daily.wind_speed_10m_max?.[dayIndex] || 0);
     const windDir = getWindDirection(daily.wind_direction_10m_dominant?.[dayIndex] || data.weather.forecast.current.wind_direction_10m);
+    const uvDay = daily.uv_index_max?.[dayIndex] ?? null;
 
     resultsDiv.innerHTML = `
         <main class="fishcast-shell" aria-label="Day detail view">
@@ -429,6 +457,8 @@ function renderDayDetailView(data, day) {
                     return `${avg} mm/h avg · ${peak} mm/h peak`;
                 })()}</p>
                 <p><strong>Wind:</strong> ${windMph.toFixed(0)} mph ${windDir}</p>
+                <p><strong>Water Temp:</strong> ${Number.isFinite(data.waterTemp) ? `${data.waterTemp.toFixed(1)}°F` : 'N/A'}</p>
+                <p><strong>UV Index:</strong> ${uvDay !== null ? Number(uvDay).toFixed(1) : 'N/A'} (daily max)</p>
                 ${pressureAvg ? `<p><strong>Pressure:</strong> ${pressureAvg} inHg avg (${pressureMin}-${pressureMax})</p>` : ''}
                 ${daily.cloud_cover_mean?.[dayIndex] !== undefined ? `<p><strong>Cloud Cover:</strong> ${daily.cloud_cover_mean[dayIndex]}%</p>` : ''}
                 ${data.weather.forecast.current.relative_humidity_2m !== undefined ? `<p><strong>Humidity:</strong> ${data.weather.forecast.current.relative_humidity_2m}% (latest reading)</p>` : ''}
