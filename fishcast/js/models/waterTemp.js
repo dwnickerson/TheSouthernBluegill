@@ -3,7 +3,7 @@
 
 import { WATER_BODIES_V2 } from '../config/waterBodies.js';
 import { API_CONFIG, APP_CONSTANTS } from '../config/constants.js';
-import { getDayOfYear, getSeasonMonth } from '../utils/date.js';
+import { getDayOfYear } from '../utils/date.js';
 import { calculateDistance } from '../utils/math.js';
 
 // Get seasonal baseline temperature using harmonic oscillation
@@ -20,13 +20,29 @@ function getSeasonalBaseTemp(latitude, dayOfYear, waterType) {
 // Calculate solar radiation effect from cloud cover
 function calculateSolarDeviation(latitude, dayOfYear, cloudCoverArray) {
     if (!cloudCoverArray || cloudCoverArray.length === 0) return 0;
+
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
     const recentDays = Math.min(7, cloudCoverArray.length);
     const avgCloudCover = cloudCoverArray.slice(-recentDays).reduce((a, b) => a + b, 0) / recentDays;
-    const month = Math.floor((dayOfYear / 365) * 12);
+
+    // Prevent month index overflow on day 365/366
+    const month = clamp(Math.floor(((dayOfYear - 1) / 365) * 12), 0, 11);
     const normalCloudCover = [55, 52, 50, 45, 40, 35, 35, 35, 38, 42, 48, 52][month];
+
+    // Latitude-aware seasonal insolation factor based on solar declination
+    const solarDeclination = 23.44 * Math.sin(((2 * Math.PI) / 365) * (dayOfYear - 81));
+    const latRad = latitude * (Math.PI / 180);
+    const declinationRad = solarDeclination * (Math.PI / 180);
+    const middayElevation = Math.asin(
+        Math.sin(latRad) * Math.sin(declinationRad) +
+        Math.cos(latRad) * Math.cos(declinationRad)
+    );
+
+    // Scale relative to a 45° reference sun angle to moderate cloud impact seasonally
+    const seasonalInsolationFactor = clamp(Math.sin(middayElevation) / Math.sin(Math.PI / 4), 0.3, 1.3);
+
     const cloudDeviation = normalCloudCover - avgCloudCover;
-    const sunAngleBonus = Math.abs(Math.sin((dayOfYear / 365) * 2 * Math.PI));
-    const solarEffect = cloudDeviation * 0.08 * (1 + sunAngleBonus * 0.5);
+    const solarEffect = cloudDeviation * 0.08 * seasonalInsolationFactor;
     return solarEffect;
 }
 
@@ -64,7 +80,9 @@ function calculateAirTempInfluence(airTemps, waterType) {
 function getThermalInertiaCoefficient(waterType, currentWaterTemp, recentAirAvg) {
     const delta = recentAirAvg - currentWaterTemp;
     const baseInertia = waterType === 'pond' ? 0.15 : waterType === 'lake' ? 0.08 : 0.05;
-    const responseFactor = Math.tanh(Math.abs(delta) / 15) * Math.sign(delta);
+    // Response grows with air-water thermal gradient but should never flip sign;
+    // the sign is already represented by delta itself.
+    const responseFactor = Math.tanh(Math.abs(delta) / 15);
     return baseInertia * responseFactor;
 }
 
@@ -205,32 +223,32 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
 }
 
 // Estimate temperature by depth (stratification)
-export function estimateTempByDepth(surfaceTemp, waterType, depth_ft) {
+export function estimateTempByDepth(surfaceTemp, waterType, depth_ft, currentDate = new Date()) {
     const body = WATER_BODIES_V2[waterType];
-    const month = getSeasonMonth();
+    const month = currentDate.getMonth();
     
     // Summer stratification
     if (month >= 4 && month <= 8) {
         const thermoclineDepth = body.thermocline_depth;
         if (depth_ft < thermoclineDepth) {
-            return surfaceTemp - (depth_ft * 0.5);
+            return Math.max(32, surfaceTemp - (depth_ft * 0.5));
         } else if (depth_ft < thermoclineDepth + 10) {
             const thermoclineTemp = surfaceTemp - (thermoclineDepth * 0.5);
-            return thermoclineTemp - ((depth_ft - thermoclineDepth) * 2.0);
+            return Math.max(32, thermoclineTemp - ((depth_ft - thermoclineDepth) * 2.0));
         } else {
-            return body.deep_stable_temp;
+            return Math.max(32, body.deep_stable_temp);
         }
     }
     // Spring/Fall turnover
     else if (month === 2 || month === 3 || month === 9 || month === 10) {
-        return surfaceTemp - (depth_ft * 0.3);
+        return Math.max(32, surfaceTemp - (depth_ft * 0.3));
     }
     // Winter stratification
     else {
         if (surfaceTemp <= 35) {
             return depth_ft < 5 ? surfaceTemp : 39;
         } else {
-            return surfaceTemp - (depth_ft * 0.2);
+            return Math.max(32, surfaceTemp - (depth_ft * 0.2));
         }
     }
 }
@@ -241,7 +259,7 @@ export async function getWaterTempProfile(coords, waterType, currentDate, histor
     const depths = [0, 5, 10, 15, 20, 25, 30];
     const profile = depths.map(depth => ({
         depth: depth,
-        temperature: depth === 0 ? surfaceTemp : estimateTempByDepth(surfaceTemp, waterType, depth)
+        temperature: depth === 0 ? surfaceTemp : estimateTempByDepth(surfaceTemp, waterType, depth, currentDate)
     }));
     
     return {

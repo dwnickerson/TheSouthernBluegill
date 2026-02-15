@@ -160,10 +160,10 @@ export function renderForecast(data) {
     const todayHighTemp = cToF(weather.forecast.daily.temperature_2m_max[0]);
     const todayLowTemp = cToF(weather.forecast.daily.temperature_2m_min[0]);
     const surfaceTemp = waterTemp.toFixed(1);
-    const temp2ft = estimateTempByDepth(waterTemp, waterType, 2).toFixed(1);
-    const temp4ft = estimateTempByDepth(waterTemp, waterType, 4).toFixed(1);
-    const temp10ft = estimateTempByDepth(waterTemp, waterType, 10).toFixed(1);
-    const temp20ft = estimateTempByDepth(waterTemp, waterType, 20).toFixed(1);
+    const temp2ft = estimateTempByDepth(waterTemp, waterType, 2, new Date()).toFixed(1);
+    const temp4ft = estimateTempByDepth(waterTemp, waterType, 4, new Date()).toFixed(1);
+    const temp10ft = estimateTempByDepth(waterTemp, waterType, 10, new Date()).toFixed(1);
+    const temp20ft = estimateTempByDepth(waterTemp, waterType, 20, new Date()).toFixed(1);
     const todaySummary = `${getWeatherDescription(weather.forecast.current.weather_code)} with ${precipProb}% rain chance. ` +
         `Air temperatures from ${todayLowTemp.toFixed(0)}°F to ${todayHighTemp.toFixed(0)}°F, ` +
         `water temperatures near Surface ${surfaceTemp}°F, 2ft ${temp2ft}°F, 4ft ${temp4ft}°F, 10ft ${temp10ft}°F, and 20ft ${temp20ft}°F, ` +
@@ -450,10 +450,10 @@ window.showDayDetails = function(dayIndex, date) {
     }
     
     // Estimate depth temps
-    const temp2ft = estimateTempByDepth(waterTempEstimate, data.waterType, 2);
-    const temp4ft = estimateTempByDepth(waterTempEstimate, data.waterType, 4);
-    const temp10ft = estimateTempByDepth(waterTempEstimate, data.waterType, 10);
-    const temp20ft = estimateTempByDepth(waterTempEstimate, data.waterType, 20);
+    const temp2ft = estimateTempByDepth(waterTempEstimate, data.waterType, 2, new Date(date));
+    const temp4ft = estimateTempByDepth(waterTempEstimate, data.waterType, 4, new Date(date));
+    const temp10ft = estimateTempByDepth(waterTempEstimate, data.waterType, 10, new Date(date));
+    const temp20ft = estimateTempByDepth(waterTempEstimate, data.waterType, 20, new Date(date));
     
     // Highlight selected day
     document.querySelectorAll('.forecast-day-card').forEach(card => {
