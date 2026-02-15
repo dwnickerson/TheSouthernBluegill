@@ -1,6 +1,7 @@
 // Water body thermal properties and characteristics
 export const WATER_BODIES_V2 = {
     pond: {
+        // Tuned for very small impoundments (roughly <= 5 acres)
         thermal_lag_days: 5,           // Responds quickly to weather
         seasonal_lag_days: 10,         // Peak temp lags solar by ~10 days
         annual_amplitude: 24,          // 24°F swing from winter to summer
