@@ -447,7 +447,7 @@ function renderMainView(data) {
                     <ul class="interpretation-list">
                         ${todayScoreDrivers.map((reason) => `<li>${reason}</li>`).join('')}
                     </ul>
-                ` : '<p class="metric-note">Score is based on today's water temp, pressure trend, wind, cloud cover, and precipitation probability.</p>'}
+                ` : "<p class=\"metric-note\">Score is based on today's water temp, pressure trend, wind, cloud cover, and precipitation probability.</p>"}
             </section>
 
             <section class="card timeline-card" aria-label="Hourly activity timeline">
