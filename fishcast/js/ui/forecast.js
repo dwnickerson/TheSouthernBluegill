@@ -52,6 +52,16 @@ function normalizeGauge(min, max, value) {
     return Math.max(0, Math.min(1, (value - min) / (max - min)));
 }
 
+function mmToInches(mm) {
+    return Number(mm) / 25.4;
+}
+
+function formatInches(mm, decimals = 2) {
+    const inches = mmToInches(mm);
+    if (!Number.isFinite(inches)) return '0.00';
+    return inches.toFixed(decimals);
+}
+
 function renderMoonGraphic(percent) {
     const clamped = Math.max(0, Math.min(100, Number(percent) || 0));
     const shadowOffset = (50 - clamped) / 50;
@@ -348,6 +358,7 @@ function renderMainView(data) {
     const windRatio = normalizeGauge(0, 40, windMph);
     const precipProb = weather.forecast.hourly.precipitation_probability?.[0] || weather.forecast.daily.precipitation_probability_max?.[0] || 0;
     const precipMm = weather.forecast.current.precipitation ?? weather.forecast.hourly.precipitation?.[0] ?? 0;
+    const precipInPerHour = formatInches(precipMm);
     const currentWeather = getWeatherDescriptor(weather.forecast.current.weather_code);
     const conditionLabel = precipMm > 0.05 || precipProb >= 55
         ? `Rain likely now (${precipProb}% chance)`
@@ -376,7 +387,8 @@ function renderMainView(data) {
                 <p class="pill ${state.className}">${state.label}</p>
                 <p class="hero-condition">${currentWeather.icon} ${conditionLabel}</p>
                 <p class="hero-explanation">${createExplanation({ precipProb, pressureTrend: pressureAnalysis.trend, windMph })}</p>
-                <p class="metric-note">Precipitation: ${precipMm.toFixed(2)} mm/h · ${precipProb}% chance</p>
+                <p class="metric-note">Precipitation: ${precipInPerHour} in/h · ${precipProb}% chance</p>
+                <p class="metric-note">Fishing score method: start at a species baseline, then adjust for water temperature range, pressure trend, wind, cloud cover, and precipitation probability before applying stability controls to prevent large swings without meaningful weather changes.</p>
             </section>
 
             <section class="card timeline-card" aria-label="Hourly activity timeline">
@@ -514,6 +526,7 @@ function renderDayDetailView(data, day) {
     }).filter(Number.isFinite);
     const hourlyWater2FtF = hourlyWaterSurfaceF.map((surfaceTemp) => estimateTempByDepth(surfaceTemp, data.waterType, 2, new Date(`${day}T12:00:00`)));
     const hourlyPrecipMm = dayHourIndexes.map((i) => hourly.precipitation?.[i]).filter(Number.isFinite);
+    const hourlyPrecipIn = hourlyPrecipMm.map((mm) => mmToInches(mm)).filter(Number.isFinite);
     const surfaceTempLabel = Number.isFinite(data.waterTemp) ? `${data.waterTemp.toFixed(1)}°F` : 'N/A';
     const twoFootTemp = Number.isFinite(data.waterTemp)
         ? estimateTempByDepth(data.waterTemp, data.waterType, 2, new Date(`${day}T12:00:00`))
@@ -540,13 +553,13 @@ function renderDayDetailView(data, day) {
             <section class="card detail-grid">
                 <h2 class="card-header">Conditions Overview</h2>
                 <p><strong>Temperature:</strong> ${cToF(daily.temperature_2m_min?.[dayIndex] || 0).toFixed(0)}°–${cToF(daily.temperature_2m_max?.[dayIndex] || 0).toFixed(0)}°F</p>
-                <p><strong>Precipitation:</strong> ${daily.precipitation_probability_max?.[dayIndex] ?? 'N/A'}% probability, ${daily.precipitation_sum?.[dayIndex] ?? 0} mm total</p>
+                <p><strong>Precipitation:</strong> ${daily.precipitation_probability_max?.[dayIndex] ?? 'N/A'}% probability, ${formatInches(daily.precipitation_sum?.[dayIndex] ?? 0)} in total</p>
                 <p><strong>Hourly rainfall:</strong> ${(() => {
                     const vals = hourly.precipitation.filter((_, i) => hourly.time[i].startsWith(day)).filter(Number.isFinite);
                     if (!vals.length) return 'N/A';
-                    const peak = Math.max(...vals).toFixed(2);
-                    const avg = (vals.reduce((s, v) => s + v, 0) / vals.length).toFixed(2);
-                    return `${avg} mm/h avg · ${peak} mm/h peak`;
+                    const peak = formatInches(Math.max(...vals));
+                    const avg = formatInches(vals.reduce((s, v) => s + v, 0) / vals.length);
+                    return `${avg} in/h avg · ${peak} in/h peak`;
                 })()}</p>
                 <p><strong>Wind:</strong> ${windMph.toFixed(0)} mph ${windDir}</p>
                 <p><strong>Water Temp Surface:</strong> ${surfaceTempLabel}</p>
@@ -573,8 +586,8 @@ function renderDayDetailView(data, day) {
                     ${renderTrendSvg(hourlyWater2FtF, '°F', 1, 'Water Temp at 2ft', '24h')}
                 </div>
                 <div class="trend-block">
-                    <h3>Precipitation (mm/hr)</h3>
-                    ${renderTrendSvg(hourlyPrecipMm, ' mm/h', 2, 'Precipitation', '24h')}
+                    <h3>Precipitation (in/hr)</h3>
+                    ${renderTrendSvg(hourlyPrecipIn, ' in/h', 2, 'Precipitation', '24h')}
                 </div>
             </section>
 
