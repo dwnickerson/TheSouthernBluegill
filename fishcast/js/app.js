@@ -236,6 +236,9 @@ function setupEventListeners() {
    
     // Geolocation
     document.getElementById('geolocateBtn')?.addEventListener('click', useCurrentLocation);
+
+    // Save current location to favorites
+    document.getElementById('saveLocationBtn')?.addEventListener('click', () => saveFavorite());
    
     // Quick actions
     document.getElementById('waterTempBtn')?.addEventListener('click', openTempReport);

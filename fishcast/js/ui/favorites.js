@@ -15,7 +15,15 @@ export function renderFavorites() {
     const favorites = storage.getFavorites();
     const favoritesSection = document.getElementById('favoritesSection');
     const favoritesList = document.getElementById('favoritesList');
+    const favoriteLocationOptions = document.getElementById('favoriteLocationOptions');
     
+    if (favoriteLocationOptions) {
+        const uniqueLocations = [...new Set(favorites.map(fav => fav.name).filter(Boolean))];
+        favoriteLocationOptions.innerHTML = uniqueLocations
+            .map(location => `<option value="${escapeHTML(location)}"></option>`)
+            .join('');
+    }
+
     if (favorites.length === 0) {
         favoritesSection.style.display = 'none';
         return;

@@ -38,10 +38,12 @@
             <form id="forecastForm">
                 <div class="form-group">
                     <label for="location">Location</label>
-                    <div style="display: flex; gap: 10px;">
-                        <input type="text" id="location" placeholder="City, State or ZIP code" required>
+                    <div class="location-input-row">
+                        <input type="text" id="location" list="favoriteLocationOptions" placeholder="City, State or ZIP code" required>
+                        <button type="button" id="saveLocationBtn" style="width: 50px; padding: 12px;" title="Save as favorite">⭐</button>
                         <button type="button" id="geolocateBtn" style="width: 50px; padding: 12px;" title="Use my location">📍</button>
                     </div>
+                    <datalist id="favoriteLocationOptions"></datalist>
                     <small>Examples: "Tupelo, MS" or "Memphis TN" or "38801"</small>
                 </div>
 
