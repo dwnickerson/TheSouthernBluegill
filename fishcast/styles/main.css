@@ -201,19 +201,31 @@ a:focus-visible,
     border-top: 1px solid rgba(56, 64, 84, 0.14);
     background: transparent;
     display: grid;
-    grid-template-columns: 62px 1fr 96px 42px;
+    grid-template-columns: 62px 1.4fr 46px 1fr 46px;
     gap: var(--space-1);
     align-items: center;
     text-align: left;
-    min-height: 54px;
+    min-height: 58px;
     color: var(--text-dark);
-    padding: 6px 0;
+    padding: 8px 0;
     cursor: pointer;
 }
 .daily-day { font-size: var(--fs-4); }
-.daily-window { color: #5a6272; font-size: var(--fs-3); }
-.daily-bar { height: 22px; border-radius: var(--radius-pill); opacity: 0.92; }
-.daily-score { justify-self: end; font-size: 2rem; color: #5b6460; }
+.daily-condition { color: #5a6272; font-size: var(--fs-2); display: inline-flex; align-items: center; gap: 6px; }
+.daily-condition em { font-style: normal; color: #2bb3e8; font-weight: 600; }
+.daily-temp-low, .daily-temp-high { color: #738095; font-size: 1.95rem; line-height: 1; }
+.daily-temp-high { justify-self: end; color: #516074; }
+.daily-bar { height: 9px; border-radius: var(--radius-pill); background: rgba(90, 98, 114, 0.2); position: relative; }
+.daily-bar-fill { position: absolute; inset: 0; border-radius: inherit; opacity: 0.95; }
+
+.radar-card { padding: var(--space-2); }
+.radar-card iframe {
+    width: 100%;
+    min-height: 230px;
+    border: 0;
+    border-radius: 16px;
+    background: rgba(15, 23, 42, 0.45);
+}
 
 .metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1); }
 .metric-card { padding: var(--space-2); min-height: 142px; }
@@ -277,4 +289,44 @@ footer a { color: var(--text-primary); }
 
 @keyframes shimmer {
     to { transform: translateX(100%); }
+}
+
+
+.gauge {
+    margin-top: 6px;
+    position: relative;
+    min-height: 136px;
+}
+.gauge-arc {
+    width: 170px;
+    height: 85px;
+    margin: 0 auto;
+    border: 8px solid rgba(148, 163, 184, 0.35);
+    border-bottom: 0;
+    border-radius: 170px 170px 0 0;
+}
+.gauge-needle {
+    position: absolute;
+    bottom: 26px;
+    left: 50%;
+    width: 4px;
+    height: 56px;
+    border-radius: 99px;
+    transform-origin: bottom center;
+    background: #f8fafc;
+    box-shadow: 0 0 0 2px rgba(51, 65, 85, 0.15);
+}
+.gauge-center {
+    text-align: center;
+    margin-top: -10px;
+}
+.gauge-direction { font-size: var(--fs-2); color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; }
+.gauge-value { font-size: 2.5rem; color: var(--text-primary); line-height: 1; }
+.gauge-unit { font-size: var(--fs-2); color: var(--text-secondary); margin-top: 2px; }
+.gauge-scale {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    color: var(--text-secondary);
+    font-size: var(--fs-1);
 }

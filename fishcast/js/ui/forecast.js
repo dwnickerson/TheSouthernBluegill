@@ -35,6 +35,38 @@ function getDailyLabel(dateString, index) {
     return new Date(`${dateString}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' });
 }
 
+function getWeatherDescriptor(code) {
+    const weatherCode = Number(code) || 0;
+    if (weatherCode === 0) return { icon: '☀️', label: 'Sunny' };
+    if ([1, 2].includes(weatherCode)) return { icon: '🌤️', label: 'Partly Cloudy' };
+    if (weatherCode === 3 || weatherCode === 45 || weatherCode === 48) return { icon: '☁️', label: 'Cloudy' };
+    if ((weatherCode >= 51 && weatherCode <= 67) || (weatherCode >= 80 && weatherCode <= 82)) return { icon: '🌧️', label: 'Rain' };
+    if (weatherCode >= 71 && weatherCode <= 77) return { icon: '❄️', label: 'Snow' };
+    if (weatherCode >= 95) return { icon: '⛈️', label: 'Storms' };
+    return { icon: '🌥️', label: 'Mixed' };
+}
+
+function normalizeGauge(min, max, value) {
+    if (!Number.isFinite(value) || !Number.isFinite(min) || !Number.isFinite(max) || min === max) return 0;
+    return Math.max(0, Math.min(1, (value - min) / (max - min)));
+}
+
+function renderGauge({ valueLabel, scaleLabelLow, scaleLabelHigh, ratio = 0, unitLabel = '', direction = null }) {
+    const degrees = -100 + (Math.max(0, Math.min(1, ratio)) * 200);
+    return `
+        <div class="gauge" aria-hidden="true">
+            <div class="gauge-arc"></div>
+            <div class="gauge-needle" style="transform: translateX(-50%) rotate(${degrees}deg)"></div>
+            <div class="gauge-center">
+                ${direction ? `<p class="gauge-direction">${direction}</p>` : ''}
+                <p class="gauge-value">${valueLabel}</p>
+                ${unitLabel ? `<p class="gauge-unit">${unitLabel}</p>` : ''}
+            </div>
+            <div class="gauge-scale"><span>${scaleLabelLow}</span><span>${scaleLabelHigh}</span></div>
+        </div>
+    `;
+}
+
 function getBestWindowText(score, windMph, precipProb) {
     if (score >= 82) return 'Best: Morning';
     if (score >= 74) return 'All Day Stable';
@@ -134,6 +166,10 @@ function buildDailyRows(data) {
         return {
             date,
             dayLabel: getDailyLabel(date, index),
+            weather: getWeatherDescriptor(daily.weather_code?.[index]),
+            lowTempF: cToF(daily.temperature_2m_min?.[index] || 0).toFixed(0),
+            highTempF: cToF(daily.temperature_2m_max?.[index] || 0).toFixed(0),
+            precipProb,
             score,
             state: normalizeState(score),
             window: getBestWindowText(score, windMph, precipProb)
@@ -217,7 +253,10 @@ function renderMainView(data) {
     const windMph = kmhToMph(weather.forecast.current.wind_speed_10m);
     const windDir = getWindDirection(weather.forecast.current.wind_direction_10m);
     const windGust = kmhToMph(weather.forecast.current.wind_gusts_10m || weather.forecast.current.wind_speed_10m);
+    const pressureRatio = normalizeGauge(28.7, 30.6, Number(pressureCurrent));
+    const windRatio = normalizeGauge(0, 40, windMph);
     const precipProb = weather.forecast.hourly.precipitation_probability?.[0] || weather.forecast.daily.precipitation_probability_max?.[0] || 0;
+    const radarUrl = `https://embed.windy.com/embed2.html?lat=${coords.lat.toFixed(3)}&lon=${coords.lon.toFixed(3)}&detailLat=${coords.lat.toFixed(3)}&detailLon=${coords.lon.toFixed(3)}&zoom=7&level=surface&overlay=radar&product=radar&menu=&message=&marker=true&calendar=now`;
 
     const hourlyItems = buildHourlyItems(data);
     const dailyRows = buildDailyRows(data);
@@ -245,13 +284,19 @@ function renderMainView(data) {
                         <li>
                             <button type="button" class="daily-row" data-day="${row.date}" aria-label="Open details for ${row.dayLabel}, ${row.date}">
                                 <span class="daily-day">${row.dayLabel}</span>
-                                <span class="daily-window">${row.window}</span>
-                                <span class="daily-bar ${row.state.className}"></span>
-                                <span class="daily-score">${row.score}</span>
+                                <span class="daily-condition">${row.weather.icon} <span>${row.weather.label}</span>${row.precipProb >= 40 ? `<em>${row.precipProb}%</em>` : ''}</span>
+                                <span class="daily-temp-low">${row.lowTempF}°</span>
+                                <span class="daily-bar"><span class="daily-bar-fill ${row.state.className}"></span></span>
+                                <span class="daily-temp-high">${row.highTempF}°</span>
                             </button>
                         </li>
                     `).join('')}
                 </ul>
+            </section>
+
+            <section class="card radar-card" aria-label="Weather radar map">
+                <h2 class="card-header">Precipitation Radar</h2>
+                <iframe title="Weather radar for ${coords.name}" loading="lazy" src="${radarUrl}"></iframe>
             </section>
 
             <section class="metrics-grid" aria-label="Condition metrics">
@@ -261,13 +306,26 @@ function renderMainView(data) {
                     <p class="metric-note">${pressureAnalysis.rate <= 0 ? 'Pressure is easing, with stronger early movement expected.' : 'Rising pressure supports steadier midday behavior.'}</p>
                 </article>
                 <article class="card metric-card">
-                    <h3>Pressure Change</h3>
-                    <p class="metric-value">${pressureDelta} inHg</p>
-                    <p class="metric-note">${describePressureTrend(pressureAnalysis.trend)} over the next several hours.</p>
+                    <h3>Pressure</h3>
+                    ${renderGauge({
+                        valueLabel: pressureCurrent,
+                        unitLabel: 'inHg',
+                        scaleLabelLow: 'Low',
+                        scaleLabelHigh: 'High',
+                        ratio: pressureRatio
+                    })}
+                    <p class="metric-note">${pressureDelta} inHg change, ${describePressureTrend(pressureAnalysis.trend)} trend.</p>
                 </article>
                 <article class="card metric-card">
-                    <h3>Wind Conditions</h3>
-                    <p class="metric-value">${windMph.toFixed(0)} mph ${windDir}</p>
+                    <h3>Wind</h3>
+                    ${renderGauge({
+                        valueLabel: windMph.toFixed(0),
+                        unitLabel: 'mph',
+                        scaleLabelLow: 'Calm',
+                        scaleLabelHigh: 'Strong',
+                        ratio: windRatio,
+                        direction: windDir
+                    })}
                     <p class="metric-note">Gust potential near ${windGust.toFixed(0)} mph.</p>
                 </article>
                 <article class="card metric-card">
