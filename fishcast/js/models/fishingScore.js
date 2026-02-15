@@ -104,6 +104,7 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
     
     const factors = [];
     const prefs = speciesData.preferences;
+    const isSunfish = speciesData.family?.includes('Sunfish');
     
     // Pressure analysis - ENHANCED with rate
     const pressures = weather.hourly.surface_pressure.slice(0, 6);
@@ -114,17 +115,18 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
     // Pressure trend scoring - enhanced with rate consideration
     if (pTrend === 'rapid_fall') {
         const isCrappie = speciesKey.includes('crappie');
-        const bonus = isCrappie ? 40 : 35;
+        const bonus = isCrappie ? 40 : (isSunfish ? 12 : 35);
         score += bonus;
         factors.push({ name: `Rapid pressure fall (${pRate.toFixed(1)} mb/hr)`, value: bonus });
     } else if (pTrend === 'falling') {
         const isCrappie = speciesKey.includes('crappie');
-        const bonus = isCrappie ? 30 : 25;
+        const bonus = isCrappie ? 30 : (isSunfish ? 8 : 25);
         score += bonus;
         factors.push({ name: `Falling pressure (${pRate.toFixed(1)} mb/hr)`, value: bonus });
     } else if (pTrend === 'rising') {
-        score -= 5;
-        factors.push({ name: 'Rising pressure', value: -5 });
+        const risingPenalty = isSunfish ? -3 : -5;
+        score += risingPenalty;
+        factors.push({ name: 'Rising pressure', value: risingPenalty });
     }
     
     // Fish phase bonus
@@ -184,6 +186,17 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
         } else if (windSpeed > 10) {
             score -= 12;
         }
+    } else if (isSunfish) {
+        if (windSpeed < 6) {
+            score += 8;
+            factors.push({ name: 'Calm wind (sunfish active)', value: 8 });
+        } else if (windSpeed < 10) {
+            score += 3;
+            factors.push({ name: 'Moderate wind', value: 3 });
+        } else if (windSpeed > 15) {
+            score -= 8;
+            factors.push({ name: 'Windy for sunfish', value: -8 });
+        }
     } else {
         if (windSpeed < 12) {
             score += 10;
@@ -196,14 +209,20 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
     const clouds = weather.current.cloud_cover;
     
     if (clouds >= 30 && clouds <= 70) {
-        score += 10;
+        const cloudBonus = isSunfish ? 5 : 10;
+        score += cloudBonus;
+        factors.push({ name: 'Balanced cloud cover', value: cloudBonus });
     } else if (clouds > 70) {
         if (isCrappie) {
             score += 15;
+            factors.push({ name: 'Heavy cloud cover (crappie)', value: 15 });
         } else if (speciesKey === 'bass' || speciesKey === 'smallmouth' || speciesKey === 'spotted') {
             score += 8;
-        } else if (speciesKey === 'bluegill' && prefs.spawn_needs_sun && waterTemp >= 67 && waterTemp <= 74) {
-            score -= 5;
+            factors.push({ name: 'Heavy cloud cover (bass)', value: 8 });
+        } else if (isSunfish && prefs.spawn_needs_sun) {
+            const sunfishPenalty = (waterTemp >= 67 && waterTemp <= 74) ? -8 : -4;
+            score += sunfishPenalty;
+            factors.push({ name: 'Heavy cloud cover (sunfish sun-need)', value: sunfishPenalty });
         }
     }
     
@@ -236,6 +255,11 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
         score -= 10;
     }
     
+    // Keep non-crappie sunfish ratings realistic (they rarely sustain a true 100 day).
+    if (isSunfish && !speciesKey.includes('crappie')) {
+        score = Math.min(score, 92);
+    }
+
     // Constrain score to 0-100
     score = Math.max(0, Math.min(100, Math.round(score)));
     
