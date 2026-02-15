@@ -291,9 +291,10 @@ function renderTrendCharts(weather) {
     const hourly = weather.forecast.hourly || {};
     const hourlyTemps = (hourly.temperature_2m || []).slice(0, 24).map(cToF);
     const hourlyPrecip = (hourly.precipitation_probability || []).slice(0, 24);
+    const hourlyWind = (hourly.wind_speed_10m || []).slice(0, 24).map(kmhToMph);
     const hourlyTime = (hourly.time || []).slice(0, 24);
 
-    if (hourlyTemps.length < 2 || hourlyPrecip.length < 2 || hourlyTime.length < 2) {
+    if (hourlyTemps.length < 2 || hourlyPrecip.length < 2 || hourlyWind.length < 2 || hourlyTime.length < 2) {
         return '';
     }
 
@@ -327,6 +328,17 @@ function renderTrendCharts(weather) {
                         gradientId: 'precipTrendFill',
                         xTicks: timeTicks,
                         yAxisTitle: 'Precipitation'
+                    })}
+                </div>
+                <div class="trend-panel">
+                    <div class="trend-title">Wind Speed</div>
+                    ${buildTrendLineSvg(hourlyWind, {
+                        stroke: '#f8c471',
+                        suffix: ' mph',
+                        decimals: 0,
+                        gradientId: 'windTrendFill',
+                        xTicks: timeTicks,
+                        yAxisTitle: 'Wind'
                     })}
                 </div>
             </div>
