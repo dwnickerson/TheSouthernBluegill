@@ -1,6 +1,7 @@
 import { cToF, kmhToMph, getWindDirection } from '../utils/math.js';
 import { calculateFishingScore, getPressureRate } from '../models/fishingScore.js';
 import { calculateSolunar } from '../models/solunar.js';
+import { calculateSpeciesAwareDayScore } from '../models/forecastEngine.js';
 
 let latestForecastData = null;
 let savedMainScroll = 0;
@@ -45,6 +46,22 @@ function getBestWindowText(score, windMph, precipProb) {
 function getDayScore(data, dayIndex, moonPhasePercent) {
     const { weather, waterTemp, speciesKey } = data;
     const daily = weather.forecast.daily;
+    const dayKey = daily.time[dayIndex];
+    const locationKey = `${data.coords.lat.toFixed(3)}_${data.coords.lon.toFixed(3)}`;
+
+    const modern = calculateSpeciesAwareDayScore({
+        data,
+        dayKey,
+        speciesKey,
+        waterTempF: waterTemp,
+        locationKey,
+        now: new Date(),
+        debug: Boolean(window?.localStorage?.getItem('fishcast_debug_scoring') === 'true')
+    });
+
+    if (Number.isFinite(modern?.score)) {
+        return modern.score;
+    }
 
     const weatherSlice = {
         current: {
