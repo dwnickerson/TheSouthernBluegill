@@ -603,7 +603,7 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Precipitation</span>
                     <span class="detail-value">
-                        ${precipIcon} ${precipProb}% chance (${todayPrecipIn.toFixed(2)} in expected)
+                        ${precipIcon} ${precipProb}% chance (${todayPrecipIn.toFixed(2)})
                     </span>
                 </div>
             </div>
