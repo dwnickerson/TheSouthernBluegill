@@ -175,3 +175,22 @@ test('species profiles enforce realistic score ceilings for bass conditions', ()
   assert.equal(profile.ceiling, 90);
   assert.ok(score <= 90);
 });
+
+test('phase-aware scoring boosts prespawn windows and keeps cloud spawn adjustment phase-gated', () => {
+  const baseFeatures = {
+    pressureAvg: 1012,
+    windAvgKmh: 8,
+    cloudAvg: 85,
+    precipProbAvg: 20,
+    tempAvgC: 18,
+    pressureTrend: { trend: 'stable', rate: 0 }
+  };
+
+  const preSpawn = scoreSpeciesByProfile(baseFeatures, 54, '2026-03-15', 'bass');
+  const winter = scoreSpeciesByProfile(baseFeatures, 44, '2026-03-15', 'bass');
+
+  assert.ok(preSpawn.score > winter.score);
+  assert.ok(preSpawn.contributions.some((c) => c.factor === 'phase_pre_spawn'));
+  assert.ok(preSpawn.contributions.some((c) => c.factor === 'spawn_cloud_adjustment'));
+  assert.ok(!winter.contributions.some((c) => c.factor === 'spawn_cloud_adjustment'));
+});

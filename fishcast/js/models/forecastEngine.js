@@ -132,6 +132,26 @@ function getSpeciesProfile(speciesKey) {
     return deepMerge(familyProfile, override);
 }
 
+function getPhaseForTemp(speciesKey, waterTempF) {
+    const phases = SPECIES_DATA[speciesKey]?.phases;
+    if (!phases || typeof waterTempF !== 'number') {
+        return null;
+    }
+
+    let bestMatch = null;
+    for (const [phaseName, phaseData] of Object.entries(phases)) {
+        const [min, max] = phaseData.temp_range || [];
+        if (waterTempF >= min && waterTempF < max) {
+            const span = max - min;
+            if (!bestMatch || span < bestMatch.span) {
+                bestMatch = { name: phaseName, data: phaseData, span };
+            }
+        }
+    }
+
+    return bestMatch;
+}
+
 export function buildDayWindows(weather, dayKey) {
     const hourly = weather.forecast.hourly;
     const dayIndexes = [];
@@ -168,6 +188,7 @@ export function scoreSpeciesByProfile(features, waterTempF, dateKey, speciesKey)
     const profile = getSpeciesProfile(speciesKey);
     let score = profile.baseline;
     const contributions = [];
+    const phase = getPhaseForTemp(speciesKey, waterTempF);
 
     if (waterTempF >= profile.temp.optimal[0] && waterTempF <= profile.temp.optimal[1]) {
         score += 22; contributions.push({ factor: 'water_temp_optimal', delta: 22 });
@@ -176,6 +197,12 @@ export function scoreSpeciesByProfile(features, waterTempF, dateKey, speciesKey)
     }
     if (waterTempF <= profile.temp.coldStress) { score -= 18; contributions.push({ factor: 'cold_stress', delta: -18 }); }
     if (waterTempF >= profile.temp.heatStress) { score -= 14; contributions.push({ factor: 'heat_stress', delta: -14 }); }
+
+    if (phase?.data && Number.isFinite(phase.data.score_bonus)) {
+        const normalizedPhaseDelta = clamp(Math.round(phase.data.score_bonus * 0.4), -8, 14);
+        score += normalizedPhaseDelta;
+        contributions.push({ factor: `phase_${phase.name}`, delta: normalizedPhaseDelta });
+    }
 
     const month = Number(dateKey.split('-')[1]);
     if (month >= 3 && month <= 6) { score += profile.season.springBonus; contributions.push({ factor: 'spring_activity', delta: profile.season.springBonus }); }
@@ -195,7 +222,8 @@ export function scoreSpeciesByProfile(features, waterTempF, dateKey, speciesKey)
     if ((features.cloudAvg || 0) >= 30 && (features.cloudAvg || 0) <= 70) {
         score += profile.clouds.balancedBonus; contributions.push({ factor: 'balanced_cloud', delta: profile.clouds.balancedBonus });
     }
-    if ((features.cloudAvg || 0) > 80 && waterTempF >= 66 && waterTempF <= 75) {
+    const inSpawnWindow = phase?.name?.includes('spawn');
+    if ((features.cloudAvg || 0) > 80 && inSpawnWindow) {
         score += profile.clouds.heavySpawnPenalty; contributions.push({ factor: 'spawn_cloud_adjustment', delta: profile.clouds.heavySpawnPenalty });
     }
 
