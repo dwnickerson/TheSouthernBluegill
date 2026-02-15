@@ -45,15 +45,15 @@ export async function getWeather(lat, lon, days = APP_CONSTANTS.DEFAULT_FORECAST
         `start_date=${startDate}&` +
         `end_date=${endDate}&` +
         `daily=temperature_2m_mean,temperature_2m_max,temperature_2m_min,cloud_cover_mean,wind_speed_10m_max,precipitation_sum&` +
-        `timezone=America/Chicago`;
+        `timezone=auto`;
 
     const forecastUrl = `${API_CONFIG.WEATHER.FORECAST_URL}?` +
         `latitude=${lat}&` +
         `longitude=${lon}&` +
-        `current=temperature_2m,apparent_temperature,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code,precipitation,uv_index&` +
-        `hourly=temperature_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code,precipitation_probability,precipitation,uv_index&` +
-        `daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,wind_direction_10m_dominant,cloud_cover_mean,sunrise,sunset,weather_code,uv_index_max&` +
-        `timezone=America/Chicago&` +
+        `current=temperature_2m,apparent_temperature,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code,precipitation&` +
+        `hourly=temperature_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code,precipitation_probability&` +
+        `daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,wind_direction_10m_dominant,cloud_cover_mean,sunrise,sunset,weather_code&` +
+        `timezone=auto&` +
         `forecast_days=${days}`;
 
     try {
@@ -96,7 +96,7 @@ export async function getCurrentWeather(lat, lon) {
         `latitude=${lat}&` +
         `longitude=${lon}&` +
         `current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code&` +
-        `timezone=America/Chicago`;
+        `timezone=auto`;
 
     return fetchJsonWithRetry(url);
 }

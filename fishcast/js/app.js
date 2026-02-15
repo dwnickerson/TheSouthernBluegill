@@ -11,7 +11,7 @@ import { storage } from './services/storage.js';
 import { getLocation } from './services/geocoding.js';
 import { getWeather } from './services/weatherAPI.js';
 import { estimateWaterTemp } from './models/waterTemp.js';
-import { renderForecast, showLoading, showError, showEmptyState, restoreLastForecast, rerenderFromRoute } from './ui/forecast.js';
+import { renderForecast, showLoading, showError } from './ui/forecast.js';
 import { renderFavorites } from './ui/favorites.js';
 import {
     openSettings,
@@ -33,8 +33,6 @@ function init() {
    
     storage.runMigrations();
 
-    applyStoredTheme();
-
     // Render favorites
     renderFavorites();
    
@@ -43,62 +41,16 @@ function init() {
    
     // Setup event listeners
     setupEventListeners();
-
-    // Open settings/about panel when requested by query string
-    openPanelFromQuery();
    
     // Initialize species memory feature
     initSpeciesMemory();
    
     // Register service worker
     registerServiceWorker();
-
-    // Restore previous forecast for deep links and refreshes
-    if (restoreLastForecast()) {
-        rerenderFromRoute();
-    } else {
-        showEmptyState();
-    }
-
-    window.addEventListener('popstate', () => {
-        rerenderFromRoute();
-        openPanelFromQuery();
-    });
-
+   
     debugLog('FishCast ready');
 }
 
-
-
-
-function setRoutePanel(panel) {
-    const url = new URL(window.location.href);
-    if (panel) {
-        url.searchParams.set('panel', panel);
-    } else {
-        url.searchParams.delete('panel');
-    }
-    window.history.pushState({}, '', url);
-}
-
-function openPanelFromQuery() {
-    document.getElementById('settingsModal')?.remove();
-    document.getElementById('aboutModal')?.remove();
-
-    const params = new URLSearchParams(window.location.search);
-    const panel = (params.get('panel') || '').toLowerCase();
-
-    if (panel === 'settings') {
-        openSettings();
-    } else if (panel === 'about') {
-        openAbout();
-    }
-}
-
-function applyStoredTheme() {
-    const theme = storage.getTheme();
-    document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
-}
 
 // Load default form values
 function loadDefaults() {
@@ -273,13 +225,11 @@ function setupEventListeners() {
     // Settings links
     document.getElementById('settingsLink')?.addEventListener('click', (e) => {
         e.preventDefault();
-        setRoutePanel('settings');
         openSettings();
     });
    
     document.getElementById('aboutLink')?.addEventListener('click', (e) => {
         e.preventDefault();
-        setRoutePanel('about');
         openAbout();
     });
 
