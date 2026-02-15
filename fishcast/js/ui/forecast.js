@@ -144,6 +144,23 @@ function renderTrendCharts(weather) {
     `;
 }
 
+function renderWeatherRadar(coords) {
+    return `
+        <div class="weather-radar-card">
+            <h3>📡 Weather Radar</h3>
+            <p>Live radar centered on ${coords.name}.</p>
+            <iframe
+                class="weather-radar-frame"
+                title="Weather radar for ${coords.name}"
+                src="${getRadarEmbedUrl(coords.lat, coords.lon)}"
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"
+                allowfullscreen>
+            </iframe>
+        </div>
+    `;
+}
+
 // ===== PHYSICS-BASED WATER TEMPERATURE EVOLUTION =====
 // Calculate how water temp changes day-by-day using thermal physics
 function calculateWaterTempEvolution(initialWaterTemp, forecastData, waterType, latitude) {
@@ -286,6 +303,7 @@ export function renderForecast(data) {
         </div>
 
         ${renderTrendCharts(weather)}
+        ${renderWeatherRadar(coords)}
         
         <div class="action-buttons">
             <button class="action-btn" onclick="window.shareForecast()">📱 Share</button>
@@ -389,18 +407,6 @@ export function renderForecast(data) {
             </div>
         </div>
 
-        <div class="weather-radar-card">
-            <h3>📡 Weather Radar</h3>
-            <p>Live radar centered on ${coords.name}.</p>
-            <iframe
-                class="weather-radar-frame"
-                title="Weather radar for ${coords.name}"
-                src="${getRadarEmbedUrl(coords.lat, coords.lon)}"
-                loading="lazy"
-                referrerpolicy="no-referrer-when-downgrade"
-                allowfullscreen>
-            </iframe>
-        </div>
     `;
 
     // Multi-day forecast if requested
