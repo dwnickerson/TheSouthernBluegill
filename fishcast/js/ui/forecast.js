@@ -148,6 +148,20 @@ function moonLabel(percent) {
     return 'Waning Crescent';
 }
 
+
+function getWeatherBackdrop(code) {
+    if (code >= 95) return 'storm';
+    if (code >= 71 && code <= 77) return 'snow';
+    if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 'rain';
+    if (code >= 1 && code <= 3) return 'cloudy';
+    return 'clear';
+}
+
+function applyWeatherBackdrop(weatherCode) {
+    const backdrop = getWeatherBackdrop(Number(weatherCode) || 0);
+    document.body.setAttribute('data-weather-backdrop', backdrop);
+}
+
 function getRouteDay() {
     const params = new URLSearchParams(window.location.search);
     return params.get('day');
@@ -207,6 +221,7 @@ function renderMainView(data) {
 
     const hourlyItems = buildHourlyItems(data);
     const dailyRows = buildDailyRows(data);
+    applyWeatherBackdrop(weather.forecast.current.weather_code);
 
     resultsDiv.innerHTML = `
         <main class="fishcast-shell" aria-label="Fishing conditions overview">
@@ -288,6 +303,7 @@ function renderDayDetailView(data, day) {
     const score = getDayScore(data, dayIndex, solunar.moon_phase_percent);
     const state = normalizeState(score);
     const hourlyItems = buildHourlyItems(data, day);
+    applyWeatherBackdrop(daily.weather_code?.[dayIndex] ?? data.weather.forecast.current.weather_code);
 
     const dayPressures = hourly.surface_pressure.filter((_, i) => hourly.time[i].startsWith(day));
     const pressureMin = dayPressures.length ? (Math.min(...dayPressures) * 0.02953).toFixed(2) : null;
@@ -414,6 +430,7 @@ export function showLoading() {
 
 export function showError(message) {
     const resultsDiv = document.getElementById('results');
+    document.body.setAttribute('data-weather-backdrop', 'clear');
     resultsDiv.innerHTML = `
         <section class="card error-card" role="alert">
             <h2>Forecast unavailable</h2>
@@ -425,6 +442,7 @@ export function showError(message) {
 
 export function showEmptyState() {
     const resultsDiv = document.getElementById('results');
+    document.body.setAttribute('data-weather-backdrop', 'clear');
     resultsDiv.innerHTML = `
         <section class="card empty-card">
             <h2>Set a location to begin</h2>
