@@ -17,7 +17,8 @@ const {
   buildDayWindows,
   applyStabilityControls,
   getStabilityStorageKey,
-  calculateSpeciesAwareDayScore
+  calculateSpeciesAwareDayScore,
+  scoreSpeciesByProfile
 } = await import('../js/models/forecastEngine.js');
 
 const weatherFixture = {
@@ -112,4 +113,19 @@ test('stability cache key includes location, species, and date', () => {
   assert.match(key, /34.2_-88.7/);
   assert.match(key, /bluegill/);
   assert.match(key, /2026-05-01/);
+});
+
+
+test('species profiles enforce realistic score ceilings for bass conditions', () => {
+  const { score, profile } = scoreSpeciesByProfile({
+    pressureAvg: 1012,
+    windAvgKmh: 10,
+    cloudAvg: 55,
+    precipProbAvg: 30,
+    tempAvgC: 29,
+    pressureTrend: { trend: 'falling', rate: -0.6 }
+  }, 84, '2026-08-10', 'bass');
+
+  assert.equal(profile.ceiling, 90);
+  assert.ok(score <= 90);
 });

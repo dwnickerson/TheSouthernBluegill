@@ -11,7 +11,7 @@
 2. Geocoding resolves coordinates, then weather service calls Open-Meteo archive + forecast endpoints.
 3. Water temp is estimated from seasonal baseline + recent air/cloud/wind + thermal lag, then memoized by lat/lon/waterType.
 4. Forecast renderer computes daily/hourly scores and condition cards.
-5. Updated: daily scoring now routes through `forecastEngine.js` first (species-aware day slicing + stability controls + deterministic scoring path), with legacy score fallback.
+5. Updated: daily scoring now routes through `forecastEngine.js` for **all species** (species-aware day slicing + profile-based biology weights + stability controls + deterministic scoring path).
 
 ### Time handling
 - Weather API now requests `timezone=America/Chicago` for archive + forecast payloads.
@@ -68,15 +68,13 @@ Standard windows (local America/Chicago):
 
 ## 4) Rule mapping / biology alignment
 
-### Bluegill corrected mapping (implemented)
-| Model input | Effect | Rule | Biology rationale | Confidence |
-|---|---|---|---|---|
-| Estimated water temp | + in optimal range | +24 at 68–78°F | peak bluegill feeding/spawn activity in warm spring-summer | High |
-| Estimated water temp | penalties at stress extremes | -20 <=48°F, -15 >=90°F | cold torpor / heat stress and oxygen stress behavior | High |
-| Month seasonality | spawn boost in Apr-Jun | +8 | seasonal reproductive activity windows | Medium |
-| Pressure trend | falling pressure benefit | +7/+10 | pre-front feeding uptick | Medium |
-| Wind | calm/moderate positive, rough negative | +8/+3/-8 | sunfish shallow-feed efficiency and wave-energy limits | Medium |
-| Cloud cover | moderate boost, heavy-cloud spawn penalty | +5 / -7 | bedding/sight dynamics and light effects | Medium |
+### Species profile mapping (implemented)
+| Group / species | Implemented profile behavior | Biological intent |
+|---|---|---|
+| Lepomis / sunfish family | Warm-optimal scoring, calm-moderate wind boost, cloud-balance bonus, heavy-spawn-cloud penalty where applicable | Bedding and sight-feeding sunfish perform best in warm stable windows with manageable wind/light |
+| Black bass family (LM/SM/spotted) | More pressure-sensitive boosts, moderate wind reward, seasonal spring/fall feed boosts, stricter species ceilings | Ambush/pursuit bass react more strongly to fronts and wind-generated forage movement |
+| Crappie family (white/black) | Cooler optimal windows, calm-wind preference, cloud/light sensitivity, tighter volatility stability profile | Schooling crappie behavior typically peaks in cooler spring/fall windows and lower wind |
+| Species overrides | Per-species temp windows + score ceilings (e.g., bass 90, smallmouth 88, bluegill 92, black crappie 92) | Prevents biologically implausible sustained 100 scores while preserving best-day separation |
 
 ### Unjustified or generic rules flagged
 - Legacy scoring mixed daily/hourly in inconsistent ways and could read missing daily pressure means.
@@ -117,7 +115,7 @@ Standard windows (local America/Chicago):
 ## 7) Operator notes / calibration backlog
 - Upload historical run logs (30–180 days) to run numeric volatility analysis and per-species calibration.
 - Add measured water-temp station ingestion where available (USGS/agency lake station feeds), then reduce estimator weight.
-- Expand species-specific score functions beyond bluegill baseline profile (current release includes bluegill-native path + robust fallback).
+- Continue tuning per-species coefficients with real catch logs (profiles now active for all selectable species).
 
 ## External references (for follow-up calibration packet)
 - NOAA weather glossary/front-pressure interpretation
