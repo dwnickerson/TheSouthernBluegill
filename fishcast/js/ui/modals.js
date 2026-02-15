@@ -23,18 +23,14 @@ let waterBodyFavorites = [];
 
 // Load favorites from localStorage
 function loadFavorites() {
-    const stored = localStorage.getItem('waterBodyFavorites');
-    if (stored) {
-        try {
-            waterBodyFavorites = JSON.parse(stored);
-            // Sort by lastUsed (most recent first)
-            waterBodyFavorites.sort((a, b) => 
-                new Date(b.lastUsed) - new Date(a.lastUsed)
-            );
-        } catch (e) {
-            console.error('Error loading favorites:', e);
-            waterBodyFavorites = [];
-        }
+    const stored = storage.getWaterBodyFavorites();
+    if (Array.isArray(stored)) {
+        waterBodyFavorites = stored;
+        waterBodyFavorites.sort((a, b) =>
+            new Date(b.lastUsed) - new Date(a.lastUsed)
+        );
+    } else {
+        waterBodyFavorites = [];
     }
     return waterBodyFavorites;
 }
@@ -45,7 +41,7 @@ function saveFavorites() {
     if (waterBodyFavorites.length > 10) {
         waterBodyFavorites = waterBodyFavorites.slice(0, 10);
     }
-    localStorage.setItem('waterBodyFavorites', JSON.stringify(waterBodyFavorites));
+    storage.saveWaterBodyFavorites(waterBodyFavorites);
     console.log(`💾 Saved ${waterBodyFavorites.length} favorites`);
 }
 
@@ -234,7 +230,7 @@ window.closeManageFavorites = function() {
 
 // Track recent reports in localStorage
 function trackRecentReport(reportData) {
-    let recentReports = JSON.parse(localStorage.getItem('recentReports') || '[]');
+    let recentReports = storage.getRecentReports();
     
     // Add new report
     recentReports.unshift({
@@ -247,12 +243,12 @@ function trackRecentReport(reportData) {
     // Keep only last 10
     recentReports = recentReports.slice(0, 10);
     
-    localStorage.setItem('recentReports', JSON.stringify(recentReports));
+    storage.saveRecentReports(recentReports);
 }
 
 // Get recent reports
 function getRecentReports() {
-    return JSON.parse(localStorage.getItem('recentReports') || '[]');
+    return storage.getRecentReports();
 }
 
 // Get locations for quick report (favorites + recent)
@@ -1247,10 +1243,18 @@ export function saveSettings() {
     }
 
     if (defaultSpeciesInput) {
-        storage.setDefaultSpecies(defaultSpeciesInput.value);
+        const speciesValue = defaultSpeciesInput.value;
+        const validSpecies = new Set(Array.from(document.querySelectorAll('#species option')).map(option => option.value));
+
+        if (speciesValue && !validSpecies.has(speciesValue)) {
+            showNotification('❌ Invalid default species selection.', 'error');
+            return;
+        }
+
+        storage.setDefaultSpecies(speciesValue);
         const speciesInput = document.getElementById('species');
-        if (speciesInput && defaultSpeciesInput.value) {
-            speciesInput.value = defaultSpeciesInput.value;
+        if (speciesInput && speciesValue) {
+            speciesInput.value = speciesValue;
         }
     }
 

@@ -31,6 +31,8 @@ import { cToF } from './utils/math.js';
 function init() {
     console.log('🎣 FishCast V2.0 Initializing...');
    
+    storage.runMigrations();
+
     // Initialize theme
     initTheme();
    
@@ -98,7 +100,7 @@ function initSpeciesMemory() {
     const speciesSelect = document.getElementById('species');
     
     // Remember last selected species
-    const lastSpecies = localStorage.getItem('lastSelectedSpecies');
+    const lastSpecies = storage.getLastSelectedSpecies();
     if (lastSpecies && speciesSelect) {
         // Check if the species still exists in the dropdown
         const option = speciesSelect.querySelector(`option[value="${lastSpecies}"]`);
@@ -113,7 +115,7 @@ function initSpeciesMemory() {
         speciesSelect.addEventListener('change', (e) => {
             const selectedSpecies = e.target.value;
             if (selectedSpecies) {
-                localStorage.setItem('lastSelectedSpecies', selectedSpecies);
+                storage.setLastSelectedSpecies(selectedSpecies);
                 console.log(`🐟 Saved species preference: ${selectedSpecies}`);
             }
         });
@@ -138,9 +140,15 @@ async function generateForecast(event) {
     try {
         // Get location coordinates
         const coords = await getLocation(location);
-       
+        if (coords.stale) {
+            showNotification(`⚠️ Using cached location data. ${coords.staleReason || ''}`.trim(), 'warning');
+        }
+
         // Fetch weather data
         const weather = await getWeather(coords.lat, coords.lon, days);
+        if (weather.stale) {
+            showNotification(`⚠️ Using cached weather data. ${weather.staleReason || ''}`.trim(), 'warning');
+        }
        
         // Convert historical temps to Fahrenheit
         const historical_F = {

@@ -5,6 +5,7 @@ import { WATER_BODIES_V2 } from '../config/waterBodies.js';
 import { API_CONFIG, APP_CONSTANTS } from '../config/constants.js';
 import { getDayOfYear } from '../utils/date.js';
 import { calculateDistance } from '../utils/math.js';
+import { storage } from '../services/storage.js';
 
 // Get seasonal baseline temperature using harmonic oscillation
 function getSeasonalBaseTemp(latitude, dayOfYear, waterType) {
@@ -227,18 +228,17 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     const body = WATER_BODIES_V2[waterType];
     estimatedTemp = Math.max(32, Math.min(95, estimatedTemp));
     
-    const yesterdayKey = `waterTemp_${coords.lat}_${coords.lon}_${waterType}`;
-    const yesterdayEstimate = localStorage.getItem(yesterdayKey);
-    
-    if (yesterdayEstimate) {
-        const yesterday = parseFloat(yesterdayEstimate);
+    const yesterdayEstimate = storage.getWaterTempMemo(coords.lat, coords.lon, waterType);
+
+    if (Number.isFinite(yesterdayEstimate)) {
+        const yesterday = yesterdayEstimate;
         const change = estimatedTemp - yesterday;
         if (Math.abs(change) > body.max_daily_change) {
             estimatedTemp = yesterday + (Math.sign(change) * body.max_daily_change);
         }
     }
     
-    localStorage.setItem(yesterdayKey, estimatedTemp.toFixed(1));
+    storage.setWaterTempMemo(coords.lat, coords.lon, waterType, estimatedTemp);
     
     const finalTemp = Math.round(estimatedTemp * 10) / 10;
     console.log(`✅ Final water temp estimate: ${finalTemp}°F`);

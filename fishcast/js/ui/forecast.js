@@ -287,9 +287,17 @@ export function renderForecast(data) {
     };
     const clarityBadge = clarityIcons[currentScore.clarity] || '💧 Normal';
 
-    
+    const degradedNotices = [];
+    if (coords.stale) {
+        degradedNotices.push(`📍 Location fallback in use (${coords.staleReason || 'cached result'})`);
+    }
+    if (weather.stale) {
+        degradedNotices.push(`🌤️ Weather fallback in use (${weather.staleReason || 'cached result'})`);
+    }
+
     // Start building HTML
     let html = `
+        ${degradedNotices.length ? `<div class="tips-card" style="border-left: 4px solid #f39c12;"><h3>⚠️ Degraded Data Mode</h3>${degradedNotices.map((notice) => `<div class="tip-item">${notice}</div>`).join('')}</div>` : ''}
         <div class="score-header">
             <h2>${weatherIcon} Today's Forecast</h2>
             <div class="score-display ${currentScore.colorClass}">${currentScore.score}</div>
