@@ -135,6 +135,39 @@ function getDailyDeltaEnvelope(waterType, synopticEventStrength) {
     return base + (synopticEventStrength * surge);
 }
 
+function getPhysicallyBoundedDeltaRange({
+    waterType,
+    prevTemp,
+    airTemp,
+    prevAirTemp,
+    synopticEventStrength
+}) {
+    const body = WATER_BODIES_V2[waterType];
+    if (!body || waterType !== 'reservoir') {
+        return { minDelta: -Infinity, maxDelta: Infinity };
+    }
+
+    const airWaterDelta = Number.isFinite(airTemp) ? airTemp - prevTemp : 0;
+    const thermalStep = clamp(Math.abs(airWaterDelta) / Math.max(body.thermal_lag_days, 1), 0.15, 1.25);
+
+    // Synoptic events (fronts, high wind, precipitation) can accelerate mixing/turnover.
+    const eventSurge = synopticEventStrength * 0.7;
+
+    let maxWarm = Math.min(thermalStep + eventSurge, 1.6);
+    let maxCool = -(thermalStep * 0.9 + (synopticEventStrength * 0.9));
+
+    const warmingRegime = (!Number.isFinite(prevAirTemp) || airTemp >= prevAirTemp) && airTemp >= (prevTemp + 2);
+    if (warmingRegime && synopticEventStrength < 0.75) {
+        // Large reservoirs can flatten during warmups but should not show deep cooling reversals.
+        maxCool = Math.max(maxCool, -0.25);
+    }
+
+    return {
+        minDelta: maxCool,
+        maxDelta: maxWarm
+    };
+}
+
 function getSynopticEventStrength(daily, dayIndex, prevAirTemp, airTemp, windMph, precipUnit = '') {
     const airJumpSignal = Number.isFinite(prevAirTemp)
         ? clamp(Math.abs(airTemp - prevAirTemp) / 12, 0, 1)
@@ -586,6 +619,14 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
 
         let projectedTemp = prevTemp + thermalEffect + solarEffect + windEffect + trendKicker;
 
+        const physicalDeltaRange = getPhysicallyBoundedDeltaRange({
+            waterType,
+            prevTemp,
+            airTemp,
+            prevAirTemp,
+            synopticEventStrength
+        });
+
         const seasonalBaseline = getSeasonalBaseTemp(latitude, dayOfYear, waterType);
         if (dayIndex >= 4) {
             const baseReversionWeight = clamp((dayIndex - 3) * 0.08, 0, 0.25);
@@ -595,7 +636,8 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
 
         const unconstrainedDelta = projectedTemp - prevTemp;
         const dailyDeltaLimit = getDailyDeltaEnvelope(waterType, synopticEventStrength);
-        const dailyDelta = clamp(unconstrainedDelta, -dailyDeltaLimit, dailyDeltaLimit);
+        const envelopeClampedDelta = clamp(unconstrainedDelta, -dailyDeltaLimit, dailyDeltaLimit);
+        const dailyDelta = clamp(envelopeClampedDelta, physicalDeltaRange.minDelta, physicalDeltaRange.maxDelta);
         projectedTemp = clamp(prevTemp + dailyDelta, 32, 95);
 
         if (options.debug === true) {
