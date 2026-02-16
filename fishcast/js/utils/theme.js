@@ -4,7 +4,7 @@ const VALID_THEMES = new Set(['light', 'dark', 'largemouth-bass', 'crappie', 'sb
 
 export function applySavedTheme() {
     const savedTheme = storage.getTheme();
-    const theme = VALID_THEMES.has(savedTheme) ? savedTheme : 'light';
+    const theme = VALID_THEMES.has(savedTheme) ? savedTheme : 'sba';
 
     document.documentElement.setAttribute('data-theme', theme);
     return theme;
