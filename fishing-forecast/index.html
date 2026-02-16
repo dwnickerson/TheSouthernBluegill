@@ -8,6 +8,42 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="FishCast">
+    <script>
+        (function initializeThemeBeforeRender() {
+            const THEME_STORAGE_KEY = 'themePreference';
+            const LEGACY_THEME_KEY = 'theme';
+            const THEME_COOKIE_KEY = 'fishcast_theme';
+
+            function getThemeFromCookie() {
+                const cookie = document.cookie
+                    .split('; ')
+                    .find((part) => part.startsWith(`${THEME_COOKIE_KEY}=`));
+                return cookie ? decodeURIComponent(cookie.split('=')[1]) : null;
+            }
+
+            function getStoredThemePreference() {
+                try {
+                    return (
+                        localStorage.getItem(THEME_STORAGE_KEY) ||
+                        localStorage.getItem(LEGACY_THEME_KEY) ||
+                        getThemeFromCookie() ||
+                        'system'
+                    );
+                } catch (error) {
+                    return getThemeFromCookie() || 'system';
+                }
+            }
+
+            function resolveTheme(preference) {
+                if (preference === 'system') {
+                    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+                return preference;
+            }
+
+            document.documentElement.setAttribute('data-theme', resolveTheme(getStoredThemePreference()));
+        })();
+    </script>
     <link rel="manifest" href="/fishing-forecast/manifest.json">
     <link rel="icon" type="image/png" sizes="192x192" href="/fishing-forecast/icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="/fishing-forecast/icon-512.png">
@@ -2534,7 +2570,42 @@
 
         const themeToggle = document.getElementById('themeToggle');
         const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)');
-        let themePreference = localStorage.getItem('themePreference') || localStorage.getItem('theme') || 'system';
+        const THEME_STORAGE_KEY = 'themePreference';
+        const LEGACY_THEME_KEY = 'theme';
+        const THEME_COOKIE_KEY = 'fishcast_theme';
+
+        function getThemeFromCookie() {
+            const cookie = document.cookie
+                .split('; ')
+                .find((part) => part.startsWith(`${THEME_COOKIE_KEY}=`));
+            return cookie ? decodeURIComponent(cookie.split('=')[1]) : null;
+        }
+
+        function persistTheme(preference) {
+            try {
+                localStorage.setItem(THEME_STORAGE_KEY, preference);
+                localStorage.setItem(LEGACY_THEME_KEY, preference);
+            } catch (error) {
+                // localStorage can be unavailable in some iOS standalone privacy configurations.
+            }
+
+            document.cookie = `${THEME_COOKIE_KEY}=${encodeURIComponent(preference)}; path=/; max-age=31536000; SameSite=Lax`;
+        }
+
+        function readThemePreference() {
+            try {
+                return (
+                    localStorage.getItem(THEME_STORAGE_KEY) ||
+                    localStorage.getItem(LEGACY_THEME_KEY) ||
+                    getThemeFromCookie() ||
+                    'system'
+                );
+            } catch (error) {
+                return getThemeFromCookie() || 'system';
+            }
+        }
+
+        let themePreference = readThemePreference();
 
         function getResolvedTheme(preference) {
             if (preference === 'system') {
@@ -2566,8 +2637,7 @@
             themePreference = next;
 
             document.documentElement.setAttribute('data-theme', next);
-            localStorage.setItem('themePreference', next);
-            localStorage.setItem('theme', next);
+            persistTheme(next);
             themeToggle.textContent = next === 'dark' ? '☀️' : '🌙';
             themeToggle.title = `Theme: ${next}. Click to toggle light/dark.`;
         });
