@@ -21,13 +21,15 @@ function average(values) {
     return finite.reduce((sum, value) => sum + value, 0) / finite.length;
 }
 
-function normalizeLikelyAirTempF(value) {
+function normalizeAirTempToF(value, tempUnit = 'F') {
     if (!Number.isFinite(value)) return null;
     if (value > 140 || value < -90) return null;
-    // Backward compatibility for stale metric payloads; current weatherAPI values are already °F.
-    if (value <= 60 && value >= -45) {
+
+    const normalizedUnit = String(tempUnit || 'F').toLowerCase();
+    if (normalizedUnit.startsWith('c')) {
         return (value * 9) / 5 + 32;
     }
+
     return value;
 }
 
@@ -135,9 +137,9 @@ function calculateSolarDeviation(latitude, dayOfYear, cloudCoverArray, waterType
     return cloudDeviation * 0.08 * seasonalInsolationFactor * waterTypeSensitivity;
 }
 
-function calculateAirTempInfluence(airTemps, waterType) {
+function calculateAirTempInfluence(airTemps, waterType, tempUnit = 'F') {
     const body = WATER_BODIES_V2[waterType];
-    const normalizedTemps = (airTemps || []).map(normalizeLikelyAirTempF).filter(Number.isFinite);
+    const normalizedTemps = (airTemps || []).map((value) => normalizeAirTempToF(value, tempUnit)).filter(Number.isFinite);
 
     if (normalizedTemps.length === 0) {
         return { average: 65, trend: 0 };
@@ -304,7 +306,8 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     const airTemps = daily.temperature_2m_mean || [];
     const cloudCover = daily.cloud_cover_mean || [];
 
-    const airInfluence = calculateAirTempInfluence(airTemps, waterType);
+    const tempUnit = historicalWeather?.meta?.units?.temp || 'F';
+    const airInfluence = calculateAirTempInfluence(airTemps, waterType, tempUnit);
     const solarEffect = calculateSolarDeviation(latitude, dayOfYear, cloudCover, waterType);
     const thermalResponse = getThermalInertiaCoefficient(waterType, calibratedBase, airInfluence.average);
     const airDelta = airInfluence.average - calibratedBase;
