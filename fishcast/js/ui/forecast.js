@@ -63,15 +63,15 @@ function getWeatherIcon(code) {
 
 // Get moon phase icon
 function getMoonIcon(phase) {
-    if (phase.includes('New')) return 'New';
-    if (phase.includes('Waxing Crescent')) return 'Waxing crescent';
-    if (phase.includes('First Quarter')) return 'First quarter';
-    if (phase.includes('Waxing Gibbous')) return 'Waxing gibbous';
-    if (phase.includes('Full')) return 'Full';
-    if (phase.includes('Waning Gibbous')) return 'Waning gibbous';
-    if (phase.includes('Last Quarter')) return 'Last quarter';
-    if (phase.includes('Waning Crescent')) return 'Waning crescent';
-    return 'Moon';
+    if (phase.includes('New')) return '🌑';
+    if (phase.includes('Waxing Crescent')) return '🌒';
+    if (phase.includes('First Quarter')) return '🌓';
+    if (phase.includes('Waxing Gibbous')) return '🌔';
+    if (phase.includes('Full')) return '🌕';
+    if (phase.includes('Waning Gibbous')) return '🌖';
+    if (phase.includes('Last Quarter')) return '🌗';
+    if (phase.includes('Waning Crescent')) return '🌘';
+    return '🌙';
 }
 
 // Get pressure trend indicator
@@ -565,7 +565,7 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Precipitation</span>
                     <span class="detail-value">
-                        ${precipIcon} ${precipProb}% chance (${todayPrecipIn.toFixed(2)})
+                        ${precipIcon} ${precipProb}% chance (${todayPrecipIn.toFixed(2)} in)
                     </span>
                 </div>
             </div>
@@ -574,7 +574,7 @@ export function renderForecast(data) {
                 <h3><span class="moon-icon"></span>Solunar</h3>
                 <div class="detail-row">
                     <span class="detail-label">Moon Phase</span>
-                    <span class="detail-value">${moonIcon} (${solunar.moon_phase_percent}%)</span>
+                    <span class="detail-value">${moonIcon} ${solunar.moon_phase} (${solunar.moon_phase_percent}%)</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Major Periods</span>
