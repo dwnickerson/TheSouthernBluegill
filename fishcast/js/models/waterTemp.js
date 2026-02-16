@@ -77,6 +77,29 @@ function getForecastWindUnit(forecastData) {
     );
 }
 
+function normalizePrecipToInches(value, unitHint = '') {
+    if (!Number.isFinite(value) || value < 0) return 0;
+    const normalizedUnit = String(unitHint || '').toLowerCase();
+
+    if (normalizedUnit.includes('inch') || normalizedUnit === 'in') {
+        return value;
+    }
+    if (normalizedUnit.includes('mm')) {
+        return value / 25.4;
+    }
+    if (normalizedUnit.includes('cm')) {
+        return value / 2.54;
+    }
+
+    return value;
+}
+
+function getForecastPrecipUnit(forecastData) {
+    const dailyUnits = forecastData?.daily_units || {};
+    const currentUnits = forecastData?.current_units || {};
+    return dailyUnits.precipitation_sum || currentUnits.precipitation || '';
+}
+
 function getSolarSensitivity(waterType, body) {
     if (waterType === 'river') return 0.65;
     if (waterType === 'reservoir') return 0.85;
@@ -112,7 +135,7 @@ function getDailyDeltaEnvelope(waterType, synopticEventStrength) {
     return base + (synopticEventStrength * surge);
 }
 
-function getSynopticEventStrength(daily, dayIndex, prevAirTemp, airTemp, windMph) {
+function getSynopticEventStrength(daily, dayIndex, prevAirTemp, airTemp, windMph, precipUnit = '') {
     const airJumpSignal = Number.isFinite(prevAirTemp)
         ? clamp(Math.abs(airTemp - prevAirTemp) / 12, 0, 1)
         : 0;
@@ -120,9 +143,14 @@ function getSynopticEventStrength(daily, dayIndex, prevAirTemp, airTemp, windMph
     // Mixing and turnover risks increase during windy frontal passages.
     const windSignal = clamp(((Number.isFinite(windMph) ? windMph : 0) - 10) / 20, 0, 1);
 
-    const precipMm = Number.isFinite(daily?.precipitation_sum?.[dayIndex]) ? daily.precipitation_sum[dayIndex] : 0;
-    const precipIn = precipMm / 25.4;
-    const precipSignal = clamp(precipIn / 1.2, 0, 1);
+    const precipIn = normalizePrecipToInches(daily?.precipitation_sum?.[dayIndex], precipUnit);
+    const precipProbability = Number.isFinite(daily?.precipitation_probability_max?.[dayIndex])
+        ? clamp(daily.precipitation_probability_max[dayIndex] / 100, 0, 1)
+        : null;
+    const executedPrecipIn = Number.isFinite(precipProbability)
+        ? precipIn * (0.35 + (0.65 * precipProbability))
+        : precipIn;
+    const precipSignal = clamp(executedPrecipIn / 1.2, 0, 1);
 
     return clamp((airJumpSignal * 0.55) + (windSignal * 0.25) + (precipSignal * 0.2), 0, 1);
 }
@@ -493,7 +521,15 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
     const tempMaxes = Array.isArray(daily.temperature_2m_max) ? daily.temperature_2m_max : [];
     const tempUnit = options.tempUnit || 'F';
     const windUnit = options.windUnit || getForecastWindUnit(forecastData);
+    const precipUnit = options.precipUnit || getForecastPrecipUnit(forecastData);
     const anchorDate = options.anchorDate instanceof Date ? options.anchorDate : new Date();
+    const historicalDaily = options.historicalDaily || {};
+    const historicalAirMeans = Array.isArray(historicalDaily.temperature_2m_mean)
+        ? historicalDaily.temperature_2m_mean.map((value) => normalizeAirTempToF(value, tempUnit)).filter(Number.isFinite)
+        : [];
+    const historicalCloudCover = Array.isArray(historicalDaily.cloud_cover_mean)
+        ? historicalDaily.cloud_cover_mean.filter(Number.isFinite)
+        : [];
 
     const normalizedAirMeans = tempMeans.map((value) => normalizeAirTempToF(value, tempUnit));
 
@@ -512,21 +548,30 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
         const dayDate = new Date(anchorDate.getTime());
         dayDate.setUTCDate(dayDate.getUTCDate() + dayIndex);
         const dayOfYear = getDayOfYear(dayDate);
-        const solarEffect = calculateSolarDeviation(latitude, dayOfYear, [cloudCover[dayIndex]], waterType);
+        const cloudContext = historicalCloudCover.slice(-6)
+            .concat(cloudCover.slice(0, dayIndex + 1).filter(Number.isFinite));
+        const solarEffect = calculateSolarDeviation(latitude, dayOfYear, cloudContext, waterType);
 
         const thermalResponse = getThermalInertiaCoefficient(waterType, prevTemp, airTemp);
         const thermalEffect = (airTemp - prevTemp) * thermalResponse;
 
-        const trendWindowStart = Math.max(0, dayIndex - 2);
-        const trendWindow = normalizedAirMeans.slice(trendWindowStart, dayIndex + 1).filter(Number.isFinite);
+        const trendSeries = historicalAirMeans.slice(-2).concat(normalizedAirMeans.slice(0, dayIndex + 1));
+        const trendWindow = trendSeries.slice(-4).filter(Number.isFinite);
         let trendFPerDay = 0;
         if (trendWindow.length >= 2) {
             trendFPerDay = (trendWindow[trendWindow.length - 1] - trendWindow[0]) / (trendWindow.length - 1);
         }
 
-        const prevAirTemp = dayIndex > 0 ? normalizedAirMeans[dayIndex - 1] : null;
+        const prevAirTemp = trendWindow.length > 1 ? trendWindow[trendWindow.length - 2] : null;
         const windEstimate = getProjectionWindForMixing(daily, dayIndex, windUnit);
-        const synopticEventStrength = getSynopticEventStrength(daily, dayIndex, prevAirTemp, airTemp, windEstimate.windMph);
+        const synopticEventStrength = getSynopticEventStrength(
+            daily,
+            dayIndex,
+            prevAirTemp,
+            airTemp,
+            windEstimate.windMph,
+            precipUnit
+        );
         const trendGain = getWaterTypeTrendGain(waterType, synopticEventStrength);
         const trendRaw = getSmoothTrendKicker(trendFPerDay) * trendGain;
         const trendLimit = getTrendKickerLimit(waterType, synopticEventStrength);
