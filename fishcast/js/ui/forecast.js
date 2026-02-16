@@ -274,12 +274,14 @@ function buildTrendLineSvg(values, {
         return { x, label: tick.label };
     });
 
+    const lineColor = `var(--${stroke.replace(/^--/, '')})`;
+
     return `
         <svg viewBox="0 0 ${width} ${height}" class="trend-svg" role="img" aria-label="Trend chart">
             <defs>
                 <linearGradient id="${gradientId}" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stop-color="${stroke}" stop-opacity="0.45"></stop>
-                    <stop offset="100%" stop-color="${stroke}" stop-opacity="0.08"></stop>
+                    <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.45"></stop>
+                    <stop offset="100%" stop-color="${lineColor}" stop-opacity="0.08"></stop>
                 </linearGradient>
             </defs>
             <text x="16" y="${(pad.top + (usableHeight / 2)).toFixed(2)}" class="trend-axis-title" transform="rotate(-90 16 ${(pad.top + (usableHeight / 2)).toFixed(2)})">${yAxisTitle}</text>
@@ -291,11 +293,11 @@ function buildTrendLineSvg(values, {
             `).join('')}
             ${normalizedXTicks.map((tick) => `<text x="${tick.x.toFixed(2)}" y="${(height - 14).toFixed(2)}" class="trend-axis-label trend-axis-label-x">${tick.label}</text>`).join('')}
             <path d="${areaPath}" fill="url(#${gradientId})"></path>
-            <path d="${path}" fill="none" stroke="${stroke}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"></path>
+            <path d="${path}" fill="none" stroke="${lineColor}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"></path>
             ${points.map((point, index) => {
                 if (index !== 0 && index !== points.length - 1 && index !== Math.floor(points.length / 2)) return '';
                 return `<g>
-                    <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="5" fill="${stroke}"></circle>
+                    <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="5" fill="${lineColor}"></circle>
                     <text x="${point.x.toFixed(2)}" y="${(point.y - 12).toFixed(2)}" class="trend-point-label">${point.value.toFixed(decimals)}${suffix}</text>
                 </g>`;
             }).join('')}
@@ -327,7 +329,7 @@ function renderTrendCharts(weather) {
                 <div class="trend-panel">
                     <div class="trend-title">Air Temperature</div>
                     ${buildTrendLineSvg(hourlyTemps, {
-                        stroke: '#7ed6a5',
+                        stroke: '--trend-temp-line',
                         suffix: '°F',
                         decimals: 0,
                         gradientId: 'tempTrendFill',
@@ -338,7 +340,7 @@ function renderTrendCharts(weather) {
                 <div class="trend-panel">
                     <div class="trend-title">Chance of Precipitation</div>
                     ${buildTrendLineSvg(hourlyPrecip, {
-                        stroke: '#62d0ff',
+                        stroke: '--trend-precip-line',
                         suffix: '%',
                         decimals: 0,
                         gradientId: 'precipTrendFill',
@@ -349,7 +351,7 @@ function renderTrendCharts(weather) {
                 <div class="trend-panel">
                     <div class="trend-title">Wind Speed</div>
                     ${buildTrendLineSvg(hourlyWind, {
-                        stroke: '#f8c471',
+                        stroke: '--trend-wind-line',
                         suffix: ' mph',
                         decimals: 0,
                         gradientId: 'windTrendFill',

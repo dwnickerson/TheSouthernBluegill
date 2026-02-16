@@ -21,6 +21,14 @@
     --danger: #ff9099;
     --gradient-primary: linear-gradient(130deg, #74c8ff 0%, #5f8cff 55%, #8f76ff 100%);
     --gradient-success: linear-gradient(130deg, #47d4b5 0%, #6ee5ff 100%);
+    --trend-panel-bg: rgba(8, 20, 40, 0.24);
+    --trend-grid-color: rgba(255, 255, 255, 0.18);
+    --trend-axis-label-color: var(--text-secondary);
+    --trend-axis-title-color: var(--text-secondary);
+    --trend-point-label-color: #eaf2ff;
+    --trend-temp-line: #7ed6a5;
+    --trend-precip-line: #62d0ff;
+    --trend-wind-line: #f8c471;
 }
 
 [data-theme="light"] {
@@ -34,6 +42,14 @@
     --shadow-sm: 0 12px 28px rgba(20, 35, 67, 0.09);
     --shadow-md: 0 16px 40px rgba(20, 35, 67, 0.12);
     --shadow-lg: 0 24px 54px rgba(20, 35, 67, 0.16);
+    --trend-panel-bg: rgba(255, 255, 255, 0.92);
+    --trend-grid-color: rgba(18, 33, 59, 0.16);
+    --trend-axis-label-color: #334968;
+    --trend-axis-title-color: #2b3e5a;
+    --trend-point-label-color: #1b2e4a;
+    --trend-temp-line: #2ca16f;
+    --trend-precip-line: #0d8fd6;
+    --trend-wind-line: #d08d1c;
 }
 
 [data-theme="dark"] {
@@ -337,7 +353,7 @@ button[type="submit"]:hover,
     border-radius: 18px;
     border: 1px solid var(--border-color);
     padding: 14px;
-    background: rgba(8, 20, 40, 0.24);
+    background: var(--trend-panel-bg);
 }
 
 .trend-title {
@@ -354,16 +370,19 @@ button[type="submit"]:hover,
 }
 
 .trend-grid-line {
-    stroke: rgba(255, 255, 255, 0.18);
+    stroke: var(--trend-grid-color);
     stroke-width: 1;
 }
 
 .trend-axis-title,
 .trend-axis-label,
 .trend-point-label {
-    fill: var(--text-secondary);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
+
+.trend-axis-title { fill: var(--trend-axis-title-color); }
+.trend-axis-label { fill: var(--trend-axis-label-color); }
+.trend-point-label { fill: var(--trend-point-label-color); }
 
 .trend-axis-title {
     font-size: 12px;
