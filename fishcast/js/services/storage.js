@@ -196,14 +196,41 @@ export const storage = {
     },
 
     getWaterTempMemo(lat, lon, waterType) {
-        const key = this.getWaterTempMemoKey(lat, lon, waterType);
-        const value = safeGetRaw(key);
-        return value === null ? null : Number.parseFloat(value);
+        const entry = this.getWaterTempMemoEntry(lat, lon, waterType);
+        return entry?.temp ?? null;
     },
 
-    setWaterTempMemo(lat, lon, waterType, temp) {
+    getWaterTempMemoEntry(lat, lon, waterType) {
         const key = this.getWaterTempMemoKey(lat, lon, waterType);
-        return safeSetRaw(key, Number(temp).toFixed(1));
+        const value = safeGetRaw(key);
+        if (value === null) return null;
+
+        try {
+            const parsed = JSON.parse(value);
+            if (parsed && Number.isFinite(parsed.temp)) {
+                return {
+                    temp: Number(parsed.temp),
+                    dayKey: typeof parsed.dayKey === 'string' ? parsed.dayKey : null
+                };
+            }
+        } catch (error) {
+            // Backward compatibility for legacy raw numeric memo values.
+        }
+
+        const legacyTemp = Number.parseFloat(value);
+        if (Number.isFinite(legacyTemp)) {
+            return { temp: legacyTemp, dayKey: null };
+        }
+
+        return null;
+    },
+
+    setWaterTempMemo(lat, lon, waterType, temp, dayKey = null) {
+        const key = this.getWaterTempMemoKey(lat, lon, waterType);
+        return safeSetRaw(key, JSON.stringify({
+            temp: Number(temp).toFixed(1),
+            dayKey
+        }));
     },
 
     // Favorites management

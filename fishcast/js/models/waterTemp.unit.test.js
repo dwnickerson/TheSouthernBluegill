@@ -24,11 +24,11 @@ globalThis.localStorage = {
     removeItem: (k) => { storageMemo.delete(k); }
 };
 
-async function runScenario({ name, weather, reports, seedMemo, waterType = 'lake' }) {
+async function runScenario({ name, weather, reports, seedMemo, memoDayKey = null, waterType = 'lake' }) {
     storageMemo.clear();
     const memoKey = `fishcast_water_temp_memo_33.7500_-84.3900_${waterType}`;
     if (Number.isFinite(seedMemo)) {
-        storageMemo.set(memoKey, String(seedMemo));
+        storageMemo.set(memoKey, JSON.stringify({ temp: seedMemo, dayKey: memoDayKey }));
     }
 
     globalThis.fetch = async () => ({ ok: true, json: async () => reports });
@@ -85,7 +85,8 @@ async function runScenario({ name, weather, reports, seedMemo, waterType = 'lake
         name: 'daily-clamp',
         weather: { daily: { ...baseDaily, temperature_2m_mean: [90, 91, 92, 93, 94, 95, 96] } },
         reports: [],
-        seedMemo: 60
+        seedMemo: 60,
+        memoDayKey: '2026-05-15'
     });
     const lakeMaxDaily = WATER_BODIES_V2.lake.max_daily_change;
     assert(Math.abs(clamped - 60) <= lakeMaxDaily + 0.05, 'daily clamp should hold without trusted reports');
@@ -97,7 +98,8 @@ async function runScenario({ name, weather, reports, seedMemo, waterType = 'lake
             { latitude: 33.8, longitude: -84.3, timestamp: '2026-05-14T10:00:00Z', temperature: 74, waterBody: 'lake' },
             { latitude: 33.81, longitude: -84.31, timestamp: '2026-05-13T11:00:00Z', temperature: 75, waterBody: 'lake' }
         ],
-        seedMemo: 60
+        seedMemo: 60,
+        memoDayKey: '2026-05-15'
     });
     assert(relaxed >= clamped, 'trusted reports should slightly relax the clamp');
     assert(Math.abs(relaxed - 60) <= (lakeMaxDaily * 2) + 0.05, 'relaxed clamp must still be bounded');
