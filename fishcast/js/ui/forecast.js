@@ -100,33 +100,11 @@ function getNextFullMoon(date = new Date()) {
     return new Date(date.getTime() + (daysAhead * 24 * 60 * 60 * 1000));
 }
 
-function buildHourlyTrendByDate(hourlyForecast) {
-    const dailyTrends = new Map();
-    const hourlyTimes = hourlyForecast.time || [];
-    const hourlyTemps = hourlyForecast.temperature_2m || [];
-    const hourlyPrecip = hourlyForecast.precipitation_probability || [];
-
-    hourlyTimes.forEach((timestamp, index) => {
-        const dayKey = timestamp.split('T')[0];
-        if (!dailyTrends.has(dayKey)) {
-            dailyTrends.set(dayKey, {
-                minTempF: Infinity,
-                maxTempF: -Infinity,
-                maxPrecip: 0
-            });
-        }
-
-        const trend = dailyTrends.get(dayKey);
-        const tempC = hourlyTemps[index];
-        if (typeof tempC === 'number') {
-            const tempF = toTempF(tempC, { forecast: { hourly_units: hourlyForecast?.hourly_units || {} } });
-            trend.minTempF = Math.min(trend.minTempF, tempF);
-            trend.maxTempF = Math.max(trend.maxTempF, tempF);
-        }
-        trend.maxPrecip = Math.max(trend.maxPrecip, hourlyPrecip[index] || 0);
-    });
-
-    return dailyTrends;
+function toPrecipInches(value, weather) {
+    if (!Number.isFinite(value)) return 0;
+    const units = String(weather?.forecast?.daily_units?.precipitation_sum || weather?.meta?.units?.precip || 'mm').toLowerCase();
+    if (units.includes('in')) return value;
+    return value / 25.4;
 }
 
 function getHourlyDetailRowsForDate(hourlyForecast, targetDate) {
@@ -679,7 +657,6 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
     let html = '<div class="multi-day-forecast"><h3>Extended forecast</h3><div class="forecast-days">';
     
     const dailyData = weather.forecast.daily;
-    const hourlyTrendsByDate = buildHourlyTrendByDate(weather.forecast.hourly || {});
     
     // 🔬 PHYSICS: Calculate water temps for all days using thermal model
     const waterTemps = projectWaterTemps(
@@ -709,10 +686,7 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
         const precipProb = dailyData.precipitation_probability_max[i];
         const weatherCode = dailyData.weather_code[i];
         const weatherIcon = getWeatherIcon(weatherCode);
-        const hourlyTrend = hourlyTrendsByDate.get(date);
-        const hourlyTrendLabel = hourlyTrend && Number.isFinite(hourlyTrend.minTempF) && Number.isFinite(hourlyTrend.maxTempF)
-            ? `${hourlyTrend.minTempF.toFixed(0)}°→${hourlyTrend.maxTempF.toFixed(0)}° · ${hourlyTrend.maxPrecip.toFixed(0)}% rain`
-            : 'Not available';
+        const precipAmountInches = toPrecipInches(dailyData.precipitation_sum?.[i], weather);
         
         // Get wind data for the day
         const windSpeed = dailyData.wind_speed_10m_max ? toWindMph(dailyData.wind_speed_10m_max[i], weather) : 0;
@@ -739,7 +713,8 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
                 <div class="day-precip">${getPrecipIcon(precipProb)} ${precipProb}%</div>
                 <div style="font-size: 0.85em; color: #888; margin-top: 4px;">${waterTemps[i].toFixed(1)}°F</div>
                 <div style="font-size: 0.85em; color: #888;">${windSpeed.toFixed(0)} mph ${windDir}</div>
-                <div class="day-hourly-trend">24h trend: ${hourlyTrendLabel}</div>
+                <div class="day-hourly-trend">${precipProb}% rain</div>
+                <div class="day-hourly-trend">${precipAmountInches.toFixed(2)} in</div>
             </div>
         `;
     }
