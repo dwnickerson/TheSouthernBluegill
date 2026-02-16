@@ -1,6 +1,6 @@
 import { storage } from '../services/storage.js';
 
-const VALID_THEMES = new Set(['light', 'dark', 'bluegill', 'largemouth-bass', 'crappie']);
+const VALID_THEMES = new Set(['light', 'dark', 'bluegill', 'largemouth-bass', 'crappie', 'sba', 'river-mist']);
 
 export function applySavedTheme() {
     const savedTheme = storage.getTheme();
