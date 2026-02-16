@@ -369,14 +369,17 @@ function renderWeatherRadar(coords) {
         <div class="weather-radar-card">
             <h3>Weather radar</h3>
             <p>Live radar centered on ${coords.name}.</p>
-            <iframe
-                class="weather-radar-frame"
-                title="Weather radar for ${coords.name}"
-                src="${getRadarEmbedUrl(coords.lat, coords.lon)}"
-                loading="lazy"
-                referrerpolicy="no-referrer-when-downgrade"
-                allowfullscreen>
-            </iframe>
+            <div class="weather-radar-shell">
+                <iframe
+                    class="weather-radar-frame"
+                    title="Weather radar for ${coords.name}"
+                    src="${getRadarEmbedUrl(coords.lat, coords.lon)}"
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"
+                    allowfullscreen>
+                </iframe>
+                <div class="weather-radar-tint" aria-hidden="true"></div>
+            </div>
         </div>
     `;
 }
