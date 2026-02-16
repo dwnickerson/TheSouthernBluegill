@@ -5,11 +5,12 @@ export function calculateSolunar(lat, lon, date) {
     const julianDay = getJulianDay(date);
     
     // Moon phase calculation
-    const moonAge = (julianDay - 2451550.1) % 29.530588853;
+    const moonAge = ((julianDay - 2451550.1) % 29.530588853 + 29.530588853) % 29.530588853;
     const moonPhase = moonAge / 29.530588853;
+    const moonIllumination = ((1 - Math.cos(moonPhase * 2 * Math.PI)) / 2) * 100;
     
     let phaseDescription = '';
-    if (moonPhase < 0.03 || moonPhase > 0.97) phaseDescription = 'New Moon';
+    if (moonPhase < 0.02 || moonPhase >= 0.98) phaseDescription = 'New Moon';
     else if (moonPhase < 0.22) phaseDescription = 'Waxing Crescent';
     else if (moonPhase < 0.28) phaseDescription = 'First Quarter';
     else if (moonPhase < 0.47) phaseDescription = 'Waxing Gibbous';
@@ -38,7 +39,7 @@ export function calculateSolunar(lat, lon, date) {
     
     return {
         moon_phase: phaseDescription,
-        moon_phase_percent: Math.round(moonPhase * 100),
+        moon_phase_percent: Math.round(moonIllumination),
         major_periods: [
             formatPeriod(major1Start, major1End),
             formatPeriod(major2Start, major2End)
