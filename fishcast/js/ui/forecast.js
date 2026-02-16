@@ -710,10 +710,9 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
                 <div class="day-weather-icon" title="${weatherIcon.label}">${weatherIcon.icon}</div>
                 <div class="day-score ${scoreClass}"title="Estimated fishing score">${Math.round(estimatedScore)}</div>
                 <div class="day-temp">${minTemp.toFixed(0)}° → ${maxTemp.toFixed(0)}°</div>
-                <div class="day-precip">${getPrecipIcon(precipProb)} ${precipProb}%</div>
+                <div class="day-precip">${precipProb}% rain</div>
                 <div style="font-size: 0.85em; color: #888; margin-top: 4px;">${waterTemps[i].toFixed(1)}°F</div>
                 <div style="font-size: 0.85em; color: #888;">${windSpeed.toFixed(0)} mph ${windDir}</div>
-                <div class="day-hourly-trend">${precipProb}% rain</div>
                 <div class="day-hourly-trend">${precipAmountInches.toFixed(2)} in</div>
             </div>
         `;
@@ -735,13 +734,13 @@ window.showDayDetails = function(dayIndex, date) {
     const avgAirTemp = (maxTemp + minTemp) / 2;
     const precipProb = dailyData.precipitation_probability_max[dayIndex];
     const precipSum = dailyData.precipitation_sum ? dailyData.precipitation_sum[dayIndex] : 0;
+    const precipAmountInches = toPrecipInches(precipSum, data.weather);
     const windSpeed = dailyData.wind_speed_10m_max ? toWindMph(dailyData.wind_speed_10m_max[dayIndex], data.weather) : 0;
     const windDir = dailyData.wind_direction_10m_dominant ? getWindDirection(dailyData.wind_direction_10m_dominant[dayIndex]) : 'N';
     const sunrise = dailyData.sunrise ? new Date(dailyData.sunrise[dayIndex]).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'N/A';
     const sunset = dailyData.sunset ? new Date(dailyData.sunset[dayIndex]).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'N/A';
     const weatherIcon = getWeatherIcon(weatherCode);
     const weatherDesc = getWeatherDescription(weatherCode);
-    const precipIcon = getPrecipIcon(precipProb);
     const daySolunar = calculateSolunar(data.coords.lat, data.coords.lon, new Date(date));
     const moonIcon = getMoonIcon(daySolunar.moon_phase);
     const daySummary = `${weatherDesc} with ${precipProb}% rain chance. Air ${minTemp.toFixed(0)}°F to ${maxTemp.toFixed(0)}°F and winds near ${windSpeed.toFixed(0)} mph ${windDir}.`;
@@ -802,7 +801,7 @@ window.showDayDetails = function(dayIndex, date) {
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Precipitation</span>
-                        <span class="detail-value">${precipIcon} ${precipProb}% chance${precipSum > 0 ? ` (${(precipSum / 25.4).toFixed(2)} in)` : ''}</span>
+                        <span class="detail-value">${precipProb}% rain (${precipAmountInches.toFixed(2)} in)</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Wind</span>
