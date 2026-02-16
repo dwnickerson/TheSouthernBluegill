@@ -247,7 +247,7 @@ export const storage = {
         const rawTheme = safeGetRaw(CACHE_KEYS.THEME);
         if (rawTheme === null) return 'light';
 
-        const validThemes = new Set(['light', 'dark', 'bluegill', 'largemouth-bass', 'crappie', 'sba', 'river-mist']);
+        const validThemes = new Set(['light', 'dark', 'largemouth-bass', 'crappie', 'sba']);
 
         try {
             const parsedTheme = JSON.parse(rawTheme);
