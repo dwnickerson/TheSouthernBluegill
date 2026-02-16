@@ -518,9 +518,11 @@ button[type="submit"]:hover,
 }
 
 .action-buttons-bottom .action-btn {
-    font-size: 1.05rem;
+    font-size: 1.2rem;
     font-weight: 700;
     letter-spacing: 0.01em;
+    padding-top: 15px;
+    padding-bottom: 15px;
 }
 
 .day-hourly-trend {
