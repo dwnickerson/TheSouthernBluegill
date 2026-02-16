@@ -1173,7 +1173,7 @@ export function openSettings() {
                         </label>
                     </div>
                     
-                    <h4 style="margin-top: 30px; color: var(--text-primary);">🎯 Defaults</h4>
+                    <h4 style="margin-top: 30px; color: var(--text-primary);">🎯 Forecast Request Defaults</h4>
 
                     <div style="display: grid; gap: 12px; margin: 15px 0;">
                         <div>
@@ -1611,10 +1611,12 @@ export function saveFavorite(locationData) {
     const locationInput = document.getElementById('location');
     const speciesInput = document.getElementById('species');
     const waterTypeInput = document.getElementById('waterType');
+    const forecastDaysInput = document.getElementById('days');
 
     const locationName = locationData?.name || locationInput?.value?.trim();
     const species = locationData?.species || speciesInput?.value;
     const waterType = locationData?.waterType || waterTypeInput?.value;
+    const forecastDays = locationData?.forecastDays || forecastDaysInput?.value;
 
     if (!locationName) {
         window.showNotification('Enter a location before saving.', 'error');
@@ -1625,7 +1627,8 @@ export function saveFavorite(locationData) {
     const duplicate = favorites.find(fav =>
         fav.name.toLowerCase() === locationName.toLowerCase() &&
         fav.species === species &&
-        fav.waterType === waterType
+        fav.waterType === waterType &&
+        String(fav.forecastDays || '') === String(forecastDays || '')
     );
 
     if (duplicate) {
@@ -1637,7 +1640,8 @@ export function saveFavorite(locationData) {
         id: Date.now(),
         name: locationName,
         species,
-        waterType
+        waterType,
+        forecastDays
     });
 
     renderFavorites();

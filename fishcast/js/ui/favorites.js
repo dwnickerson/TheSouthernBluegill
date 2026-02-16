@@ -34,11 +34,13 @@ export function renderFavorites() {
     let html = '';
     favorites.forEach(fav => {
         const speciesName = SPECIES_DATA[fav.species]?.name || fav.species;
+        const forecastDaysLabel = fav.forecastDays ? `${escapeHTML(String(fav.forecastDays))} day${String(fav.forecastDays) === '1' ? '' : 's'}` : '';
+        const details = [escapeHTML(speciesName), escapeHTML(fav.waterType), forecastDaysLabel].filter(Boolean).join(' • ');
         html += `
             <div class="favorite-item" onclick="loadFavorite(${fav.id})">
                 <div>
                     <div class="favorite-name">${escapeHTML(fav.name)}</div>
-                    <div class="favorite-location">${escapeHTML(speciesName)} • ${escapeHTML(fav.waterType)}</div>
+                    <div class="favorite-location">${details}</div>
                 </div>
                 <span class="favorite-remove" onclick="event.stopPropagation(); removeFavorite(${fav.id})">✕</span>
             </div>
@@ -58,6 +60,9 @@ export function loadFavorite(id) {
     document.getElementById('location').value = favorite.name;
     document.getElementById('species').value = favorite.species;
     document.getElementById('waterType').value = favorite.waterType;
+    if (favorite.forecastDays) {
+        document.getElementById('days').value = String(favorite.forecastDays);
+    }
     
     // Scroll to form
     document.getElementById('forecastForm').scrollIntoView({ behavior: 'smooth' });
