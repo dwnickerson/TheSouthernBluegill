@@ -207,6 +207,38 @@ test('late-winter warm front can produce an approximately 2°F day-over-day lake
   assert.ok(feb18ToFeb19Rise <= 3.1, `lake response should remain physically bounded, got ${feb18ToFeb19Rise.toFixed(2)}°F`);
 });
 
+test('reservoir warming sequence does not show multi-day cooling drift without strong storm forcing', () => {
+  const forecast = {
+    daily: {
+      time: [
+        '2026-02-16',
+        '2026-02-17',
+        '2026-02-18',
+        '2026-02-19',
+        '2026-02-20',
+        '2026-02-21',
+        '2026-02-22'
+      ],
+      temperature_2m_mean: [50, 55, 63, 67.5, 61, 54.5, 42.5],
+      temperature_2m_min: [43, 51, 57, 59, 53, 46, 36],
+      temperature_2m_max: [57, 59, 69, 76, 69, 63, 49],
+      cloud_cover_mean: [60, 58, 52, 68, 72, 70, 62],
+      precipitation_sum: [0.0, 0.02, 0.03, 0.41, 0.41, 0.37, 0.33],
+      precipitation_probability_max: [0, 2, 3, 41, 41, 37, 33],
+      wind_speed_10m_mean: [10, 13, 13, 20, 14, 18, 19],
+      wind_speed_10m_max: [15, 18, 20, 27, 20, 25, 26]
+    }
+  };
+
+  const projected = projectWaterTemps(50.1, forecast, 'reservoir', 34.26, {
+    anchorDate: new Date('2026-02-16T12:00:00Z')
+  });
+
+  assert.ok(projected[1] >= 50.0, `day 1 should not materially cool under warming air, got ${projected[1].toFixed(2)}°F`);
+  assert.ok(projected[2] >= projected[1] - 0.2, `day 2 should not continue cooling drift, got ${projected[2].toFixed(2)} vs ${projected[1].toFixed(2)}°F`);
+  assert.ok(projected[3] >= projected[2] - 0.2, `day 3 should track warming pattern, got ${projected[3].toFixed(2)} vs ${projected[2].toFixed(2)}°F`);
+});
+
 
 test('synoptic precipitation signal is tempered when rain probability is low', () => {
   const forecastLowProb = {

@@ -135,6 +135,36 @@ function getDailyDeltaEnvelope(waterType, synopticEventStrength) {
     return base + (synopticEventStrength * surge);
 }
 
+function getWarmingGuardrailFloorDelta({
+    waterType,
+    prevTemp,
+    airTemp,
+    prevAirTemp,
+    trendFPerDay,
+    synopticEventStrength,
+    precipProbability
+}) {
+    if (waterType !== 'reservoir') return null;
+
+    const effectivePrecipProbability = Number.isFinite(precipProbability)
+        ? clamp(precipProbability / 100, 0, 1)
+        : 0;
+    const strongStormMixing = synopticEventStrength >= 0.75 || effectivePrecipProbability >= 0.85;
+    if (strongStormMixing) return null;
+
+    const airAboveWater = airTemp - prevTemp;
+    const warmingDay = !Number.isFinite(prevAirTemp) || airTemp >= prevAirTemp;
+    const sustainedWarming = trendFPerDay >= 0.6;
+
+    if (warmingDay && sustainedWarming && airAboveWater >= 2.5) {
+        // Under a sustained warming regime, large inertial reservoirs can flatten but should
+        // not materially cool day-over-day unless a strong synoptic event is present.
+        return -0.15;
+    }
+
+    return null;
+}
+
 function getSynopticEventStrength(daily, dayIndex, prevAirTemp, airTemp, windMph, precipUnit = '') {
     const airJumpSignal = Number.isFinite(prevAirTemp)
         ? clamp(Math.abs(airTemp - prevAirTemp) / 12, 0, 1)
@@ -585,6 +615,20 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
         );
 
         let projectedTemp = prevTemp + thermalEffect + solarEffect + windEffect + trendKicker;
+
+        const warmingGuardrailFloorDelta = getWarmingGuardrailFloorDelta({
+            waterType,
+            prevTemp,
+            airTemp,
+            prevAirTemp,
+            trendFPerDay,
+            synopticEventStrength,
+            precipProbability: daily?.precipitation_probability_max?.[dayIndex]
+        });
+
+        if (Number.isFinite(warmingGuardrailFloorDelta)) {
+            projectedTemp = Math.max(projectedTemp, prevTemp + warmingGuardrailFloorDelta);
+        }
 
         const seasonalBaseline = getSeasonalBaseTemp(latitude, dayOfYear, waterType);
         if (dayIndex >= 4) {
