@@ -1089,7 +1089,7 @@
             </div>
             
             <div style="margin: 20px 0;">
-                <h4 style="margin-bottom: 15px; color: var(--text-primary);">Default Settings</h4>
+                <h4 style="margin-bottom: 15px; color: var(--text-primary);">Forecast Request Defaults</h4>
                 <div style="background: var(--input-bg); padding: 15px; border-radius: 2px;">
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; margin-bottom: 5px; color: var(--text-primary); font-size: 0.9rem;">
@@ -1898,11 +1898,14 @@
                 this.render();
             }
             
-            add(name, location) {
+            add(name, location, species, waterType, days) {
                 const favorite = {
                     id: Date.now(),
                     name: name,
                     location: location,
+                    species: species,
+                    waterType: waterType,
+                    days: days,
                     addedAt: new Date().toISOString()
                 };
                 
@@ -1932,18 +1935,27 @@
                 
                 section.style.display = 'block';
                 list.innerHTML = this.favorites.map(fav => `
-                    <div class="favorite-item" onclick="favoritesManager.select('${fav.location}')">
+                    <div class="favorite-item" onclick="favoritesManager.select(${fav.id})">
                         <div>
                             <div class="favorite-name">${fav.name}</div>
-                            <div class="favorite-location">${fav.location}</div>
+                            <div class="favorite-location">${fav.location}${fav.species ? ` • ${fav.species}` : ''}${fav.waterType ? ` • ${fav.waterType}` : ''}${fav.days ? ` • ${fav.days} day${String(fav.days) === '1' ? '' : 's'}` : ''}</div>
                         </div>
                         <span class="favorite-remove" onclick="event.stopPropagation(); favoritesManager.remove(${fav.id})">✕</span>
                     </div>
                 `).join('');
             }
             
-            select(location) {
-                document.getElementById('location').value = location;
+            select(id) {
+                const favorite = this.favorites.find(f => f.id === id);
+                if (!favorite) return;
+
+                document.getElementById('location').value = favorite.location;
+                if (favorite.species) document.getElementById('species').value = favorite.species;
+                if (favorite.waterType) document.getElementById('waterType').value = favorite.waterType;
+                if (favorite.days) {
+                    document.getElementById('days').value = favorite.days;
+                    document.getElementById('daysValue').textContent = favorite.days;
+                }
             }
         }
 
@@ -2461,10 +2473,13 @@
 
         function saveFavorite() {
             const location = document.getElementById('location').value;
+            const species = document.getElementById('species').value;
+            const waterType = document.getElementById('waterType').value;
+            const days = document.getElementById('days').value;
             const name = prompt('Name this fishing spot:', location);
             
             if (name) {
-                favoritesManager.add(name, location);
+                favoritesManager.add(name, location, species, waterType, days);
                 showNotification('Saved to favorites!');
             }
         }
