@@ -15,6 +15,13 @@ function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
 }
 
+function getLocalDayKey(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 function average(values) {
     if (!Array.isArray(values) || values.length === 0) return null;
     const finite = values.filter(Number.isFinite);
@@ -519,16 +526,21 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     const body = WATER_BODIES_V2[waterType];
     estimatedTemp = clamp(estimatedTemp, 32, 95);
 
-    const yesterdayEstimate = storage.getWaterTempMemo(coords.lat, coords.lon, waterType);
-    if (Number.isFinite(yesterdayEstimate)) {
+    const memoEntry = storage.getWaterTempMemoEntry(coords.lat, coords.lon, waterType);
+    const memoEstimate = memoEntry?.temp;
+    const memoDayKey = memoEntry?.dayKey || null;
+    const currentDayKey = getLocalDayKey(currentDate);
+    const shouldApplyDailyClamp = Number.isFinite(memoEstimate) && memoDayKey === currentDayKey;
+
+    if (shouldApplyDailyClamp) {
         const dailyLimit = getRelaxedDailyChangeLimit(body.max_daily_change, userReports, coords);
-        const change = estimatedTemp - yesterdayEstimate;
+        const change = estimatedTemp - memoEstimate;
         if (Math.abs(change) > dailyLimit) {
-            estimatedTemp = yesterdayEstimate + (Math.sign(change) * dailyLimit);
+            estimatedTemp = memoEstimate + (Math.sign(change) * dailyLimit);
         }
     }
 
-    storage.setWaterTempMemo(coords.lat, coords.lon, waterType, estimatedTemp);
+    storage.setWaterTempMemo(coords.lat, coords.lon, waterType, estimatedTemp, currentDayKey);
 
     const finalTemp = Math.round(estimatedTemp * 10) / 10;
     if (windEstimate.warnings.length) {
