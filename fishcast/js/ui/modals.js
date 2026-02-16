@@ -1164,13 +1164,15 @@ export function openSettings() {
                     
                     <div style="margin: 15px 0; padding: 15px; background: var(--bg-primary); border-radius: 8px;">
                         <label for="themeSelect" style="display: block; margin-bottom: 6px; color: var(--text-primary); font-weight: 600;">Theme</label>
-                        <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 10px;">Choose a look: light, dark, Bluegill, Largemouth Bass, or Crappie.</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 10px;">Choose a look: light, dark, Bluegill, Largemouth Bass, Crappie, SBA (clean monochrome), or River Mist.</div>
                         <select id="themeSelect" style="width: 100%;">
                             <option value="light">Light</option>
                             <option value="dark">Dark</option>
                             <option value="bluegill">Bluegill</option>
                             <option value="largemouth-bass">Largemouth Bass</option>
                             <option value="crappie">Crappie</option>
+                            <option value="sba">SBA</option>
+                            <option value="river-mist">River Mist</option>
                         </select>
                     </div>
                     
