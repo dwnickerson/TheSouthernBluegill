@@ -344,3 +344,55 @@ test('projection trend bootstrap incorporates recent historical air temperatures
     `historical context should materially influence day-1 projection, got ${day1Delta.toFixed(2)}°F`
   );
 });
+
+test('Tupelo late-winter sequence keeps pond and lake extended projections physically plausible', () => {
+  const forecast = {
+    daily_units: {
+      precipitation_sum: 'inch',
+      wind_speed_10m_mean: 'mph',
+      wind_speed_10m_max: 'mph'
+    },
+    daily: {
+      time: [
+        '2026-02-16',
+        '2026-02-17',
+        '2026-02-18',
+        '2026-02-19',
+        '2026-02-20',
+        '2026-02-21',
+        '2026-02-22'
+      ],
+      temperature_2m_mean: [50, 55, 63, 67.5, 61, 54.5, 42.5],
+      temperature_2m_min: [43, 51, 57, 59, 53, 46, 36],
+      temperature_2m_max: [57, 59, 69, 76, 69, 63, 49],
+      cloud_cover_mean: [60, 58, 52, 68, 72, 70, 62],
+      precipitation_sum: [0.0, 0.02, 0.03, 0.41, 0.41, 0.37, 0.33],
+      precipitation_probability_max: [0, 2, 3, 41, 41, 37, 33],
+      wind_speed_10m_mean: [10, 13, 13, 20, 14, 18, 19],
+      wind_speed_10m_max: [15, 18, 20, 27, 20, 25, 26]
+    }
+  };
+
+  const initialSurfaceTemp = 50.7;
+  const anchorDate = new Date('2026-02-16T12:00:00Z');
+
+  const pondProjected = projectWaterTemps(initialSurfaceTemp, forecast, 'pond', 34.26, {
+    anchorDate
+  });
+  const lakeProjected = projectWaterTemps(initialSurfaceTemp, forecast, 'lake', 34.26, {
+    anchorDate
+  });
+
+  // Both water-body classes should stay in realistic winter ranges for this 7-day setup.
+  pondProjected.forEach((temp, idx) => {
+    assert.ok(temp >= 44 && temp <= 62, `pond day ${idx} should remain physically plausible, got ${temp.toFixed(2)}°F`);
+  });
+  lakeProjected.forEach((temp, idx) => {
+    assert.ok(temp >= 44 && temp <= 60, `lake day ${idx} should remain physically plausible, got ${temp.toFixed(2)}°F`);
+  });
+
+  // Lake should remain more inertial than pond under the same forcing.
+  const pondRange = Math.max(...pondProjected) - Math.min(...pondProjected);
+  const lakeRange = Math.max(...lakeProjected) - Math.min(...lakeProjected);
+  assert.ok(lakeRange < pondRange, `lake range should be narrower than pond (${lakeRange.toFixed(2)} vs ${pondRange.toFixed(2)}°F)`);
+});
