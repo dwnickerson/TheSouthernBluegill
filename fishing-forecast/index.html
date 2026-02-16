@@ -1460,24 +1460,16 @@
         }
 
         function calculateSolunar(lat, lon, date) {
-            const year = date.getFullYear();
-            const month = date.getMonth() + 1;
-            const day = date.getDate();
-            
-            const a = Math.floor((14 - month) / 12);
-            const y = year - a;
-            const m = month + 12 * a - 3;
-            const jd = day + Math.floor((153 * m + 2) / 5) + 365 * y + 
-                      Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) - 32045;
-            
-            const daysSinceNew = jd - 2451550.1;
-            const newMoons = daysSinceNew / 29.530588853;
-            const phase = newMoons - Math.floor(newMoons);
+            const julianDay = date.getTime() / 86400000 + 2440587.5;
+            const synodicMonth = 29.530588853;
+            const moonAge = (julianDay - 2451550.1) % synodicMonth;
+            const normalizedMoonAge = moonAge < 0 ? moonAge + synodicMonth : moonAge;
+            const phase = normalizedMoonAge / synodicMonth;
             
             const illumination = (1 - Math.cos(phase * 2 * Math.PI)) / 2 * 100;
             
             let phaseName;
-            if (phase < 0.0625 || phase >= 0.9375) phaseName = "New Moon";
+            if (phase < 0.03 || phase >= 0.97) phaseName = "New Moon";
             else if (phase < 0.1875) phaseName = "Waxing Crescent";
             else if (phase < 0.3125) phaseName = "First Quarter";
             else if (phase < 0.4375) phaseName = "Waxing Gibbous";
