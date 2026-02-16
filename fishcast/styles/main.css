@@ -67,6 +67,36 @@
     --bg-primary: #0a1224;
 }
 
+[data-theme="bluegill"] {
+    --bg-primary: #132537;
+    --bg-secondary: rgba(24, 43, 61, 0.78);
+    --bg-card: rgba(28, 51, 70, 0.82);
+    --text-primary: #edf6ff;
+    --text-secondary: #bad0df;
+    --border-color: rgba(192, 226, 155, 0.28);
+    --input-bg: rgba(18, 35, 52, 0.92);
+    --shadow-sm: 0 12px 28px rgba(6, 13, 22, 0.3);
+    --shadow-md: 0 16px 40px rgba(6, 13, 22, 0.4);
+    --shadow-lg: 0 24px 54px rgba(6, 13, 22, 0.52);
+    --accent: #9fcc3b;
+    --accent-hover: #b6dc53;
+    --gradient-primary: linear-gradient(120deg, #67c2c0 0%, #9fcc3b 52%, #7a9a3f 100%);
+    --gradient-success: linear-gradient(130deg, #90c94f 0%, #67c2c0 100%);
+    --trend-panel-bg: rgba(18, 35, 52, 0.4);
+    --trend-grid-color: rgba(202, 233, 170, 0.2);
+    --trend-axis-label-color: #cadfaf;
+    --trend-axis-title-color: #d8e8bf;
+    --trend-point-label-color: #f0f7e1;
+    --trend-temp-line: #9fcc3b;
+    --trend-precip-line: #66c4cb;
+    --trend-wind-line: #f1b43d;
+    --score-excellent: #66c4cb;
+    --score-good: #9fcc3b;
+    --score-fair: #d6a949;
+    --score-poor: #b9833b;
+    --score-bad: #8d5b34;
+}
+
 body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     color: var(--text-primary);
@@ -80,6 +110,14 @@ body {
     transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+
+[data-theme="bluegill"] body {
+    background:
+        radial-gradient(circle at 18% 16%, rgba(108, 197, 198, 0.3), transparent 42%),
+        radial-gradient(circle at 80% 6%, rgba(159, 204, 59, 0.28), transparent 38%),
+        radial-gradient(circle at 52% 118%, rgba(122, 154, 63, 0.28), transparent 52%),
+        var(--bg-primary);
+}
 .container {
     max-width: 980px;
     margin: 0 auto;
@@ -370,6 +408,12 @@ button[type="submit"]:hover,
 [data-theme="light"] .weather-radar-tint {
     mix-blend-mode: soft-light;
     opacity: 0.38;
+}
+
+[data-theme="bluegill"] .weather-radar-tint {
+    background: linear-gradient(140deg, color-mix(in oklab, #9fcc3b 36%, transparent), transparent 64%);
+    mix-blend-mode: soft-light;
+    opacity: 0.42;
 }
 
 .detail-card {

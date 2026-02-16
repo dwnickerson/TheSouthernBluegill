@@ -247,12 +247,14 @@ export const storage = {
         const rawTheme = safeGetRaw(CACHE_KEYS.THEME);
         if (rawTheme === null) return 'light';
 
+        const validThemes = new Set(['light', 'dark', 'bluegill']);
+
         try {
             const parsedTheme = JSON.parse(rawTheme);
-            return parsedTheme === 'dark' ? 'dark' : 'light';
+            return validThemes.has(parsedTheme) ? parsedTheme : 'light';
         } catch (error) {
             // Backward compatibility for legacy raw string values (e.g. dark)
-            return rawTheme === 'dark' ? 'dark' : 'light';
+            return validThemes.has(rawTheme) ? rawTheme : 'light';
         }
     },
 

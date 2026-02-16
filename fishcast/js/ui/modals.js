@@ -1133,7 +1133,7 @@ export function submitCatchLog(event) {
 }
 
 export function openSettings() {
-    const darkModeEnabled = storage.getTheme() === 'dark';
+    const selectedTheme = storage.getTheme();
     const defaultLocation = storage.getDefaultLocation();
     const defaultSpecies = storage.getDefaultSpecies();
     const defaultWaterBody = storage.getDefaultWaterBody();
@@ -1162,15 +1162,14 @@ export function openSettings() {
                 <div style="padding: 20px;">
                     <h4 style="margin-top: 0; color: var(--text-primary);">🎨 Appearance</h4>
                     
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin: 15px 0; padding: 15px; background: var(--bg-primary); border-radius: 8px;">
-                        <div>
-                            <div style="font-weight: 600; color: var(--text-primary);">Dark Mode</div>
-                            <div style="font-size: 0.9rem; color: var(--text-secondary);">Toggle dark/light theme</div>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="darkModeToggle" ${darkModeEnabled ? 'checked' : ''}>
-                            <span class="toggle-slider"></span>
-                        </label>
+                    <div style="margin: 15px 0; padding: 15px; background: var(--bg-primary); border-radius: 8px;">
+                        <label for="themeSelect" style="display: block; margin-bottom: 6px; color: var(--text-primary); font-weight: 600;">Theme</label>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 10px;">Choose a look: light, dark, or Bluegill.</div>
+                        <select id="themeSelect" style="width: 100%;">
+                            <option value="light">Light</option>
+                            <option value="dark">Dark</option>
+                            <option value="bluegill">Bluegill</option>
+                        </select>
                     </div>
                     
                     <h4 style="margin-top: 30px; color: var(--text-primary);">🎯 Forecast Request Defaults</h4>
@@ -1235,11 +1234,13 @@ export function openSettings() {
     if (defaultWaterBodyInput) defaultWaterBodyInput.value = defaultWaterBody;
     if (defaultForecastDaysInput) defaultForecastDaysInput.value = defaultForecastDays;
     
-    // Add event listener for dark mode toggle
-    document.getElementById('darkModeToggle').addEventListener('change', (e) => {
-        const enabled = e.target.checked;
-        document.documentElement.setAttribute('data-theme', enabled ? 'dark' : 'light');
-    });
+    const themeSelect = document.getElementById('themeSelect');
+    if (themeSelect) {
+        themeSelect.value = selectedTheme;
+        themeSelect.addEventListener('change', (e) => {
+            document.documentElement.setAttribute('data-theme', e.target.value);
+        });
+    }
 }
 
 export function closeSettings() {
@@ -1248,9 +1249,9 @@ export function closeSettings() {
 }
 
 export function saveSettings() {
-    const darkModeToggle = document.getElementById('darkModeToggle');
-    if (darkModeToggle) {
-        const theme = darkModeToggle.checked ? 'dark' : 'light';
+    const themeSelect = document.getElementById('themeSelect');
+    if (themeSelect) {
+        const theme = themeSelect.value;
         document.documentElement.setAttribute('data-theme', theme);
         storage.setTheme(theme);
     }
