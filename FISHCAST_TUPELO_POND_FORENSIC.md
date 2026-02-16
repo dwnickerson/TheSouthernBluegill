@@ -46,3 +46,21 @@ This keeps the daily model intact while exposing intraday behavior that shallow 
 
 ## Environment limitation encountered during this audit
 This execution environment could not reach Open-Meteo endpoints (proxy/connect failures), so historical API pulls could not be completed live here. The model improvements and tests were implemented locally regardless.
+
+## Field update (operator dataset received after initial pass)
+A 9-point observational set was supplied for 2026-02-10 through 2026-02-15 with hourly Open-Meteo matches (offsets 1–23 min). The key pattern in this new data is:
+
+- **Persistent overcast periods (cloud ~92–100%) with modest pond warming** rather than large midday spikes.
+- **Warm-air anomalies did not fully translate** to water at 1.6 ft depth during cloudy/windy windows.
+- Observed period spread remained moderate (roughly low-single-digit °F), not the upper-end clear-sky shallow-pond response.
+
+### Model impact
+This data indicates our intraday pond terms were still a bit aggressive under overcast regimes. To better match observed behavior:
+
+1. **Reduced pond air-coupling gain** so short-lived warm air surges don't overdrive surface estimates under poor radiative forcing.
+2. **Reduced pond solar gain slightly** to avoid optimistic midday peaks when cloud decks persist.
+3. **Increased wind damping slightly** for surface-layer warming.
+4. **Changed cloud damping from daily-mean only to blended daily+target-hour cloud cover**, giving stronger suppression when the actual target hour is heavily overcast.
+
+These changes preserve clear/calm daytime rise while reducing false warm spikes in cloudy/windy conditions similar to the Tupelo set.
+

@@ -25,9 +25,12 @@ function average(values) {
 function getDiurnalResponseByWaterType(waterType) {
     if (waterType === 'pond') {
         return {
-            solarGain: 0.34,
-            airCoupling: 0.28,
-            windDamping: 0.025
+            // Tuned against Feb-2026 Tupelo probe observations where shallow-pond
+            // heating was highly sensitive to sky cover and weakly coupled to short
+            // lived warm-air spikes under overcast conditions.
+            solarGain: 0.27,
+            airCoupling: 0.16,
+            windDamping: 0.03
         };
     }
     if (waterType === 'lake') {
@@ -765,7 +768,11 @@ export function estimateWaterTempByPeriod({
 
     const normalizedHour = clamp((periodHour - 6) / 12, 0, 1);
     const solarPhase = Math.sin(Math.PI * normalizedHour);
-    const cloudDamping = clamp(1 - ((cloudMean / 100) * 0.6), 0.25, 1);
+    // Use both daily cloud context and target-hour cloud state. Heavy overcast can
+    // suppress shortwave forcing much more than daily means imply.
+    const targetCloud = Number.isFinite(hourlyCloud[targetIndex]) ? hourlyCloud[targetIndex] : cloudMean;
+    const cloudBlend = (cloudMean * 0.45) + (targetCloud * 0.55);
+    const cloudDamping = clamp(1 - ((cloudBlend / 100) * 0.82), 0.12, 1);
     const windDamping = clamp(1 - (windMean * response.windDamping), 0.5, 1);
 
     const solarTerm = dailyAirRange * response.solarGain * solarPhase * cloudDamping * windDamping;
