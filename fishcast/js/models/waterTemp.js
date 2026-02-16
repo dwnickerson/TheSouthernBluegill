@@ -9,6 +9,7 @@ import { calculateDistance } from '../utils/math.js';
 import { storage } from '../services/storage.js';
 
 const WIND_FALLBACK_MAX_REDUCTION = 0.6;
+const FORECAST_MAX_WIND_GUST_WEIGHT = 0.2;
 
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -192,6 +193,38 @@ function calculateWindMixingEffect(windSpeedMph, waterType, estimatedSurfaceTemp
     return 0;
 }
 
+function getProjectionWindMph(daily, dayIndex) {
+    const meanWind = normalizeLikelyWindMph(daily?.wind_speed_10m_mean?.[dayIndex]);
+    if (Number.isFinite(meanWind)) {
+        return { windMph: meanWind, source: 'daily.wind_speed_10m_mean' };
+    }
+
+    const maxWind = normalizeLikelyWindMph(daily?.wind_speed_10m_max?.[dayIndex]);
+    if (Number.isFinite(maxWind)) {
+        return {
+            windMph: maxWind * WIND_FALLBACK_MAX_REDUCTION,
+            source: 'daily.wind_speed_10m_max_scaled'
+        };
+    }
+
+    return { windMph: 0, source: 'fallback_zero' };
+}
+
+function getProjectionWindForMixing(daily, dayIndex) {
+    const base = getProjectionWindMph(daily, dayIndex);
+    const maxWind = normalizeLikelyWindMph(daily?.wind_speed_10m_max?.[dayIndex]);
+
+    if (!Number.isFinite(maxWind) || !Number.isFinite(base.windMph) || maxWind <= base.windMph) {
+        return base;
+    }
+
+    const gustStress = (maxWind - base.windMph) * FORECAST_MAX_WIND_GUST_WEIGHT;
+    return {
+        windMph: base.windMph + gustStress,
+        source: `${base.source}+gust_stress`
+    };
+}
+
 function getWindEstimateMph(historicalWeather) {
     const daily = historicalWeather?.daily || {};
     const forecast = historicalWeather?.forecast || {};
@@ -371,6 +404,81 @@ export function estimateTempByDepth(surfaceTemp, waterType, depth_ft, currentDat
         return depth_ft < 5 ? surfaceTemp : 39;
     }
     return Math.max(32, surfaceTemp - (depth_ft * 0.2));
+}
+
+// Project daily water temperatures using the same primitives as estimateWaterTemp.
+// Returns temperatures aligned to forecast.daily arrays:
+// temps[0] = anchored current/"today" temp, temps[1] = tomorrow using daily[1] forcing, etc.
+export function projectWaterTemps(initialWaterTemp, forecastData, waterType, latitude, options = {}) {
+    const body = WATER_BODIES_V2[waterType];
+    const daily = forecastData?.daily || {};
+    const timeline = Array.isArray(daily.time) ? daily.time : [];
+    const dayCount = timeline.length;
+
+    if (!Number.isFinite(initialWaterTemp) || !body || dayCount === 0) {
+        return [];
+    }
+
+    const temps = [clamp(initialWaterTemp, 32, 95)];
+    const cloudCover = Array.isArray(daily.cloud_cover_mean) ? daily.cloud_cover_mean : [];
+    const tempMeans = Array.isArray(daily.temperature_2m_mean) ? daily.temperature_2m_mean : [];
+    const tempMins = Array.isArray(daily.temperature_2m_min) ? daily.temperature_2m_min : [];
+    const tempMaxes = Array.isArray(daily.temperature_2m_max) ? daily.temperature_2m_max : [];
+    const tempUnit = options.tempUnit || 'F';
+    const anchorDate = options.anchorDate instanceof Date ? options.anchorDate : new Date();
+
+    for (let dayIndex = 1; dayIndex < dayCount; dayIndex++) {
+        const prevTemp = temps[dayIndex - 1];
+        const meanTempRaw = Number.isFinite(tempMeans[dayIndex])
+            ? tempMeans[dayIndex]
+            : average([tempMins[dayIndex], tempMaxes[dayIndex]]);
+        const airTemp = normalizeAirTempToF(meanTempRaw, tempUnit);
+
+        if (!Number.isFinite(airTemp)) {
+            temps.push(prevTemp);
+            continue;
+        }
+
+        const dayDate = new Date(anchorDate.getTime());
+        dayDate.setUTCDate(dayDate.getUTCDate() + dayIndex);
+        const dayOfYear = getDayOfYear(dayDate);
+        const solarEffect = calculateSolarDeviation(latitude, dayOfYear, [cloudCover[dayIndex]], waterType);
+
+        const thermalResponse = getThermalInertiaCoefficient(waterType, prevTemp, airTemp);
+        const thermalEffect = (airTemp - prevTemp) * thermalResponse;
+
+        const windEstimate = getProjectionWindForMixing(daily, dayIndex);
+        const windEffect = calculateWindMixingEffect(
+            windEstimate.windMph,
+            waterType,
+            prevTemp + thermalEffect + solarEffect,
+            airTemp
+        );
+
+        let projectedTemp = prevTemp + thermalEffect + solarEffect + windEffect;
+
+        const seasonalBaseline = getSeasonalBaseTemp(latitude, dayOfYear, waterType);
+        if (dayIndex >= 4) {
+            const reversionWeight = clamp((dayIndex - 3) * 0.08, 0, 0.25);
+            projectedTemp = (projectedTemp * (1 - reversionWeight)) + (seasonalBaseline * reversionWeight);
+        }
+
+        const dailyDelta = clamp(projectedTemp - prevTemp, -body.max_daily_change, body.max_daily_change);
+        projectedTemp = clamp(prevTemp + dailyDelta, 32, 95);
+
+        if (options.debug === true) {
+            console.log(
+                `[FishCast][waterTempProjection] day=${dayIndex} air=${airTemp.toFixed(1)} ` +
+                `thermal=${thermalEffect.toFixed(2)} solar=${solarEffect.toFixed(2)} ` +
+                `wind=${windEffect.toFixed(2)} windSource=${windEstimate.source} ` +
+                `delta=${dailyDelta.toFixed(2)} final=${projectedTemp.toFixed(1)}`
+            );
+        }
+
+        temps.push(projectedTemp);
+    }
+
+    return temps;
 }
 
 // Get complete temperature profile
