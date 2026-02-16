@@ -273,6 +273,10 @@ export const storage = {
         return localStorage.getItem(CACHE_KEYS.DEFAULT_WATER_BODY) || '';
     },
 
+    getDefaultForecastDays() {
+        return localStorage.getItem(CACHE_KEYS.DEFAULT_FORECAST_DAYS) || '';
+    },
+
     setDefaultLocation(location) {
         localStorage.setItem(CACHE_KEYS.DEFAULT_LOCATION, location);
     },
@@ -283,5 +287,9 @@ export const storage = {
 
     setDefaultWaterBody(waterBody) {
         localStorage.setItem(CACHE_KEYS.DEFAULT_WATER_BODY, waterBody);
+    },
+
+    setDefaultForecastDays(days) {
+        localStorage.setItem(CACHE_KEYS.DEFAULT_FORECAST_DAYS, String(days));
     }
 };

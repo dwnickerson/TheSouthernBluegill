@@ -1134,6 +1134,22 @@ export function submitCatchLog(event) {
 
 export function openSettings() {
     const darkModeEnabled = storage.getTheme() === 'dark';
+    const defaultLocation = storage.getDefaultLocation();
+    const defaultSpecies = storage.getDefaultSpecies();
+    const defaultWaterBody = storage.getDefaultWaterBody();
+    const defaultForecastDays = storage.getDefaultForecastDays();
+
+    const speciesOptions = Array.from(document.querySelectorAll('#species option'))
+        .map(option => `<option value="${option.value}">${option.textContent}</option>`)
+        .join('');
+
+    const waterTypeOptions = Array.from(document.querySelectorAll('#waterType option'))
+        .map(option => `<option value="${option.value}">${option.textContent}</option>`)
+        .join('');
+
+    const daysOptions = Array.from(document.querySelectorAll('#days option'))
+        .map(option => `<option value="${option.value}">${option.textContent}</option>`)
+        .join('');
     
     const modalHTML = `
         <div class="modal show" id="settingsModal" onclick="if(event.target === this) window.closeSettings()">
@@ -1157,6 +1173,39 @@ export function openSettings() {
                         </label>
                     </div>
                     
+                    <h4 style="margin-top: 30px; color: var(--text-primary);">🎯 Defaults</h4>
+
+                    <div style="display: grid; gap: 12px; margin: 15px 0;">
+                        <div>
+                            <label for="defaultLocation" style="display: block; margin-bottom: 6px; color: var(--text-primary); font-weight: 600;">Location</label>
+                            <input type="text" id="defaultLocation" value="${defaultLocation}" placeholder="City, State or ZIP code" style="width: 100%;">
+                        </div>
+
+                        <div>
+                            <label for="defaultSpecies" style="display: block; margin-bottom: 6px; color: var(--text-primary); font-weight: 600;">Target Species</label>
+                            <select id="defaultSpecies" style="width: 100%;">
+                                <option value="">Use form default</option>
+                                ${speciesOptions}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="defaultWaterBody" style="display: block; margin-bottom: 6px; color: var(--text-primary); font-weight: 600;">Water Body Type</label>
+                            <select id="defaultWaterBody" style="width: 100%;">
+                                <option value="">Use form default</option>
+                                ${waterTypeOptions}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="defaultForecastDays" style="display: block; margin-bottom: 6px; color: var(--text-primary); font-weight: 600;">Forecast Days</label>
+                            <select id="defaultForecastDays" style="width: 100%;">
+                                <option value="">Use form default</option>
+                                ${daysOptions}
+                            </select>
+                        </div>
+                    </div>
+
                     <h4 style="margin-top: 30px; color: var(--text-primary);">💾 Data</h4>
                     
                     <div style="display: flex; gap: 10px; margin: 15px 0;">
@@ -1177,6 +1226,14 @@ export function openSettings() {
     `;
     
     document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    const defaultSpeciesInput = document.getElementById('defaultSpecies');
+    const defaultWaterBodyInput = document.getElementById('defaultWaterBody');
+    const defaultForecastDaysInput = document.getElementById('defaultForecastDays');
+
+    if (defaultSpeciesInput) defaultSpeciesInput.value = defaultSpecies;
+    if (defaultWaterBodyInput) defaultWaterBodyInput.value = defaultWaterBody;
+    if (defaultForecastDaysInput) defaultForecastDaysInput.value = defaultForecastDays;
     
     // Add event listener for dark mode toggle
     document.getElementById('darkModeToggle').addEventListener('change', (e) => {
@@ -1202,6 +1259,7 @@ export function saveSettings() {
     const defaultLocationInput = document.getElementById('defaultLocation');
     const defaultSpeciesInput = document.getElementById('defaultSpecies');
     const defaultWaterBodyInput = document.getElementById('defaultWaterBody');
+    const defaultForecastDaysInput = document.getElementById('defaultForecastDays');
 
     if (defaultLocationInput) {
         const location = defaultLocationInput.value.trim();
@@ -1235,6 +1293,22 @@ export function saveSettings() {
         const waterTypeInput = document.getElementById('waterType');
         if (waterTypeInput && defaultWaterBodyInput.value) {
             waterTypeInput.value = defaultWaterBodyInput.value;
+        }
+    }
+
+    if (defaultForecastDaysInput) {
+        const daysValue = defaultForecastDaysInput.value;
+        const validDays = new Set(Array.from(document.querySelectorAll('#days option')).map(option => option.value));
+
+        if (daysValue && !validDays.has(daysValue)) {
+            showNotification('Invalid default forecast days selection.', 'error');
+            return;
+        }
+
+        storage.setDefaultForecastDays(daysValue);
+        const daysInput = document.getElementById('days');
+        if (daysInput && daysValue) {
+            daysInput.value = daysValue;
         }
     }
     

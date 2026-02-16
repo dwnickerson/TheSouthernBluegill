@@ -60,6 +60,7 @@ function loadDefaults() {
     const defaultLocation = storage.getDefaultLocation();
     const defaultSpecies = storage.getDefaultSpecies();
     const defaultWaterBody = storage.getDefaultWaterBody();
+    const defaultForecastDays = storage.getDefaultForecastDays();
    
     if (defaultLocation) {
         document.getElementById('location').value = defaultLocation;
@@ -69,6 +70,9 @@ function loadDefaults() {
     }
     if (defaultWaterBody) {
         document.getElementById('waterType').value = defaultWaterBody;
+    }
+    if (defaultForecastDays) {
+        document.getElementById('days').value = defaultForecastDays;
     }
 }
 

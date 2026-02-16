@@ -33,6 +33,7 @@ export const CACHE_KEYS = {
     DEFAULT_LOCATION: 'default_location',
     DEFAULT_SPECIES: 'default_species',
     DEFAULT_WATER_BODY: 'default_water_body',
+    DEFAULT_FORECAST_DAYS: 'default_forecast_days',
     NOTIFICATIONS_ENABLED: 'notifications_enabled',
     GEOCODE_CACHE_PREFIX: 'fishcast_geocode_cache_',
     WEATHER_CACHE_PREFIX: 'fishcast_weather_cache_',
