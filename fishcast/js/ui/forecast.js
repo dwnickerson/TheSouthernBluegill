@@ -606,7 +606,7 @@ export function renderForecast(data) {
 
     html += `
         <div class="action-buttons action-buttons-bottom">
-            <button class="action-btn" onclick="window.shareForecast()" aria-label="Share forecast">Share</button>
+            <button class="action-btn" onclick="window.shareForecast()" aria-label="Share forecast">Share Forecast</button>
         </div>
     `;
     
