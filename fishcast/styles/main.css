@@ -97,6 +97,37 @@
     --score-bad: #8d5b34;
 }
 
+
+[data-theme="largemouth-bass"] {
+    --bg-primary: #18290f;
+    --bg-secondary: rgba(34, 60, 21, 0.78);
+    --bg-card: rgba(18, 45, 16, 0.82);
+    --text-primary: #ecf5df;
+    --text-secondary: #bccda3;
+    --border-color: rgba(198, 219, 160, 0.24);
+    --input-bg: rgba(16, 37, 14, 0.9);
+    --shadow-sm: 0 12px 28px rgba(5, 12, 2, 0.32);
+    --shadow-md: 0 16px 40px rgba(5, 12, 2, 0.42);
+    --shadow-lg: 0 24px 54px rgba(5, 12, 2, 0.54);
+    --accent: #90ad3b;
+    --accent-hover: #abc851;
+    --gradient-primary: linear-gradient(140deg, #2d4f1f 0%, #90ad3b 58%, #1f2f17 100%);
+    --gradient-success: linear-gradient(130deg, #7ea33a 0%, #5f8730 100%);
+    --trend-panel-bg: rgba(15, 34, 13, 0.42);
+    --trend-grid-color: rgba(209, 227, 176, 0.2);
+    --trend-axis-label-color: #cdddb3;
+    --trend-axis-title-color: #dce8c8;
+    --trend-point-label-color: #f2f8e7;
+    --trend-temp-line: #9abf47;
+    --trend-precip-line: #7ea33a;
+    --trend-wind-line: #ceb465;
+    --score-excellent: #7ea33a;
+    --score-good: #90ad3b;
+    --score-fair: #bf9f4c;
+    --score-poor: #9b7538;
+    --score-bad: #704f2f;
+}
+
 body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     color: var(--text-primary);
@@ -116,6 +147,18 @@ body {
         radial-gradient(circle at 18% 16%, rgba(108, 197, 198, 0.3), transparent 42%),
         radial-gradient(circle at 80% 6%, rgba(159, 204, 59, 0.28), transparent 38%),
         radial-gradient(circle at 52% 118%, rgba(122, 154, 63, 0.28), transparent 52%),
+        var(--bg-primary);
+}
+
+
+[data-theme="largemouth-bass"] body {
+    background:
+        linear-gradient(to bottom, rgba(18, 35, 11, 0.65) 0%, rgba(18, 35, 11, 0.65) 24%, transparent 24%, transparent 50%, rgba(113, 145, 49, 0.56) 50%, rgba(113, 145, 49, 0.56) 76%, rgba(180, 199, 141, 0.62) 76%, rgba(180, 199, 141, 0.62) 100%),
+        radial-gradient(ellipse at 18% 50%, rgba(7, 18, 9, 0.72) 0 9%, transparent 10%),
+        radial-gradient(ellipse at 34% 50%, rgba(7, 18, 9, 0.74) 0 12%, transparent 13%),
+        radial-gradient(ellipse at 52% 50%, rgba(7, 18, 9, 0.76) 0 16%, transparent 17%),
+        radial-gradient(ellipse at 70% 50%, rgba(7, 18, 9, 0.74) 0 12%, transparent 13%),
+        radial-gradient(ellipse at 86% 50%, rgba(7, 18, 9, 0.72) 0 9%, transparent 10%),
         var(--bg-primary);
 }
 .container {
@@ -414,6 +457,13 @@ button[type="submit"]:hover,
     background: linear-gradient(140deg, color-mix(in oklab, #9fcc3b 36%, transparent), transparent 64%);
     mix-blend-mode: soft-light;
     opacity: 0.42;
+}
+
+
+[data-theme="largemouth-bass"] .weather-radar-tint {
+    background: linear-gradient(140deg, color-mix(in oklab, #90ad3b 38%, transparent), transparent 64%);
+    mix-blend-mode: multiply;
+    opacity: 0.44;
 }
 
 .detail-card {
