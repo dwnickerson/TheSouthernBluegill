@@ -22,6 +22,34 @@ function average(values) {
     return finite.reduce((sum, value) => sum + value, 0) / finite.length;
 }
 
+function getDiurnalResponseByWaterType(waterType) {
+    if (waterType === 'pond') {
+        return {
+            solarGain: 0.34,
+            airCoupling: 0.28,
+            windDamping: 0.025
+        };
+    }
+    if (waterType === 'lake') {
+        return {
+            solarGain: 0.2,
+            airCoupling: 0.18,
+            windDamping: 0.02
+        };
+    }
+    return {
+        solarGain: 0.14,
+        airCoupling: 0.12,
+        windDamping: 0.015
+    };
+}
+
+function getPeriodTargetHour(period) {
+    if (period === 'morning') return 9;
+    if (period === 'afternoon') return 15;
+    return 12;
+}
+
 function normalizeAirTempToF(value, tempUnit = 'F') {
     if (!Number.isFinite(value)) return null;
     if (value > 140 || value < -90) return null;
@@ -654,6 +682,98 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
     }
 
     return temps;
+}
+
+// Estimate morning/midday/afternoon water temperatures from a daily surface estimate.
+// Useful for shallow systems where intraday heating/cooling can exceed ±2-4°F.
+export function estimateWaterTempByPeriod({
+    dailySurfaceTemp,
+    waterType,
+    hourly,
+    timezone = 'America/Chicago',
+    date = new Date(),
+    period = 'midday'
+}) {
+    if (!Number.isFinite(dailySurfaceTemp)) return null;
+
+    const hourlyTimes = Array.isArray(hourly?.time) ? hourly.time : [];
+    const hourlyAir = Array.isArray(hourly?.temperature_2m) ? hourly.temperature_2m : [];
+    const hourlyCloud = Array.isArray(hourly?.cloud_cover) ? hourly.cloud_cover : [];
+    const hourlyWind = Array.isArray(hourly?.wind_speed_10m) ? hourly.wind_speed_10m : [];
+
+    if (!hourlyTimes.length || !hourlyAir.length) {
+        return Math.round(dailySurfaceTemp * 10) / 10;
+    }
+
+    const periodHour = getPeriodTargetHour(period);
+    const dateKey = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(date);
+
+    const dayIndices = hourlyTimes
+        .map((timeValue, index) => {
+            const hourDate = new Date(timeValue);
+            const localDate = new Intl.DateTimeFormat('en-CA', {
+                timeZone: timezone,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(hourDate);
+            const localHour = Number(new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone,
+                hour: '2-digit',
+                hour12: false
+            }).format(hourDate));
+            return { index, localDate, localHour };
+        })
+        .filter((entry) => entry.localDate === dateKey);
+
+    if (!dayIndices.length) {
+        return Math.round(dailySurfaceTemp * 10) / 10;
+    }
+
+    const airSeries = dayIndices
+        .map(({ index }) => normalizeAirTempToF(hourlyAir[index], 'F'))
+        .filter(Number.isFinite);
+    const windSeries = dayIndices
+        .map(({ index }) => normalizeLikelyWindMph(hourlyWind[index]))
+        .filter(Number.isFinite);
+    const cloudSeries = dayIndices
+        .map(({ index }) => hourlyCloud[index])
+        .filter(Number.isFinite);
+
+    if (!airSeries.length) {
+        return Math.round(dailySurfaceTemp * 10) / 10;
+    }
+
+    const targetEntry = dayIndices.reduce((best, entry) => {
+        if (!best) return entry;
+        const currentDelta = Math.abs(entry.localHour - periodHour);
+        const bestDelta = Math.abs(best.localHour - periodHour);
+        return currentDelta < bestDelta ? entry : best;
+    }, null);
+    const targetIndex = targetEntry?.index ?? -1;
+    const targetAir = normalizeAirTempToF(hourlyAir[targetIndex], 'F');
+    const dailyAirMean = average(airSeries) || targetAir || 0;
+    const dailyAirRange = Math.max(...airSeries) - Math.min(...airSeries);
+    const cloudMean = average(cloudSeries) || 50;
+    const windMean = average(windSeries) || 0;
+    const response = getDiurnalResponseByWaterType(waterType);
+
+    const normalizedHour = clamp((periodHour - 6) / 12, 0, 1);
+    const solarPhase = Math.sin(Math.PI * normalizedHour);
+    const cloudDamping = clamp(1 - ((cloudMean / 100) * 0.6), 0.25, 1);
+    const windDamping = clamp(1 - (windMean * response.windDamping), 0.5, 1);
+
+    const solarTerm = dailyAirRange * response.solarGain * solarPhase * cloudDamping * windDamping;
+    const airAnomalyTerm = Number.isFinite(targetAir)
+        ? (targetAir - dailyAirMean) * response.airCoupling * windDamping
+        : 0;
+
+    return Math.round(clamp(dailySurfaceTemp + solarTerm + airAnomalyTerm, 32, 95) * 10) / 10;
 }
 
 // Get complete temperature profile
