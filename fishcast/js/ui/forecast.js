@@ -508,13 +508,6 @@ export function renderForecast(data) {
     const temp4ft = estimateTempByDepth(waterTemp, waterType, 4, new Date()).toFixed(1);
     const temp10ft = estimateTempByDepth(waterTemp, waterType, 10, new Date()).toFixed(1);
     const temp20ft = estimateTempByDepth(waterTemp, waterType, 20, new Date()).toFixed(1);
-    const todaySummary = `${getWeatherDescription(weather.forecast.current.weather_code)} with a ${precipProb}% rain chance. ` +
-        `Air ranges from ${todayLowTemp.toFixed(0)}°F to ${todayHighTemp.toFixed(0)}°F. ` +
-        `Feels like ${feelsLikeTemp.toFixed(0)}°F. ` +
-        `Expected precipitation: ${todayPrecipIn.toFixed(2)} in. ` +
-        `Water temps: Surface ${surfaceTemp}°F | 2ft ${temp2ft}°F | 4ft ${temp4ft}°F | 10ft ${temp10ft}°F | 20ft ${temp20ft}°F. ` +
-        `Wind: ${windSpeed.toFixed(0)} mph from the ${windDir}. ` +
-        `Pressure trend: ${pTrend}.`;
     
     // NEW: Water clarity badge
     const clarityIcons = {
@@ -556,7 +549,6 @@ export function renderForecast(data) {
                 <div class="summary-card"><div class="label">Water surface</div><div class="value">${surfaceTemp}°F</div></div>
                 <div class="summary-card"><div class="label">Wind</div><div class="value">${windSpeed.toFixed(0)} mph ${windDir}</div></div>
             </div>
-            <div class="location-info">${todaySummary}</div>
         </div>
 
         ${renderTrendCharts(weather)}
