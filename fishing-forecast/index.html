@@ -1606,7 +1606,7 @@
             const historicalResponse = await fetch(historicalUrl);
             const historicalData = await historicalResponse.json();
             
-            const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code&hourly=temperature_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code,precipitation_probability,precipitation&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&temperature_unit=fahrenheit&timezone=auto&forecast_days=${days}`;
+            const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code&hourly=temperature_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code,precipitation_probability,precipitation&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,sunrise,sunset&temperature_unit=fahrenheit&timezone=auto&forecast_days=${days}`;
             
             const forecastResponse = await fetch(forecastUrl);
             const forecastData = await forecastResponse.json();
@@ -2289,6 +2289,7 @@
                     const windSpeed = kmhToMph(dayWeather.current.wind_speed_10m);
                     const windDir = getWindDirection(forecast.hourly.wind_direction_10m[safeHourIndex] || 0);
                     const precip = forecast.daily.precipitation_probability_max[i] || 0;
+                    const precipAmountIn = mmToIn(forecast.daily.precipitation_sum?.[i] || 0);
                     const pressure = dayWeather.hourly.surface_pressure[0] || forecast.current.surface_pressure;
                     const pressureTrend = getPressureTrend(dayWeather.hourly.surface_pressure);
                     const clouds = dayWeather.current.cloud_cover;
@@ -2317,7 +2318,7 @@
                         wind: `${windSpeed.toFixed(1)} mph ${windDir}`,
                         pressure: `${(pressure * 0.02953).toFixed(2)} inHg (${pressureTrend.replace('_', ' ')})`,
                         clouds: `${clouds}%`,
-                        precip: `${precip}%`,
+                        precip: `${precip}% (${precipAmountIn.toFixed(2)} in)`,
                         sunriseSunset: `${formatTime(forecast.daily.sunrise[i])} / ${formatTime(forecast.daily.sunset[i])}`,
                         fishPhase: dayScore.phase.replace('_', ' '),
                         solunar: {
@@ -2356,7 +2357,7 @@
                             </div>
                             <div class="weather-detail">
                                 <span class="weather-label">Precip</span>
-                                <span class="weather-value">${precip}%</span>
+                                <span class="weather-value">${precip}% (${precipAmountIn.toFixed(2)} in)</span>
                             </div>
                             <div class="weather-detail">
                                 <span class="weather-label">Fish Phase</span>
