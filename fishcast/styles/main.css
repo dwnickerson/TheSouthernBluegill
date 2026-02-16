@@ -161,6 +161,37 @@
     --score-bad: #b0b0b0;
 }
 
+
+[data-theme="bluegill"] {
+    --bg-primary: #1a3420;
+    --bg-secondary: rgba(48, 88, 43, 0.78);
+    --bg-card: rgba(36, 72, 36, 0.82);
+    --text-primary: #f5f8eb;
+    --text-secondary: #d2dfad;
+    --border-color: rgba(214, 233, 154, 0.26);
+    --input-bg: rgba(35, 66, 35, 0.9);
+    --shadow-sm: 0 12px 28px rgba(14, 23, 8, 0.34);
+    --shadow-md: 0 16px 40px rgba(14, 23, 8, 0.44);
+    --shadow-lg: 0 24px 54px rgba(14, 23, 8, 0.56);
+    --accent: #8fcf33;
+    --accent-hover: #a8df4b;
+    --gradient-primary: linear-gradient(140deg, #2c552a 0%, #8fcf33 58%, #f7b31c 100%);
+    --gradient-success: linear-gradient(130deg, #6caf2e 0%, #8fcf33 100%);
+    --trend-panel-bg: rgba(25, 52, 24, 0.44);
+    --trend-grid-color: rgba(222, 236, 174, 0.2);
+    --trend-axis-label-color: #d4e3b0;
+    --trend-axis-title-color: #e0ebc4;
+    --trend-point-label-color: #f6f9ec;
+    --trend-temp-line: #bcd628;
+    --trend-precip-line: #53c0c8;
+    --trend-wind-line: #f7b31c;
+    --score-excellent: #90c032;
+    --score-good: #b2cf32;
+    --score-fair: #dbc72b;
+    --score-poor: #dca72e;
+    --score-bad: #8a7138;
+}
+
 body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     color: var(--text-primary);
@@ -250,6 +281,27 @@ body {
         radial-gradient(circle at 14% 10%, rgba(255, 255, 255, 0.9), transparent 36%),
         radial-gradient(circle at 86% 92%, rgba(215, 215, 215, 0.26), transparent 38%),
         linear-gradient(180deg, #fafaf8 0%, #f2f2ef 100%),
+        var(--bg-primary);
+}
+
+
+[data-theme="bluegill"] body {
+    background:
+        linear-gradient(to bottom,
+            rgba(112, 156, 39, 0.92) 0%, rgba(112, 156, 39, 0.92) 24%,
+            rgba(148, 203, 0, 0.92) 24%, rgba(148, 203, 0, 0.92) 48%,
+            rgba(191, 218, 0, 0.9) 48%, rgba(191, 218, 0, 0.9) 72%,
+            rgba(247, 178, 21, 0.92) 72%, rgba(247, 178, 21, 0.92) 100%),
+        radial-gradient(ellipse at -3% 50%, rgba(1, 4, 16, 0.96) 0 13%, transparent 13.4%),
+        radial-gradient(ellipse at 18% 50%, rgba(74, 193, 202, 0.92) 0 18%, transparent 18.3%),
+        linear-gradient(to right,
+            transparent 0%, transparent 37%,
+            rgba(130, 130, 63, 0.94) 37%, rgba(130, 130, 63, 0.94) 43%,
+            transparent 43%, transparent 56%,
+            rgba(130, 130, 63, 0.94) 56%, rgba(130, 130, 63, 0.94) 62%,
+            transparent 62%, transparent 73%,
+            rgba(130, 130, 63, 0.94) 73%, rgba(130, 130, 63, 0.94) 79%,
+            transparent 79%, transparent 100%),
         var(--bg-primary);
 }
 
@@ -563,6 +615,13 @@ button[type="submit"]:hover,
     background: linear-gradient(140deg, color-mix(in oklab, #3a3a3a 22%, transparent), transparent 66%);
     mix-blend-mode: multiply;
     opacity: 0.26;
+}
+
+
+[data-theme="bluegill"] .weather-radar-tint {
+    background: linear-gradient(140deg, color-mix(in oklab, #8fcf33 34%, transparent), color-mix(in oklab, #53c0c8 16%, transparent) 60%, transparent 82%);
+    mix-blend-mode: multiply;
+    opacity: 0.42;
 }
 
 .detail-card {
