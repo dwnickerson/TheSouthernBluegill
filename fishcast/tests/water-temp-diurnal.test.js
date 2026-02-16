@@ -100,3 +100,35 @@ test('cloud and wind damping suppress intraday spread', () => {
 
   assert.ok(dampedSpread < clearSpread, `damped spread (${dampedSpread.toFixed(1)}°F) should be lower than clear spread (${clearSpread.toFixed(1)}°F)`);
 });
+
+test('overcast pond setup tempers warm-air anomaly impact', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-02-10',
+    // Pattern mirrors Tupelo field conditions: cooler AM, warmer PM air.
+    temps: [49, 48, 48, 47, 47, 48, 51, 54, 58, 61, 63, 65, 66, 67, 67, 67, 66, 65, 62, 59, 56, 54, 52, 51],
+    clouds: Array(24).fill(100),
+    winds: Array(24).fill(6)
+  });
+
+  const morning = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 48,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-02-10T07:00:00Z'),
+    period: 'morning'
+  });
+
+  const afternoon = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 48,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-02-10T17:00:00Z'),
+    period: 'afternoon'
+  });
+
+  const spread = afternoon - morning;
+  assert.ok(spread <= 2.2, `fully overcast spread should stay muted, got ${spread.toFixed(1)}°F`);
+  assert.ok(spread >= 0.4, `some daytime warming should remain, got ${spread.toFixed(1)}°F`);
+});
