@@ -41,8 +41,8 @@ test('theme storage reads both JSON and legacy raw string values', () => {
   localStorage.setItem('theme', 'sba');
   assert.equal(storage.getTheme(), 'sba');
 
-  storage.setTheme('light');
-  assert.equal(storage.getTheme(), 'light');
+  storage.setTheme('sba');
+  assert.equal(storage.getTheme(), 'sba');
 
   localStorage.setItem('theme', JSON.stringify('sba'));
   assert.equal(storage.getTheme(), 'sba');

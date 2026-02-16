@@ -245,7 +245,7 @@ export const storage = {
     // Theme management
     getTheme() {
         const rawTheme = safeGetRaw(CACHE_KEYS.THEME);
-        if (rawTheme === null) return 'light';
+        if (rawTheme === null) return 'sba';
 
         const validThemes = new Set(['light', 'dark', 'largemouth-bass', 'crappie', 'sba', 'bluegill']);
 
