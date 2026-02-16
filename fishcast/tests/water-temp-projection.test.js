@@ -117,3 +117,60 @@ test('projection respects km/h wind units from forecast metadata', () => {
   const day1Drop = projected[1] - projected[0];
   assert.ok(day1Drop > -2.5, `km/h winds should not be treated as mph; got day-1 change ${day1Drop.toFixed(2)}°F`);
 });
+
+
+test('synoptic events can drive large physically plausible changes for lakes and ponds', () => {
+  const forecast = {
+    daily: {
+      ...forecastDailyTemplate,
+      temperature_2m_mean: [58, 74, 77, 79, 80, 81],
+      temperature_2m_min: [50, 67, 70, 72, 73, 74],
+      temperature_2m_max: [66, 81, 84, 86, 87, 88],
+      cloud_cover_mean: [80, 35, 28, 26, 30, 32],
+      precipitation_sum: [0.0, 22, 16, 8, 2, 0],
+      wind_speed_10m_mean: [6, 22, 20, 16, 12, 10],
+      wind_speed_10m_max: [10, 38, 35, 28, 20, 16]
+    }
+  };
+
+  const lakeProjected = projectWaterTemps(56, forecast, 'lake', 34.2, {
+    anchorDate: new Date('2026-03-20T12:00:00Z')
+  });
+  const pondProjected = projectWaterTemps(56, forecast, 'pond', 34.2, {
+    anchorDate: new Date('2026-03-20T12:00:00Z')
+  });
+
+  const lakeDay1Rise = lakeProjected[1] - lakeProjected[0];
+  const pondDay1Rise = pondProjected[1] - pondProjected[0];
+
+  assert.ok(lakeDay1Rise >= 2.0, `lake should respond to strong front-driven warming, got ${lakeDay1Rise.toFixed(2)}°F`);
+  assert.ok(pondDay1Rise >= 3.0, `pond should respond strongly to front-driven warming, got ${pondDay1Rise.toFixed(2)}°F`);
+});
+
+test('reservoir remains more inertial than lakes during the same synoptic event', () => {
+  const forecast = {
+    daily: {
+      ...forecastDailyTemplate,
+      temperature_2m_mean: [58, 74, 77, 79, 80, 81],
+      temperature_2m_min: [50, 67, 70, 72, 73, 74],
+      temperature_2m_max: [66, 81, 84, 86, 87, 88],
+      cloud_cover_mean: [80, 35, 28, 26, 30, 32],
+      precipitation_sum: [0.0, 22, 16, 8, 2, 0],
+      wind_speed_10m_mean: [6, 22, 20, 16, 12, 10],
+      wind_speed_10m_max: [10, 38, 35, 28, 20, 16]
+    }
+  };
+
+  const reservoirProjected = projectWaterTemps(56, forecast, 'reservoir', 34.2, {
+    anchorDate: new Date('2026-03-20T12:00:00Z')
+  });
+  const lakeProjected = projectWaterTemps(56, forecast, 'lake', 34.2, {
+    anchorDate: new Date('2026-03-20T12:00:00Z')
+  });
+
+  const reservoirDay1Rise = reservoirProjected[1] - reservoirProjected[0];
+  const lakeDay1Rise = lakeProjected[1] - lakeProjected[0];
+
+  assert.ok(reservoirDay1Rise > 0.8, `reservoir should still react to major forcing, got ${reservoirDay1Rise.toFixed(2)}°F`);
+  assert.ok(reservoirDay1Rise < lakeDay1Rise, `reservoir should warm less than lake under same forcing (${reservoirDay1Rise.toFixed(2)} vs ${lakeDay1Rise.toFixed(2)}°F)`);
+});
