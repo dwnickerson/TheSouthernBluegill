@@ -29,11 +29,12 @@
     --trend-temp-line: #7ed6a5;
     --trend-precip-line: #62d0ff;
     --trend-wind-line: #f8c471;
-    --score-excellent: #2ecf9e;
-    --score-good: #47b2ff;
-    --score-fair: #ffbf57;
-    --score-poor: #ff8a72;
-    --score-bad: #ff5f7a;
+    /* Ordered score ramp (worst -> best): red -> orange -> amber -> blue -> indigo */
+    --score-excellent: #253494;
+    --score-good: #2c7fb8;
+    --score-fair: #d4a017;
+    --score-poor: #e67e22;
+    --score-bad: #c0392b;
 }
 
 [data-theme="light"] {
@@ -55,11 +56,11 @@
     --trend-temp-line: #2ca16f;
     --trend-precip-line: #0d8fd6;
     --trend-wind-line: #d08d1c;
-    --score-excellent: #0f8f61;
-    --score-good: #1169c9;
-    --score-fair: #ad6c05;
-    --score-poor: #c04b18;
-    --score-bad: #bc1f48;
+    --score-excellent: #253494;
+    --score-good: #2c7fb8;
+    --score-fair: #b18108;
+    --score-poor: #bf5f16;
+    --score-bad: #a93226;
 }
 
 [data-theme="dark"] {
