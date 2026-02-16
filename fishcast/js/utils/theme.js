@@ -1,8 +1,10 @@
 import { storage } from '../services/storage.js';
 
+const VALID_THEMES = new Set(['light', 'dark', 'bluegill']);
+
 export function applySavedTheme() {
     const savedTheme = storage.getTheme();
-    const theme = savedTheme === 'dark' ? 'dark' : 'light';
+    const theme = VALID_THEMES.has(savedTheme) ? savedTheme : 'light';
 
     document.documentElement.setAttribute('data-theme', theme);
     return theme;
