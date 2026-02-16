@@ -206,3 +206,70 @@ test('late-winter warm front can produce an approximately 2°F day-over-day lake
   assert.ok(feb18ToFeb19Rise >= 1.8, `late-winter frontal setup should allow roughly 2°F rises, got ${feb18ToFeb19Rise.toFixed(2)}°F`);
   assert.ok(feb18ToFeb19Rise <= 3.1, `lake response should remain physically bounded, got ${feb18ToFeb19Rise.toFixed(2)}°F`);
 });
+
+
+test('synoptic precipitation signal is tempered when rain probability is low', () => {
+  const forecastLowProb = {
+    daily_units: { precipitation_sum: 'inch' },
+    daily: {
+      ...forecastDailyTemplate,
+      temperature_2m_mean: [54, 58, 59, 58, 57, 56],
+      precipitation_sum: [0, 1.0, 0.8, 0.2, 0, 0],
+      precipitation_probability_max: [0, 10, 10, 20, 5, 5],
+      wind_speed_10m_mean: [8, 16, 14, 10, 8, 8],
+      wind_speed_10m_max: [12, 24, 20, 14, 12, 12]
+    }
+  };
+
+  const forecastHighProb = {
+    daily_units: { precipitation_sum: 'inch' },
+    daily: {
+      ...forecastLowProb.daily,
+      precipitation_probability_max: [0, 95, 90, 75, 20, 20]
+    }
+  };
+
+  const lowProb = projectWaterTemps(52, forecastLowProb, 'lake', 34.1, {
+    anchorDate: new Date('2026-03-01T12:00:00Z')
+  });
+  const highProb = projectWaterTemps(52, forecastHighProb, 'lake', 34.1, {
+    anchorDate: new Date('2026-03-01T12:00:00Z')
+  });
+
+  const lowProbDay1Change = lowProb[1] - lowProb[0];
+  const highProbDay1Change = highProb[1] - highProb[0];
+
+  assert.ok(
+    highProbDay1Change > lowProbDay1Change,
+    `higher executed rain signal should increase synoptic forcing (${highProbDay1Change.toFixed(2)} vs ${lowProbDay1Change.toFixed(2)}°F)`
+  );
+});
+
+test('projection trend bootstrap incorporates recent historical air temperatures', () => {
+  const forecast = {
+    daily: {
+      ...forecastDailyTemplate,
+      temperature_2m_mean: [52, 53, 54, 55, 56, 57],
+      cloud_cover_mean: [45, 44, 43, 42, 41, 40],
+      wind_speed_10m_mean: [6, 6, 6, 6, 6, 6],
+      wind_speed_10m_max: [10, 10, 10, 10, 10, 10]
+    }
+  };
+
+  const withoutHistory = projectWaterTemps(49.5, forecast, 'lake', 34.7, {
+    anchorDate: new Date('2026-02-20T12:00:00Z')
+  });
+  const withHistory = projectWaterTemps(49.5, forecast, 'lake', 34.7, {
+    anchorDate: new Date('2026-02-20T12:00:00Z'),
+    historicalDaily: {
+      temperature_2m_mean: [44, 47, 50, 51],
+      cloud_cover_mean: [70, 68, 65, 60]
+    }
+  });
+
+  const day1Delta = Math.abs(withHistory[1] - withoutHistory[1]);
+  assert.ok(
+    day1Delta >= 0.2,
+    `historical context should materially influence day-1 projection, got ${day1Delta.toFixed(2)}°F`
+  );
+});

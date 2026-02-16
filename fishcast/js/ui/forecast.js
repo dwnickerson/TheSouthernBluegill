@@ -690,6 +690,8 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
         {
             anchorDate: runNow,
             tempUnit: weather?.meta?.units?.temp || 'F',
+            precipUnit: weather?.meta?.units?.precip || 'in',
+            historicalDaily: weather?.historical?.daily || {},
             debug: localStorage.getItem('fishcast_debug_water_temp') === 'true'
         }
     );
