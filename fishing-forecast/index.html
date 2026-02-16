@@ -1122,6 +1122,23 @@
                             <option value="reservoir">Reservoir (> 500 acres)</option>
                         </select>
                     </div>
+                    <div style="margin-top: 15px;">
+                        <label style="display: block; margin-bottom: 5px; color: var(--text-primary); font-size: 0.9rem;">
+                            Default Forecast Days
+                        </label>
+                        <select id="defaultForecastDays"
+                                style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 2px; background: var(--bg-secondary); color: var(--text-primary);">
+                            <option value="">None (use current value)</option>
+                            <option value="3">3 days</option>
+                            <option value="4">4 days</option>
+                            <option value="5">5 days</option>
+                            <option value="6">6 days</option>
+                            <option value="7">7 days</option>
+                            <option value="8">8 days</option>
+                            <option value="9">9 days</option>
+                            <option value="10">10 days</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -2832,6 +2849,7 @@
             document.getElementById('defaultLocation').value = localStorage.getItem('default_location') || '';
             document.getElementById('defaultSpecies').value = localStorage.getItem('default_species') || '';
             document.getElementById('defaultWaterBody').value = localStorage.getItem('default_water_body') || '';
+            document.getElementById('defaultForecastDays').value = localStorage.getItem('default_forecast_days') || '';
         }
 
         function saveSettings() {
@@ -2839,6 +2857,7 @@
             localStorage.setItem('default_location', document.getElementById('defaultLocation').value);
             localStorage.setItem('default_species', document.getElementById('defaultSpecies').value);
             localStorage.setItem('default_water_body', document.getElementById('defaultWaterBody').value);
+            localStorage.setItem('default_forecast_days', document.getElementById('defaultForecastDays').value);
             
             showNotification('Settings saved!');
             
@@ -2857,6 +2876,13 @@
             if (localStorage.getItem('default_water_body')) {
                 waterTypeSelect.value = localStorage.getItem('default_water_body');
             }
+
+            const daysInput = document.getElementById('days');
+            const daysValue = document.getElementById('daysValue');
+            if (localStorage.getItem('default_forecast_days')) {
+                daysInput.value = localStorage.getItem('default_forecast_days');
+                daysValue.textContent = localStorage.getItem('default_forecast_days');
+            }
             
             closeSettings();
         }
@@ -2870,6 +2896,7 @@
                     default_location: localStorage.getItem('default_location') || '',
                     default_species: localStorage.getItem('default_species') || '',
                     default_water_body: localStorage.getItem('default_water_body') || '',
+                    default_forecast_days: localStorage.getItem('default_forecast_days') || '',
                     notifications_enabled: localStorage.getItem('notifications_enabled') || 'false'
                 },
                 exported_at: new Date().toISOString()
@@ -2900,6 +2927,7 @@
             localStorage.removeItem('default_location');
             localStorage.removeItem('default_species');
             localStorage.removeItem('default_water_body');
+            localStorage.removeItem('default_forecast_days');
             localStorage.removeItem('notifications_enabled');
 
             showNotification('All data cleared!', 'error');
@@ -2936,6 +2964,7 @@
             const defaultLocation = localStorage.getItem('default_location');
             const defaultSpecies = localStorage.getItem('default_species');
             const defaultWaterBody = localStorage.getItem('default_water_body');
+            const defaultForecastDays = localStorage.getItem('default_forecast_days');
 
             if (defaultLocation) {
                 document.getElementById('location').value = defaultLocation;
@@ -2945,6 +2974,10 @@
             }
             if (defaultWaterBody) {
                 document.getElementById('waterType').value = defaultWaterBody;
+            }
+            if (defaultForecastDays) {
+                document.getElementById('days').value = defaultForecastDays;
+                document.getElementById('daysValue').textContent = defaultForecastDays;
             }
         });
     </script>
