@@ -15,13 +15,17 @@ function buildWeather({
     windKmh = 10,
     weatherCode = 1,
     precipDaily = [0, 0, 0],
-    precipProb = 20
+    precipProb = 20,
+    windUnits = 'kmh'
 }) {
     return {
         current: {
             wind_speed_10m: windKmh,
             cloud_cover: cloudCover,
             weather_code: weatherCode
+        },
+        current_units: {
+            wind_speed_10m: windUnits
         },
         daily: {
             precipitation_sum: precipDaily
@@ -105,4 +109,20 @@ test('score always bounded [0,100] and never NaN', () => {
     const result = calculateFishingScore(weather, 35, 'smallmouth', 0);
     assert.ok(Number.isFinite(result.score));
     assert.ok(result.score >= 0 && result.score <= 100);
+});
+
+
+test('wind units that include mp/h are treated as mph without reconversion', () => {
+    const weather = buildWeather({
+        pressures: [1016, 1016, 1015, 1015, 1014, 1014, 1014, 1013, 1013, 1013, 1012],
+        pressureTimes: pastHours(11),
+        windKmh: 6,
+        windUnits: 'mp/h'
+    });
+
+    const result = calculateFishingScore(weather, 70, 'bluegill', 50);
+    const windFactor = result.factors.find((factor) => factor.name.startsWith('Wind ('));
+
+    assert.ok(windFactor, 'expected wind factor to be present');
+    assert.match(windFactor.name, /Wind \(6\.0 mph\)/);
 });

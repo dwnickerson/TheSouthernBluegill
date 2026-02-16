@@ -31,10 +31,23 @@ function toTempF(value, weather) {
 function toWindMph(value, weather) {
     if (!Number.isFinite(value)) return 0;
     const units = String(weather?.forecast?.hourly_units?.wind_speed_10m || weather?.forecast?.current_units?.wind_speed_10m || 'kmh').toLowerCase();
-    if (units.includes('mph')) return value;
+    if (units.includes('mph') || units.includes('mp/h') || units.includes('mi/h') || units.includes('mile')) return value;
     if (units.includes('m/s') || units.includes('ms')) return value * 2.23694;
     if (units.includes('kn')) return value * 1.15078;
     return value * 0.621371;
+}
+
+function calculateDewPointF(tempF, humidityPercent) {
+    if (!Number.isFinite(tempF) || !Number.isFinite(humidityPercent) || humidityPercent <= 0) {
+        return null;
+    }
+
+    const tempC = (tempF - 32) * (5 / 9);
+    const a = 17.625;
+    const b = 243.04;
+    const gamma = Math.log(humidityPercent / 100) + ((a * tempC) / (b + tempC));
+    const dewPointC = (b * gamma) / (a - gamma);
+    return (dewPointC * (9 / 5)) + 32;
 }
 
 // Get weather icon + label based on code
@@ -508,6 +521,8 @@ export function renderForecast(data) {
     const todayHighTemp = toTempF(weather.forecast.daily.temperature_2m_max[0], weather);
     const todayLowTemp = toTempF(weather.forecast.daily.temperature_2m_min[0], weather);
     const feelsLikeTemp = toTempF(weather.forecast.current.apparent_temperature, weather);
+    const humidity = Number(weather.forecast.current.relative_humidity_2m) || 0;
+    const dewPointF = calculateDewPointF(toTempF(weather.forecast.current.temperature_2m, weather), humidity);
     const surfaceTemp = waterTemp.toFixed(1);
     const temp2ft = estimateTempByDepth(waterTemp, waterType, 2, new Date()).toFixed(1);
     const temp4ft = estimateTempByDepth(waterTemp, waterType, 4, new Date()).toFixed(1);
@@ -553,6 +568,7 @@ export function renderForecast(data) {
                 <div class="summary-card"><div class="label">Feels like</div><div class="value">${feelsLikeTemp.toFixed(0)}°F</div></div>
                 <div class="summary-card"><div class="label">Water surface</div><div class="value">${surfaceTemp}°F</div></div>
                 <div class="summary-card"><div class="label">Wind</div><div class="value">${windSpeed.toFixed(0)} mph ${windDir}</div></div>
+                <div class="summary-card"><div class="label">Humidity / Dew point</div><div class="value">${humidity.toFixed(0)}% · ${dewPointF?.toFixed(0) ?? 'N/A'}°F</div></div>
             </div>
         </div>
 
@@ -614,7 +630,11 @@ export function renderForecast(data) {
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Humidity</span>
-                    <span class="detail-value">${weather.forecast.current.relative_humidity_2m}%</span>
+                    <span class="detail-value">${humidity}%</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Dew Point</span>
+                    <span class="detail-value">${dewPointF?.toFixed(1) ?? 'N/A'}°F</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Cloud Cover</span>
