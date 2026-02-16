@@ -93,6 +93,34 @@ function getSmoothTrendKicker(trendFPerDay) {
     return ramp * trendFPerDay * 0.5;
 }
 
+function getWaterTypeTrendGain(waterType) {
+    // Surface layers in high-volume reservoirs respond slowly to synoptic swings.
+    if (waterType === 'reservoir') return 0.12;
+    if (waterType === 'lake') return 0.22;
+    return 0.35;
+}
+
+function getDailyPhysicsChangeLimit(waterType, prevTemp, airTemp, windMph) {
+    const body = WATER_BODIES_V2[waterType];
+    if (!body) return 1.5;
+
+    // Base response envelope from mixed-layer thermal mass.
+    // Large reservoirs are intentionally tighter than max_daily_change because
+    // the forecast model represents whole-reservoir surface behavior, not small coves.
+    const baseLimit = waterType === 'reservoir'
+        ? 0.95
+        : waterType === 'lake'
+            ? 1.35
+            : 2.0;
+
+    const deltaAirWater = Math.abs((Number.isFinite(airTemp) ? airTemp : prevTemp) - prevTemp);
+    const thermalForcingBoost = clamp(deltaAirWater / 30, 0, 1) * (waterType === 'reservoir' ? 0.25 : 0.5);
+    const windBoost = clamp((Number.isFinite(windMph) ? windMph : 0) / 30, 0, 1) * (waterType === 'reservoir' ? 0.1 : 0.25);
+
+    const strictCap = waterType === 'reservoir' ? 1.2 : body.max_daily_change;
+    return clamp(baseLimit + thermalForcingBoost + windBoost, 0.4, strictCap);
+}
+
 function getRelaxedDailyChangeLimit(baseLimit, userReports, coords) {
     if (!Array.isArray(userReports) || userReports.length < 2) {
         return baseLimit;
@@ -489,7 +517,7 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
         if (trendWindow.length >= 2) {
             trendFPerDay = (trendWindow[trendWindow.length - 1] - trendWindow[0]) / (trendWindow.length - 1);
         }
-        const trendKicker = getSmoothTrendKicker(trendFPerDay);
+        const trendKicker = getSmoothTrendKicker(trendFPerDay) * getWaterTypeTrendGain(waterType);
 
         const windEstimate = getProjectionWindForMixing(daily, dayIndex, windUnit);
         const windEffect = calculateWindMixingEffect(
@@ -507,7 +535,8 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
             projectedTemp = (projectedTemp * (1 - reversionWeight)) + (seasonalBaseline * reversionWeight);
         }
 
-        const dailyDelta = clamp(projectedTemp - prevTemp, -body.max_daily_change, body.max_daily_change);
+        const dailyChangeLimit = getDailyPhysicsChangeLimit(waterType, prevTemp, airTemp, windEstimate.windMph);
+        const dailyDelta = clamp(projectedTemp - prevTemp, -dailyChangeLimit, dailyChangeLimit);
         projectedTemp = clamp(prevTemp + dailyDelta, 32, 95);
 
         if (options.debug === true) {

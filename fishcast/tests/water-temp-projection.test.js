@@ -117,3 +117,30 @@ test('projection respects km/h wind units from forecast metadata', () => {
   const day1Drop = projected[1] - projected[0];
   assert.ok(day1Drop > -2.5, `km/h winds should not be treated as mph; got day-1 change ${day1Drop.toFixed(2)}°F`);
 });
+
+
+test('reservoir projection remains thermally inertial under sharp forcing', () => {
+  const forecast = {
+    daily: {
+      ...forecastDailyTemplate,
+      temperature_2m_mean: [70, 80, 81, 82, 82, 83],
+      temperature_2m_min: [64, 73, 74, 75, 75, 76],
+      temperature_2m_max: [76, 87, 88, 89, 89, 90],
+      cloud_cover_mean: [45, 18, 16, 15, 20, 22],
+      wind_speed_10m_mean: [6, 10, 11, 9, 8, 7],
+      wind_speed_10m_max: [12, 20, 22, 18, 16, 14]
+    }
+  };
+
+  const projected = projectWaterTemps(66, forecast, 'reservoir', 34.2, {
+    anchorDate: new Date('2026-06-01T12:00:00Z')
+  });
+
+  const day1Rise = projected[1] - projected[0];
+  assert.ok(day1Rise <= 1.2, `reservoir day-1 rise should stay <= 1.2°F, got ${day1Rise.toFixed(2)}°F`);
+
+  for (let i = 1; i < projected.length; i++) {
+    const change = projected[i] - projected[i - 1];
+    assert.ok(Math.abs(change) <= 1.2, `reservoir day-${i} change should stay <= 1.2°F, got ${change.toFixed(2)}°F`);
+  }
+});
