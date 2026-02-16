@@ -174,3 +174,35 @@ test('reservoir remains more inertial than lakes during the same synoptic event'
   assert.ok(reservoirDay1Rise > 0.8, `reservoir should still react to major forcing, got ${reservoirDay1Rise.toFixed(2)}°F`);
   assert.ok(reservoirDay1Rise < lakeDay1Rise, `reservoir should warm less than lake under same forcing (${reservoirDay1Rise.toFixed(2)} vs ${lakeDay1Rise.toFixed(2)}°F)`);
 });
+
+test('late-winter warm front can produce an approximately 2°F day-over-day lake increase', () => {
+  const forecast = {
+    daily: {
+      time: [
+        '2026-02-16',
+        '2026-02-17',
+        '2026-02-18',
+        '2026-02-19',
+        '2026-02-20',
+        '2026-02-21',
+        '2026-02-22'
+      ],
+      temperature_2m_mean: [50, 52, 63.5, 67.5, 61, 54.5, 42.5],
+      temperature_2m_min: [43, 45, 58, 59, 53, 46, 36],
+      temperature_2m_max: [57, 59, 69, 76, 69, 63, 49],
+      cloud_cover_mean: [60, 58, 52, 68, 72, 70, 62],
+      precipitation_sum: [0, 0, 0.05, 0.3, 0.3, 0.2, 0.1],
+      wind_speed_10m_mean: [10, 13, 14, 20, 14, 18, 19],
+      wind_speed_10m_max: [15, 18, 20, 27, 20, 25, 26]
+    }
+  };
+
+  const projected = projectWaterTemps(47.8, forecast, 'lake', 34.5, {
+    anchorDate: new Date('2026-02-16T12:00:00Z')
+  });
+
+  const feb18ToFeb19Rise = projected[3] - projected[2];
+
+  assert.ok(feb18ToFeb19Rise >= 1.8, `late-winter frontal setup should allow roughly 2°F rises, got ${feb18ToFeb19Rise.toFixed(2)}°F`);
+  assert.ok(feb18ToFeb19Rise <= 3.1, `lake response should remain physically bounded, got ${feb18ToFeb19Rise.toFixed(2)}°F`);
+});
