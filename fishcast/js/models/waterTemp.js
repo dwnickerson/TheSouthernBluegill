@@ -44,6 +44,39 @@ function normalizeLikelyWindMph(value) {
     return value;
 }
 
+function toWindMph(value, unitHint = '') {
+    if (!Number.isFinite(value)) return null;
+    const normalizedUnit = String(unitHint || '').toLowerCase();
+
+    if (normalizedUnit.includes('mph') || normalizedUnit.includes('mp/h') || normalizedUnit.includes('mi/h') || normalizedUnit.includes('mile')) {
+        return value;
+    }
+    if (normalizedUnit.includes('m/s') || normalizedUnit.includes('ms')) {
+        return value * 2.23694;
+    }
+    if (normalizedUnit.includes('kn')) {
+        return value * 1.15078;
+    }
+    if (normalizedUnit.includes('km') || normalizedUnit.includes('kph')) {
+        return value * 0.621371;
+    }
+
+    return normalizeLikelyWindMph(value);
+}
+
+function getForecastWindUnit(forecastData) {
+    const dailyUnits = forecastData?.daily_units || {};
+    const hourlyUnits = forecastData?.hourly_units || {};
+    const currentUnits = forecastData?.current_units || {};
+    return (
+        dailyUnits.wind_speed_10m_mean ||
+        dailyUnits.wind_speed_10m_max ||
+        hourlyUnits.wind_speed_10m ||
+        currentUnits.wind_speed_10m ||
+        ''
+    );
+}
+
 function getSolarSensitivity(waterType, body) {
     if (waterType === 'river') return 0.65;
     if (waterType === 'reservoir') return 0.85;
@@ -193,13 +226,13 @@ function calculateWindMixingEffect(windSpeedMph, waterType, estimatedSurfaceTemp
     return 0;
 }
 
-function getProjectionWindMph(daily, dayIndex) {
-    const meanWind = normalizeLikelyWindMph(daily?.wind_speed_10m_mean?.[dayIndex]);
+function getProjectionWindMph(daily, dayIndex, windUnit = '') {
+    const meanWind = toWindMph(daily?.wind_speed_10m_mean?.[dayIndex], windUnit);
     if (Number.isFinite(meanWind)) {
         return { windMph: meanWind, source: 'daily.wind_speed_10m_mean' };
     }
 
-    const maxWind = normalizeLikelyWindMph(daily?.wind_speed_10m_max?.[dayIndex]);
+    const maxWind = toWindMph(daily?.wind_speed_10m_max?.[dayIndex], windUnit);
     if (Number.isFinite(maxWind)) {
         return {
             windMph: maxWind * WIND_FALLBACK_MAX_REDUCTION,
@@ -210,9 +243,9 @@ function getProjectionWindMph(daily, dayIndex) {
     return { windMph: 0, source: 'fallback_zero' };
 }
 
-function getProjectionWindForMixing(daily, dayIndex) {
-    const base = getProjectionWindMph(daily, dayIndex);
-    const maxWind = normalizeLikelyWindMph(daily?.wind_speed_10m_max?.[dayIndex]);
+function getProjectionWindForMixing(daily, dayIndex, windUnit = '') {
+    const base = getProjectionWindMph(daily, dayIndex, windUnit);
+    const maxWind = toWindMph(daily?.wind_speed_10m_max?.[dayIndex], windUnit);
 
     if (!Number.isFinite(maxWind) || !Number.isFinite(base.windMph) || maxWind <= base.windMph) {
         return base;
@@ -425,6 +458,7 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
     const tempMins = Array.isArray(daily.temperature_2m_min) ? daily.temperature_2m_min : [];
     const tempMaxes = Array.isArray(daily.temperature_2m_max) ? daily.temperature_2m_max : [];
     const tempUnit = options.tempUnit || 'F';
+    const windUnit = options.windUnit || getForecastWindUnit(forecastData);
     const anchorDate = options.anchorDate instanceof Date ? options.anchorDate : new Date();
 
     for (let dayIndex = 1; dayIndex < dayCount; dayIndex++) {
@@ -447,7 +481,7 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
         const thermalResponse = getThermalInertiaCoefficient(waterType, prevTemp, airTemp);
         const thermalEffect = (airTemp - prevTemp) * thermalResponse;
 
-        const windEstimate = getProjectionWindForMixing(daily, dayIndex);
+        const windEstimate = getProjectionWindForMixing(daily, dayIndex, windUnit);
         const windEffect = calculateWindMixingEffect(
             windEstimate.windMph,
             waterType,

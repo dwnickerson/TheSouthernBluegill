@@ -71,3 +71,27 @@ test('high-wind day cooling is bounded for warm-water/cool-air setup', () => {
   assert.ok(day1Drop >= -3.1, `cooling should be bounded, got ${day1Drop.toFixed(2)}°F`);
   assert.ok(day1Drop <= 0.5, `setup should not spuriously warm on high-wind cool-air day, got ${day1Drop.toFixed(2)}°F`);
 });
+
+
+test('projection respects km/h wind units from forecast metadata', () => {
+  const forecast = {
+    daily_units: {
+      wind_speed_10m_mean: 'km/h',
+      wind_speed_10m_max: 'km/h'
+    },
+    daily: {
+      ...forecastDailyTemplate,
+      temperature_2m_mean: [78, 77, 77, 76, 76, 75],
+      cloud_cover_mean: [40, 42, 44, 45, 46, 47],
+      wind_speed_10m_mean: [16, 22, 24, 20, 18, 16],
+      wind_speed_10m_max: [28, 34, 36, 30, 28, 26]
+    }
+  };
+
+  const projected = projectWaterTemps(79, forecast, 'lake', 34.8, {
+    anchorDate: new Date('2026-06-01T12:00:00Z')
+  });
+
+  const day1Drop = projected[1] - projected[0];
+  assert.ok(day1Drop > -2.5, `km/h winds should not be treated as mph; got day-1 change ${day1Drop.toFixed(2)}°F`);
+});
