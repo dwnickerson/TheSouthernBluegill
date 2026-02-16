@@ -38,7 +38,7 @@ function getSafeNumber(value, fallback = 0) {
 function toWindMph(value, units = 'kmh') {
     if (!Number.isFinite(value)) return 0;
     const unitText = String(units || 'kmh').toLowerCase();
-    if (unitText.includes('mph')) return value;
+    if (unitText.includes('mph') || unitText.includes('mp/h') || unitText.includes('mi/h') || unitText.includes('mile')) return value;
     if (unitText.includes('m/s') || unitText.includes('ms')) return value * 2.23694;
     if (unitText.includes('kn')) return value * 1.15078;
     return value * 0.621371;
