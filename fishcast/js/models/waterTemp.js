@@ -461,6 +461,8 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
     const windUnit = options.windUnit || getForecastWindUnit(forecastData);
     const anchorDate = options.anchorDate instanceof Date ? options.anchorDate : new Date();
 
+    const normalizedAirMeans = tempMeans.map((value) => normalizeAirTempToF(value, tempUnit));
+
     for (let dayIndex = 1; dayIndex < dayCount; dayIndex++) {
         const prevTemp = temps[dayIndex - 1];
         const meanTempRaw = Number.isFinite(tempMeans[dayIndex])
@@ -481,6 +483,14 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
         const thermalResponse = getThermalInertiaCoefficient(waterType, prevTemp, airTemp);
         const thermalEffect = (airTemp - prevTemp) * thermalResponse;
 
+        const trendWindowStart = Math.max(0, dayIndex - 2);
+        const trendWindow = normalizedAirMeans.slice(trendWindowStart, dayIndex + 1).filter(Number.isFinite);
+        let trendFPerDay = 0;
+        if (trendWindow.length >= 2) {
+            trendFPerDay = (trendWindow[trendWindow.length - 1] - trendWindow[0]) / (trendWindow.length - 1);
+        }
+        const trendKicker = getSmoothTrendKicker(trendFPerDay);
+
         const windEstimate = getProjectionWindForMixing(daily, dayIndex, windUnit);
         const windEffect = calculateWindMixingEffect(
             windEstimate.windMph,
@@ -489,7 +499,7 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
             airTemp
         );
 
-        let projectedTemp = prevTemp + thermalEffect + solarEffect + windEffect;
+        let projectedTemp = prevTemp + thermalEffect + solarEffect + windEffect + trendKicker;
 
         const seasonalBaseline = getSeasonalBaseTemp(latitude, dayOfYear, waterType);
         if (dayIndex >= 4) {
@@ -504,7 +514,8 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
             console.log(
                 `[FishCast][waterTempProjection] day=${dayIndex} air=${airTemp.toFixed(1)} ` +
                 `thermal=${thermalEffect.toFixed(2)} solar=${solarEffect.toFixed(2)} ` +
-                `wind=${windEffect.toFixed(2)} windSource=${windEstimate.source} ` +
+                `wind=${windEffect.toFixed(2)} trend=${trendKicker.toFixed(2)} ` +
+                `windSource=${windEstimate.source} ` +
                 `delta=${dailyDelta.toFixed(2)} final=${projectedTemp.toFixed(1)}`
             );
         }

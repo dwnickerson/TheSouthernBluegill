@@ -73,6 +73,28 @@ test('high-wind day cooling is bounded for warm-water/cool-air setup', () => {
 });
 
 
+
+
+test('extended warming trend avoids persistent cold bias', () => {
+  const forecast = {
+    daily: {
+      ...forecastDailyTemplate,
+      temperature_2m_mean: [52, 54, 57, 60, 63, 66],
+      temperature_2m_min: [45, 47, 49, 52, 55, 58],
+      temperature_2m_max: [59, 61, 65, 68, 71, 74],
+      cloud_cover_mean: [58, 55, 52, 49, 46, 43],
+      wind_speed_10m_mean: [6, 7, 7, 8, 8, 9],
+      wind_speed_10m_max: [12, 13, 14, 15, 16, 17]
+    }
+  };
+
+  const projected = projectWaterTemps(50, forecast, 'lake', 34.5, {
+    anchorDate: new Date('2026-03-01T12:00:00Z')
+  });
+
+  const day5Change = projected[5] - projected[0];
+  assert.ok(day5Change >= 3.5, `warming sequence should materially rise by day 5, got ${day5Change.toFixed(2)}°F`);
+});
 test('projection respects km/h wind units from forecast metadata', () => {
   const forecast = {
     daily_units: {
