@@ -69,10 +69,10 @@ function getForecastWindUnit(forecastData) {
     const hourlyUnits = forecastData?.hourly_units || {};
     const currentUnits = forecastData?.current_units || {};
     return (
-        dailyUnits.wind_speed_10m_mean ||
-        dailyUnits.wind_speed_10m_max ||
         hourlyUnits.wind_speed_10m ||
         currentUnits.wind_speed_10m ||
+        dailyUnits.wind_speed_10m_mean ||
+        dailyUnits.wind_speed_10m_max ||
         ''
     );
 }
