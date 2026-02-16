@@ -1373,10 +1373,6 @@
             reservoir: { thermal_lag_days: 21, response_factor: 0.88 }
         };
 
-        function cToF(celsius) {
-            return (celsius * 9/5) + 32;
-        }
-
         function kmhToMph(kmh) {
             return kmh * 0.621371;
         }
@@ -1577,12 +1573,12 @@
             const endDate = new Date().toISOString().split('T')[0];
             const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
             
-            const historicalUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_mean&timezone=auto`;
+            const historicalUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_mean&temperature_unit=fahrenheit&timezone=auto`;
             
             const historicalResponse = await fetch(historicalUrl);
             const historicalData = await historicalResponse.json();
             
-            const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code&hourly=temperature_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code,precipitation_probability,precipitation&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=auto&forecast_days=${days}`;
+            const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code&hourly=temperature_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code,precipitation_probability,precipitation&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&temperature_unit=fahrenheit&timezone=auto&forecast_days=${days}`;
             
             const forecastResponse = await fetch(forecastUrl);
             const forecastData = await forecastResponse.json();
@@ -2091,7 +2087,7 @@
                 const forecastKey = `${coords.lat}_${coords.lon}_${speciesKey}_${waterType}`;
                 await offlineManager.saveForecast(forecastKey, currentForecastData);
                 
-                const historicalTemps = historical.daily.temperature_2m_mean.map(t => cToF(t));
+                const historicalTemps = historical.daily.temperature_2m_mean; // value is already °F from weatherAPI
                 const currentWaterTemp = estimateWaterTemp(historicalTemps, waterType);
                 
                 const speciesData = SPECIES_DATA[speciesKey];
@@ -2140,7 +2136,7 @@
                             </div>
                             <div class="detail-row">
                                 <span class="detail-label">Air Temperature</span>
-                                <span class="detail-value">${cToF(forecast.current.temperature_2m).toFixed(1)}°F (feels like ${cToF(forecast.current.apparent_temperature).toFixed(1)}°F)</span>
+                                <span class="detail-value">${forecast.current.temperature_2m.toFixed(1)}°F (feels like ${forecast.current.apparent_temperature.toFixed(1)}°F)</span>
                             </div>
                             <div class="detail-row">
                                 <span class="detail-label">Fish Phase</span>
@@ -2237,7 +2233,7 @@
                     
                     const futureAirTemps = [...historicalTemps];
                     for (let j = 1; j <= i; j++) {
-                        const futureAvg = (cToF(forecast.daily.temperature_2m_max[j]) + cToF(forecast.daily.temperature_2m_min[j])) / 2;
+                        const futureAvg = (forecast.daily.temperature_2m_max[j] + forecast.daily.temperature_2m_min[j]) / 2; // value is already °F from weatherAPI
                         futureAirTemps.push(futureAvg);
                     }
                     const dayWaterTemp = estimateWaterTemp(futureAirTemps, waterType);
@@ -2289,7 +2285,7 @@
                         rating: dayScore.rating,
                         colorClass: dayScore.colorClass,
                         waterTemp: `${dayWaterTemp.toFixed(1)}°F`,
-                        airTemp: `${cToF(forecast.daily.temperature_2m_max[i]).toFixed(0)}° / ${cToF(forecast.daily.temperature_2m_min[i]).toFixed(0)}°F`,
+                        airTemp: `${forecast.daily.temperature_2m_max[i].toFixed(0)}° / ${forecast.daily.temperature_2m_min[i].toFixed(0)}°F`,
                         wind: `${windSpeed.toFixed(1)} mph ${windDir}`,
                         pressure: `${(pressure * 0.02953).toFixed(2)} inHg (${pressureTrend.replace('_', ' ')})`,
                         clouds: `${clouds}%`,
@@ -2316,7 +2312,7 @@
                             </div>
                             <div class="weather-detail">
                                 <span class="weather-label">Air Temp</span>
-                                <span class="weather-value">${cToF(forecast.daily.temperature_2m_max[i]).toFixed(0)}° / ${cToF(forecast.daily.temperature_2m_min[i]).toFixed(0)}°F</span>
+                                <span class="weather-value">${forecast.daily.temperature_2m_max[i].toFixed(0)}° / ${forecast.daily.temperature_2m_min[i].toFixed(0)}°F</span>
                             </div>
                             <div class="weather-detail">
                                 <span class="weather-label">Wind</span>

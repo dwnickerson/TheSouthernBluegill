@@ -1,5 +1,6 @@
 // Water Temperature Prediction Model V2.0
 // Science-based estimation using seasonal physics + user data calibration
+// Unit contract: all model temperatures are expected in °F from weatherAPI (temperature_unit=fahrenheit).
 
 import { WATER_BODIES_V2 } from '../config/waterBodies.js';
 import { API_CONFIG, APP_CONSTANTS } from '../config/constants.js';
@@ -23,7 +24,7 @@ function average(values) {
 function normalizeLikelyAirTempF(value) {
     if (!Number.isFinite(value)) return null;
     if (value > 140 || value < -90) return null;
-    // Backward compatibility for stale metric payloads.
+    // Backward compatibility for stale metric payloads; current weatherAPI values are already °F.
     if (value <= 60 && value >= -45) {
         return (value * 9) / 5 + 32;
     }

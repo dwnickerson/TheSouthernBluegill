@@ -24,8 +24,8 @@ function getSpeciesData(species) {
 
 function toTempF(value, weather) {
     if (!Number.isFinite(value)) return 0;
-    const units = String(weather?.forecast?.hourly_units?.temperature_2m || weather?.forecast?.current_units?.temperature_2m || 'celsius').toLowerCase();
-    return units.includes('f') ? value : ((value * 9) / 5 + 32);
+    // Value is already °F from weatherAPI (temperature_unit=fahrenheit).
+    return value;
 }
 
 function toWindMph(value, weather) {
@@ -305,9 +305,9 @@ function buildTrendLineSvg(values, {
 
 function renderTrendCharts(weather) {
     const hourly = weather.forecast.hourly || {};
-    const hourlyTemps = (hourly.temperature_2m || []).slice(0, 24).map(cToF);
+    const hourlyTemps = (hourly.temperature_2m || []).slice(0, 24);
     const hourlyPrecip = (hourly.precipitation_probability || []).slice(0, 24);
-    const hourlyWind = (hourly.wind_speed_10m || []).slice(0, 24).map(kmhToMph);
+    const hourlyWind = (hourly.wind_speed_10m || []).slice(0, 24).map((value) => toWindMph(value, weather));
     const hourlyTime = (hourly.time || []).slice(0, 24);
 
     if (hourlyTemps.length < 2 || hourlyPrecip.length < 2 || hourlyWind.length < 2 || hourlyTime.length < 2) {

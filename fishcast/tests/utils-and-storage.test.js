@@ -15,12 +15,10 @@ const makeLocalStorage = () => {
 
 global.localStorage = makeLocalStorage();
 
-const { cToF, kmhToMph } = await import('../js/utils/math.js');
+const { kmhToMph } = await import('../js/utils/math.js');
 const { storage } = await import('../js/services/storage.js');
 
-test('unit conversions are correct', () => {
-  assert.equal(cToF(0), 32);
-  assert.equal(cToF(25), 77);
+test('wind conversion is correct', () => {
   assert.ok(Math.abs(kmhToMph(16.0934) - 10) < 0.01);
 });
 
