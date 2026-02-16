@@ -10,7 +10,9 @@ export function calculateSolunar(lat, lon, date) {
     const moonIllumination = ((1 - Math.cos(moonPhase * 2 * Math.PI)) / 2) * 100;
     
     let phaseDescription = '';
-    if (moonPhase < 0.02 || moonPhase >= 0.98) phaseDescription = 'New Moon';
+    // Keep the "New Moon" window tight around conjunction.
+    // Classifying too early (e.g., ~97% through the cycle) should remain Waning Crescent.
+    if (moonPhase < 0.01 || moonPhase >= 0.99) phaseDescription = 'New Moon';
     else if (moonPhase < 0.22) phaseDescription = 'Waxing Crescent';
     else if (moonPhase < 0.28) phaseDescription = 'First Quarter';
     else if (moonPhase < 0.47) phaseDescription = 'Waxing Gibbous';
