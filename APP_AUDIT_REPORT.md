@@ -1,187 +1,163 @@
 # FishCast Full Application Audit (Current State)
 
-Date: 2026-02-17
-Scope: Entire `fishcast` web app (product flow, data pipeline, architecture, testing, UX/accessibility, and deployment posture).
+Date: 2026-02-17  
+Scope: End-to-end review of the `fishcast` app (runtime behavior, model pipeline, architecture, UX/accessibility, offline behavior, and test posture).
 
 ---
 
 ## Executive summary
 
-FishCast has a solid forecast core and a strong automated test baseline, but it still carries legacy "community report / sheet sync" product behavior in active runtime code. The app is stable enough for iterative release, but **not yet aligned with your stated direction that Google Sheets is no longer part of the product**.
+A complete fresh audit shows that previously flagged "Google Sheets / Apps Script submission" priorities are largely resolved in active runtime code. Reporting is now local-first (saved client-side), and UI modal responsibilities are already split into focused modules.
+
+The app is in materially better shape than the previous report indicated. The highest-value remaining work is now **cleanup and hardening**, not product-direction triage.
 
 ### Overall status
-- **Core model/testing:** Good and improving.
-- **Product consistency:** Needs correction.
-- **Architecture maintainability:** Moderate risk due to oversized UI modal module and mixed concerns.
-- **Accessibility:** Partial; key improvements still needed.
+- **Forecast/model quality:** Strong and stable.
+- **Testing baseline:** Strong (unit + smoke suites passing).
+- **Architecture trajectory:** Improved (modular UI split already in place).
+- **Remaining risk level:** Moderate-low, concentrated in operational polish and accessibility/E2E coverage.
 
-### Top priorities (in order)
-1. Remove stale Google-Script-specific submission and "Sheet sync pending" messaging from runtime code paths.
-2. Feature-gate or remove reporting gamification UI if it is no longer a product goal.
-3. Split `modals.js` into smaller modules (reporting, settings, educational/help) to reduce regression risk.
-4. Reduce console noise in production and formalize debug logging gates.
-5. Close accessibility gaps on icon-heavy controls and dynamic modal semantics.
+### Updated top priorities (in order)
+1. Remove stale `script.google.com` handling from the service worker network-only host list to match current architecture.
+2. Add browser-level accessibility/E2E checks for modal keyboard/focus behavior.
+3. Reduce unconditional `console.error` localStorage noise in non-browser contexts with a centralized environment-aware guard.
+4. Align operator debug docs with actual debug flags/keys used in runtime logger and scoring flows.
 
 ---
 
-## 1) Product reality vs stated direction
+## 1) Product direction alignment (re-audited)
 
-You stated that Google Sheets/reporting was removed previously. Current codebase still contains active indicators of that legacy flow:
+### Current findings
+- Forecast-first shell is clear on the main page; report submission is no longer front-and-center in the primary entry flow.
+- Report submission persists to local storage (`waterTempReports`) instead of posting to Google Apps Script.
+- Modular modal split is present: reporting, settings, and help/about responsibilities are separated.
 
-- Water-temp report endpoints are still configured as Google Apps Script URLs.
-- Runtime submission still posts directly to a Google Apps Script endpoint.
-- Fallback user copy still references "Sheet sync pending".
-- UI copy and help text still describe community report mechanics as first-class behavior.
+### What changed vs prior report
+- The prior report's top concern (active Apps Script submission + "Sheet sync" style messaging) is not supported by current reporting submission logic.
+- Residual Google coupling appears only as stale service worker host allowlisting, not active data submission behavior.
 
-### Impact
-- Product messaging mismatch (what users and operators believe vs what app does).
-- Ongoing operational coupling to third-party script deployments.
-- Increased support burden when users hit report failures.
-
-### Recommendation
-- Decide explicitly between:
-  - **A) Keep reporting** (then rename it and remove all Sheets terminology), or
-  - **B) Remove reporting** (strip UI/actions, retention keys, and endpoint code entirely).
+### Remaining action
+- Remove stale `script.google.com` branch in SW fetch routing to avoid policy drift and operator confusion.
 
 ---
 
 ## 2) Forecast/model pipeline health
 
-The forecast stack itself is structured and defensible:
+### Strengths confirmed
+- Forecast generation path remains coherent: geocode -> weather fetch -> water temp estimation -> render.
+- Water temperature model and scoring behavior retain robust regression coverage (including stability and edge-case handling).
+- Weather API unit metadata handling is covered and passing.
 
-- Unit normalization and safeguards are present (temp/wind/precip normalization).
-- Seasonal baseline + water-body parameters + lag/inertia logic are implemented.
-- Wind-mixing and cold-season pond correction logic exist and are tested.
-- User reports are blended with weighting and trust checks (distance/recency/type).
-- Same-day memo clamping provides anti-jitter stability unless trusted local reports exist.
-
-### Residual model risks
-- Heavy reliance on heuristic constants means calibration can drift by region/season.
-- Console-level observability exists, but there is no formal telemetry/event model.
-- Some branch behavior is complex enough to warrant scenario regression snapshots per region.
+### Residual technical risk
+- Model remains heuristic-heavy (expected for this product), so seasonal/regional calibration drift remains a long-term maintenance concern.
 
 ### Recommendation
-- Keep current model architecture, but add a formal calibration harness per representative climate zone.
+- Keep current architecture; continue periodic scenario calibration snapshots for representative climate/water-body profiles.
 
 ---
 
-## 3) Testing and quality posture
+## 3) Test and quality posture
 
-### What is strong
-- Node test suite is extensive and currently passing.
-- Smoke suite validates key invariants (unit sanity, wind realism, trend smoothness, score stability, UI view-model assumptions).
-- Water-temp projection and scoring logic are covered with targeted tests.
+### Current status
+- Automated Node test suite passes.
+- Smoke invariants pass for unit sanity, alignment, wind realism, smoothness, and score stability.
 
-### Gaps to close
-- No browser-level E2E checks for modal accessibility/focus traps.
-- No explicit CI contract documented for required checks before deploy.
-- No contract tests for endpoint migration/deprecation behavior.
+### Gaps
+- Still no browser E2E guardrail for modal accessibility semantics and keyboard traversal.
 
 ### Recommendation
-- Add minimal Playwright E2E for critical user path and modal keyboard navigation.
+- Add a minimal Playwright suite for:
+  - Settings/About modal open/close by keyboard
+  - Escape-close behavior
+  - Focus return to trigger element
 
 ---
 
 ## 4) Architecture and maintainability
 
-### Findings
-- `modals.js` is large and multi-purpose (reporting, quick report, badges, educational content, settings-like interactions), which raises change risk.
-- Reporting/business logic is partially interwoven with UI flow.
-- Multiple sources of product copy are embedded in JS strings, making policy updates error-prone.
+### Improvements verified
+- `modals.js` now acts primarily as an export/bridge layer.
+- Functional ownership has been split into dedicated modules (`reportingModal.js`, `settingsModal.js`, `helpModal.js`).
+
+### Remaining concerns
+- Some report flow text/logic remains embedded inline in large template strings, which raises copy-change risk.
+- Storage service logs raw errors whenever localStorage is unavailable; this is safe but noisy in test/server-like contexts.
 
 ### Recommendation
-- Extract:
-  1) `reportingModal.js`
-  2) `settingsModal.js`
-  3) `about/helpModal.js`
-  4) `reportingService.js`
-- Centralize all external endpoints in config only, and route via one service interface.
+- Introduce a shared environment-aware logger/guard for storage failures and keep user-facing behavior unchanged.
 
 ---
 
-## 5) UX and accessibility
+## 5) UX, accessibility, and operational readiness
 
-### Strengths
-- Clear primary use case (get location → generate forecast).
-- Forecast cards and species framing are understandable for target users.
+### What is good
+- Main form controls include baseline labels and useful `aria-label` attributes for icon buttons.
+- Core flow remains straightforward and understandable.
 
-### Issues
-- Icon/emoji density remains high in some interactions, reducing professional trust for decision-support context.
-- Some dynamic modal content can be difficult for assistive-tech users without stronger semantic annotations.
-- Reporting affordances still visually compete with forecast-first behavior.
+### What still needs attention
+- Modal accessibility quality is not currently enforced by automated browser checks.
+- Debug-mode operator docs do not fully align with current runtime logger toggles (`fishcast_debug` vs scoring-specific toggle guidance).
 
 ### Recommendation
-- Simplify top-level actions to forecast-first.
-- Add explicit ARIA labels, heading structure checks, and keyboard focus audits for all modal flows.
+- Add E2E accessibility checks and reconcile docs with runtime debug key behavior.
 
 ---
 
-## 6) Security and operational concerns
+## 6) Security/offline/runtime concerns
 
 ### Observations
-- Client-side direct calls to public script endpoints expose operational fragility (versioned script URLs, CORS/runtime failures, quota behaviors).
-- No visible server-side abstraction layer for report ingestion.
+- Service worker keeps API-like endpoints network-only (good anti-stale posture).
+- SW still includes a legacy `script.google.com` network-only host branch that no longer matches current submission architecture.
 
 ### Recommendation
-- If reporting is retained, place ingestion behind a controlled API boundary and deprecate direct client → Apps Script writes.
+- Remove stale host allowlist entry and bump SW cache version to ensure clean client rollout.
 
 ---
 
-## 7) Concrete action plan (7-day hardening)
+## 7) 7-day hardening plan (updated)
 
-### Day 1-2: Product alignment
-- Remove or gate all legacy Sheets/reporting UX and copy.
-- Delete dead/local fallback strings referencing "Sheet sync pending".
+### Day 1
+- Remove stale `script.google.com` SW branch.
+- Increment cache version and verify update behavior.
 
-### Day 3-4: Refactor for safety
-- Split `modals.js` and isolate report transport/service code.
-- Introduce typed payload validation for report fetch/submit responses.
+### Day 2-3
+- Add browser E2E tests for modal keyboard/a11y critical path.
 
-### Day 5: Accessibility pass
-- Modal semantics + keyboard traversal + icon-button labels.
+### Day 4
+- Implement storage error logging guard (avoid noisy false alarms in non-browser test/runtime contexts).
 
-### Day 6: Release guardrails
-- Define pre-release quality gate: unit + smoke + E2E happy-path.
+### Day 5
+- Reconcile `OPERATOR_GUIDE.md` debug instructions with actual runtime flags.
 
-### Day 7: Documentation
-- Update operator guide and architecture notes to reflect final product decision on reporting.
+### Day 6-7
+- Run full validation (unit + smoke + new E2E) and publish release note with updated operational expectations.
 
 ---
 
-## 8) Data used for this app audit (full inventory)
+## 8) Data used for this audit (full inventory)
 
-This audit was based on repository evidence and runtime integration points (not assumptions). Data reviewed:
+This audit was based on direct repository evidence and executed test runs.
 
-### A) Runtime input data used by the app
-- Open-Meteo forecast hourly fields: pressure, wind, cloud cover, precipitation probability, air temperature.
-- Open-Meteo archive/daily fields used for recent-history context (including precipitation totals).
-- Geocoding/reverse-geocoding payloads used for location resolution.
-- User-submitted water-temperature/community report payloads sent to configured report endpoints.
+### A) Runtime/product evidence reviewed
+- Main app shell and primary user flow entry (`fishcast/index.html`, `fishcast/js/app.js`).
+- Modal orchestration and split modules (`fishcast/js/ui/modals.js`, `fishcast/js/ui/reportingModal.js`, `fishcast/js/ui/settingsModal.js`, `fishcast/js/ui/helpModal.js`).
+- Service worker fetch strategy (`fishcast/sw.js`).
 
-### B) Internal model/config data used by the app
-- Species profiles and scoring heuristics in fish model modules.
-- Water-body defaults and constants (pond/lake/river assumptions, thermal behavior constants, stability thresholds).
-- Date/time handling and timezone logic used for day slicing and tomorrow-freeze behavior.
+### B) Model/data-path evidence reviewed
+- Forecast, weather, and water-temp modules (`fishcast/js/models/*`, `fishcast/js/services/weatherAPI.js`, `fishcast/js/services/storage.js`).
 
-### C) Client persistence data used by the app
-- LocalStorage keys for favorites, recent reports/catches, selected species, settings, and memoized forecast/water-temperature artifacts.
-- Service-worker cache entries for shell assets and runtime requests.
+### C) Quality evidence executed
+- `npm test`
+- `npm run test:smoke`
 
-### D) Evidence used to write this report
-- Application source modules in `fishcast/js/{app,services,models,ui,config}`.
-- Service worker and manifest/runtime shell files.
-- Automated tests and smoke scenarios under `fishcast/tests` and model unit tests.
-- Existing operator/audit documentation in this repository.
-
-### E) Out-of-scope / unavailable data during this audit
-- Production analytics/telemetry streams.
-- Historical incident payload archives not committed to this repo.
-- Backend logs for external report endpoints.
+### D) Out-of-scope for this repository-only audit
+- Production analytics streams and real user telemetry.
+- External backend logs (if any) beyond repository-local behavior.
 
 ---
 
 ## Final judgment
 
-FishCast’s core forecasting engine is in good condition and supported by meaningful tests. The primary issue is not model collapse; it is **product/architecture inconsistency around legacy reporting infrastructure that should have been fully retired (or formally retained and modernized).**
+FishCast is now substantially more aligned with forecast-first product goals than prior audit conclusions suggested. The major previously reported priority (active Google Apps Script reporting path) appears effectively resolved in runtime behavior, with only minor legacy residue in the service worker allowlist.
 
-If you want, next step can be a surgical cleanup PR that removes all Google Script/Sheet-specific behavior and leaves a strict forecast-only product surface.
+The next phase should focus on **hardening and operational polish**: remove stale SW residue, add modal E2E accessibility checks, and align operator debug documentation with runtime reality.
