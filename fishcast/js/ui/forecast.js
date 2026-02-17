@@ -1042,10 +1042,9 @@ window.showDayDetails = function(dayIndex, date) {
 };
 
 function getRadarEmbedUrl(lat, lon) {
-    const safeLat = Number(lat).toFixed(4);
-    const safeLon = Number(lon).toFixed(4);
-    return `https://embed.windy.com/embed2.html?lat=${safeLat}&lon=${safeLon}&detailLat=${safeLat}&detailLon=${safeLon}&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1`;
+  return null;
 }
+
 
 // Helper function to provide fishing tips for specific day
 function getFishingTipForDay(maxTemp, minTemp, precipProb, windSpeed) {
