@@ -9,6 +9,7 @@ import { calculateSolunar } from '../models/solunar.js';
 import { estimateTempByDepth, estimateWaterTempByPeriod, projectWaterTemps } from '../models/waterTemp.js';
 import { createLogger } from '../utils/logger.js';
 import { toWindMph } from '../utils/units.js';
+import { getRadarEmbedUrl } from '../utils/radar.js';
 
 const debugLog = createLogger('forecast');
 const FISHCAST_BUILD_ID = `${Date.now()}`;
@@ -643,6 +644,17 @@ function renderTrendCharts(weather) {
 }
 
 function renderWeatherRadar(coords) {
+    const radarUrl = getRadarEmbedUrl(coords.lat, coords.lon);
+
+    if (!radarUrl) {
+        return `
+            <div class="weather-radar-card">
+                <h3>Weather radar</h3>
+                <p>Radar unavailable for this location right now.</p>
+            </div>
+        `;
+    }
+
     return `
         <div class="weather-radar-card">
             <h3>Weather radar</h3>
@@ -651,7 +663,7 @@ function renderWeatherRadar(coords) {
                 <iframe
                     class="weather-radar-frame"
                     title="Weather radar for ${coords.name}"
-                    src="${getRadarEmbedUrl(coords.lat, coords.lon)}"
+                    src="${radarUrl}"
                     loading="lazy"
                     referrerpolicy="no-referrer-when-downgrade"
                     allowfullscreen>
@@ -1182,10 +1194,6 @@ window.showDayDetails = function(dayIndex, date) {
     // Add new modal
     document.body.insertAdjacentHTML('beforeend', modalHTML);
 };
-
-function getRadarEmbedUrl(lat, lon) {
-  return null;
-}
 
 
 // Helper function to provide fishing tips for specific day
