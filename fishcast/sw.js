@@ -2,6 +2,7 @@
 const CACHE_NAME = 'fishcast-v6';
 const APP_PATH = '/fishcast/';
 const DEBUG_SW = false;
+const DEV_SW = DEBUG_SW || (typeof self !== 'undefined' && /localhost|127\.0\.0\.1/.test(self.location.hostname));
 const SW_API_HOSTS = new Set([
   'api.open-meteo.com',
   'archive-api.open-meteo.com',
@@ -11,13 +12,13 @@ const SW_API_HOSTS = new Set([
 const swDebugKeys = new Set();
 
 function logSW(...args) {
-  if (DEBUG_SW) {
+  if (DEV_SW) {
     console.log('[FishCast SW]', ...args);
   }
 }
 
 function logSWOnce(key, ...args) {
-  if (!DEBUG_SW || swDebugKeys.has(key)) {
+  if (!DEV_SW || swDebugKeys.has(key)) {
     return;
   }
 
@@ -82,17 +83,31 @@ self.addEventListener('activate', event => {
 
 // Fetch event - app shell offline first, API network only
 self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') {
+  const request = event?.request;
+  if (!request || request.method !== 'GET') {
     return;
   }
-  event.respondWith(handleFetch(event.request));
+
+  const safeResponse = handleFetch(request).catch((error) => {
+    logSW('fetch.respondWith.unhandled', request?.url, error);
+    if (request.mode === 'navigate') {
+      return caches.match(`${APP_PATH}index.html`).then((appShell) => appShell || offlineResponse());
+    }
+    return new Response(null, { status: 204 });
+  });
+
+  event.respondWith(safeResponse);
 });
 
 async function handleFetch(request) {
   try {
+    if (!request || !request.url) {
+      return new Response(null, { status: 204 });
+    }
+
     const url = new URL(request.url);
 
-    if (url.pathname.includes('/null') || url.pathname.endsWith('/null')) {
+    if (url.pathname.includes('/null') || url.pathname.endsWith('/null') || url.href.includes('/null?')) {
       logSWOnce('null-path', 'Blocked invalid /null request', url.href);
       return new Response(null, { status: 204 });
     }
@@ -157,10 +172,16 @@ async function handleFetch(request) {
         return cachedFallback;
       }
 
-      return offlineResponse();
+      return request.mode === 'navigate'
+        ? offlineResponse()
+        : new Response(null, { status: 204 });
     }
   } catch (error) {
-    logSW('fetch-handler-error', error);
-    return offlineResponse();
+    logSW('fetch-handler-error', request?.url, error);
+    if (request?.mode === 'navigate') {
+      const appShell = await caches.match(`${APP_PATH}index.html`);
+      return appShell || offlineResponse();
+    }
+    return new Response(null, { status: 204 });
   }
 }

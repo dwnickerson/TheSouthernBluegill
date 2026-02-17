@@ -9,7 +9,7 @@ import { calculateSolunar } from '../models/solunar.js';
 import { estimateTempByDepth, estimateWaterTempByPeriod, projectWaterTemps } from '../models/waterTemp.js';
 import { createLogger } from '../utils/logger.js';
 import { toWindMph } from '../utils/units.js';
-import { getRadarEmbedUrl } from '../utils/radar.js';
+import { getRainViewerMetadataUrl, getRainViewerTileUrl } from '../utils/radar.js';
 
 const debugLog = createLogger('forecast');
 const FISHCAST_BUILD_ID = `${Date.now()}`;
@@ -154,8 +154,12 @@ function isWaterTempTraceEnabled() {
     }
 }
 
+function isWaterTempDebugEnabled() {
+    return typeof window !== 'undefined' && window.__DEBUG_WATER_TEMP === true;
+}
+
 function logWaterTempTrace(message, data) {
-    if (!isWaterTempTraceEnabled()) return;
+    if (!isWaterTempDebugEnabled()) return;
     console.log(`[UI water temp trace] ${message}`, data);
 }
 
@@ -165,11 +169,11 @@ function getWaterTempDebugState() {
     }
     if (!window.__fishcastWaterTempDebug) {
         window.__fishcastWaterTempDebug = {
-            enabled: isWaterTempTraceEnabled(),
+            enabled: isWaterTempDebugEnabled(),
             lastWrites: {}
         };
     }
-    window.__fishcastWaterTempDebug.enabled = isWaterTempTraceEnabled();
+    window.__fishcastWaterTempDebug.enabled = isWaterTempDebugEnabled();
     return window.__fishcastWaterTempDebug;
 }
 
@@ -218,7 +222,7 @@ function extractRenderedTempF(text) {
 }
 
 function assertRenderedWaterTemps({ computed }) {
-    if (!isWaterTempTraceEnabled()) return;
+    if (!isWaterTempDebugEnabled()) return;
 
     const displayed = {
         surface: extractRenderedTempF(document.querySelector('[data-water-field="surface"]')?.textContent || ''),
@@ -255,9 +259,16 @@ function buildWaterTempViewModel({ waterTemp, waterType, weather, coords, date =
         coords
     });
 
-    const surfaceNow = getSurfaceWaterNowTemp({ waterTemp, waterType, weather, coords });
+    const surfaceNow = getSurfaceWaterNowTemp({ waterTemp, waterType, weather, coords, date });
+    const surfaceNowRounded = Number(surfaceNow.value.toFixed(1));
+    const surfaceDailyRounded = Number((Number.isFinite(waterTemp) ? waterTemp : surfaceNow.value).toFixed(1));
+    const mode = isSelectedDateToday(weather, date) ? 'live' : 'day';
     const viewModel = {
-        surface: Number(surfaceNow.value.toFixed(1)),
+        surface: surfaceNowRounded,
+        surfaceNow: surfaceNowRounded,
+        surfaceDaily: surfaceDailyRounded,
+        surfaceLabel: mode === 'live' ? 'Surface (now)' : 'Surface (day)',
+        mode,
         sunrise: Number(periods.sunrise.toFixed(1)),
         midday: Number(periods.midday.toFixed(1)),
         sunset: Number(periods.sunset.toFixed(1)),
@@ -293,20 +304,38 @@ function getCurrentPeriodByHour(hour24) {
     return 'afternoon';
 }
 
-function getSurfaceWaterNowTemp({ waterTemp, waterType, weather, coords = null }) {
+
+function isSelectedDateToday(weather, date = new Date()) {
     const timezone = weather?.forecast?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago';
-    const localHour = Number(new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        hour: '2-digit',
-        hour12: false
-    }).format(new Date()));
-    const period = getCurrentPeriodByHour(localHour);
     const todayKey = new Intl.DateTimeFormat('en-CA', {
         timeZone: timezone,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit'
     }).format(new Date());
+    const selectedKey = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(date);
+    return selectedKey === todayKey;
+}
+
+function getSurfaceWaterNowTemp({ waterTemp, waterType, weather, coords = null, date = new Date() }) {
+    const timezone = weather?.forecast?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago';
+    const localHour = Number(new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        hour: '2-digit',
+        hour12: false
+    }).format(date));
+    const period = getCurrentPeriodByHour(localHour);
+    const todayKey = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(date);
 
     const daily = weather?.forecast?.daily || {};
     const dailyTimes = Array.isArray(daily.time) ? daily.time : [];
@@ -320,7 +349,7 @@ function getSurfaceWaterNowTemp({ waterTemp, waterType, weather, coords = null }
         waterType,
         hourly: weather?.forecast?.hourly,
         timezone,
-        date: new Date(),
+        date,
         period,
         sunriseTime,
         sunsetTime
@@ -407,23 +436,26 @@ function formatDepthTempsForSurface(surfaceTemp, waterType, date) {
     };
 }
 
-function renderWaterPeriodBreakdown({ periods, waterType, date }) {
+function renderWaterPeriodBreakdown({ periods, waterType, date, surfaceLabel = 'Surface (now)', surfaceValue = null }) {
     const sunriseDepths = formatDepthTempsForSurface(periods.sunrise, waterType, date);
     const middayDepths = formatDepthTempsForSurface(periods.midday, waterType, date);
     const sunsetDepths = formatDepthTempsForSurface(periods.sunset, waterType, date);
+    const surfaceHeader = Number.isFinite(surfaceValue)
+        ? `<strong>${surfaceLabel}:</strong> <span data-water-field="surface">${surfaceValue.toFixed(1)}°F</span><br>`
+        : '';
 
     return `
         <small style="color: var(--text-secondary); display: block; margin-top: 6px; line-height: 1.5;">
+            ${surfaceHeader}
             <strong>Sunrise temp:</strong> <span data-water-field="sunrise">${periods.sunrise.toFixed(1)}°F</span><br>
-            <strong>Depths:</strong> 2ft: ${sunriseDepths.temp2ft}°F | 4ft: ${sunriseDepths.temp4ft}°F | 10ft: ${sunriseDepths.temp10ft}°F | 20ft: ${sunriseDepths.temp20ft}°F
-        </small>
-        <small style="color: var(--text-secondary); display: block; margin-top: 8px; line-height: 1.5;">
             <strong>Midday temp:</strong> <span data-water-field="midday">${periods.midday.toFixed(1)}°F</span><br>
-            <strong>Depths:</strong> 2ft: ${middayDepths.temp2ft}°F | 4ft: ${middayDepths.temp4ft}°F | 10ft: ${middayDepths.temp10ft}°F | 20ft: ${middayDepths.temp20ft}°F
-        </small>
-        <small style="color: var(--text-secondary); display: block; margin-top: 8px; line-height: 1.5;">
-            <strong>Sunset temp:</strong> <span data-water-field="sunset">${periods.sunset.toFixed(1)}°F</span><br>
-            <strong>Depths:</strong> 2ft: ${sunsetDepths.temp2ft}°F | 4ft: ${sunsetDepths.temp4ft}°F | 10ft: ${sunsetDepths.temp10ft}°F | 20ft: ${sunsetDepths.temp20ft}°F
+            <strong>Sunset temp:</strong> <span data-water-field="sunset">${periods.sunset.toFixed(1)}°F</span>
+            <details style="margin-top: 6px;">
+                <summary style="cursor: pointer;">Show depth temps</summary>
+                <strong>Sunrise depths:</strong> 2ft: ${sunriseDepths.temp2ft}°F | 4ft: ${sunriseDepths.temp4ft}°F | 10ft: ${sunriseDepths.temp10ft}°F | 20ft: ${sunriseDepths.temp20ft}°F<br>
+                <strong>Midday depths:</strong> 2ft: ${middayDepths.temp2ft}°F | 4ft: ${middayDepths.temp4ft}°F | 10ft: ${middayDepths.temp10ft}°F | 20ft: ${middayDepths.temp20ft}°F<br>
+                <strong>Sunset depths:</strong> 2ft: ${sunsetDepths.temp2ft}°F | 4ft: ${sunsetDepths.temp4ft}°F | 10ft: ${sunsetDepths.temp10ft}°F | 20ft: ${sunsetDepths.temp20ft}°F
+            </details>
         </small>
     `;
 }
@@ -644,9 +676,9 @@ function renderTrendCharts(weather) {
 }
 
 function renderWeatherRadar(coords) {
-    const radarUrl = getRadarEmbedUrl(coords.lat, coords.lon);
-
-    if (!radarUrl) {
+    const lat = Number(coords?.lat);
+    const lon = Number(coords?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
         return `
             <div class="weather-radar-card">
                 <h3>Weather radar</h3>
@@ -658,20 +690,52 @@ function renderWeatherRadar(coords) {
     return `
         <div class="weather-radar-card">
             <h3>Weather radar</h3>
-            <p>Live radar centered on ${coords.name}.</p>
+            <p>Latest RainViewer precipitation tile centered on ${coords.name}.</p>
             <div class="weather-radar-shell">
-                <iframe
-                    class="weather-radar-frame"
-                    title="Weather radar for ${coords.name}"
-                    src="${radarUrl}"
-                    loading="lazy"
-                    referrerpolicy="no-referrer-when-downgrade"
-                    allowfullscreen>
-                </iframe>
-                <div class="weather-radar-tint" aria-hidden="true"></div>
+                <img class="weather-radar-frame" data-radar-image="true" alt="Weather radar for ${coords.name}" loading="lazy" />
             </div>
+            <small data-radar-status="true" style="color: var(--text-secondary);"></small>
         </div>
     `;
+}
+
+async function hydrateRadarTiles(coords) {
+    const radarImage = document.querySelector('[data-radar-image="true"]');
+    const radarStatus = document.querySelector('[data-radar-status="true"]');
+    if (!radarImage || !coords) return;
+
+    const fallback = () => {
+        if (radarStatus) {
+            radarStatus.textContent = 'Radar temporarily unavailable.';
+        }
+    };
+
+    const setLatestFrame = async () => {
+        try {
+            const metadataResp = await fetch(getRainViewerMetadataUrl(), { cache: 'no-store' });
+            if (!metadataResp.ok) throw new Error(`Radar metadata failed (${metadataResp.status})`);
+            const metadata = await metadataResp.json();
+            const radarPast = Array.isArray(metadata?.radar?.past) ? metadata.radar.past : [];
+            const latest = radarPast[radarPast.length - 1];
+            const framePath = latest?.path;
+            const tileUrl = getRainViewerTileUrl({ lat: coords.lat, lon: coords.lon, framePath });
+            if (!tileUrl) throw new Error('No RainViewer frame path available.');
+            radarImage.src = tileUrl;
+            radarImage.onerror = fallback;
+            if (radarStatus) {
+                radarStatus.textContent = `Updated ${new Date((latest.time || 0) * 1000).toLocaleTimeString()}`;
+            }
+        } catch (error) {
+            if (isWaterTempDebugEnabled()) {
+                console.warn('[radar] failed to load RainViewer tile', error);
+            }
+            fallback();
+        }
+    };
+
+    await setLatestFrame();
+    window.clearInterval(window.__fishcastRadarRefreshInterval);
+    window.__fishcastRadarRefreshInterval = window.setInterval(setLatestFrame, 5 * 60 * 1000);
 }
 
 export function renderForecast(data) {
@@ -772,7 +836,7 @@ export function renderForecast(data) {
                 <div class="summary-card"><div class="label">Conditions</div><div class="value weather-condition-value"><span class="weather-symbol">${weatherIcon.icon}</span><span>${weatherIcon.label}</span></div></div>
                 <div class="summary-card"><div class="label">Air temp range</div><div class="value">${todayLowTemp.toFixed(0)}°F to ${todayHighTemp.toFixed(0)}°F</div></div>
                 <div class="summary-card"><div class="label">Feels like</div><div class="value">${feelsLikeTemp.toFixed(0)}°F</div></div>
-                <div class="summary-card"><div class="label">Water surface</div><div class="value" data-water-field="surface">${waterTempView.surface.toFixed(1)}°F</div></div>
+                <div class="summary-card"><div class="label">Water surface</div><div class="value" data-water-field="surface">${waterTempView.surfaceNow.toFixed(1)}°F</div></div>
                 <div class="summary-card"><div class="label">Wind</div><div class="value">${windSpeed.toFixed(0)} mph ${windDir}</div></div>
                 <div class="summary-card"><div class="label">Humidity / Dew point</div><div class="value">${humidity.toFixed(0)}% · ${dewPointF?.toFixed(0) ?? 'N/A'}°F</div></div>
             </div>
@@ -787,7 +851,7 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Water Temperature</span>
                     <span class="detail-value">
-                        ${renderWaterPeriodBreakdown({ periods: waterTempView.periods, waterType, date: waterTempView.date })}
+                        ${renderWaterPeriodBreakdown({ periods: waterTempView.periods, waterType, date: waterTempView.date, surfaceLabel: waterTempView.surfaceLabel, surfaceValue: waterTempView.mode === 'live' ? waterTempView.surfaceNow : waterTempView.surfaceDaily })}
                     </span>
                 </div>
                 <div class="detail-row">
@@ -901,15 +965,15 @@ export function renderForecast(data) {
     `;
     
     resultsDiv.innerHTML = html;
-    writeWaterTempField({ selector: '[data-water-field="surface"]', nextText: `${waterTempView.surface.toFixed(1)}°F`, sourceVar: 'waterTempView.surface', fieldKey: 'surface' });
+    writeWaterTempField({ selector: '[data-water-field="surface"]', nextText: `${waterTempView.surfaceNow.toFixed(1)}°F`, sourceVar: 'waterTempView.surfaceNow', fieldKey: 'surface' });
     writeWaterTempField({ selector: '[data-water-field="sunrise"]', nextText: `${waterTempView.sunrise.toFixed(1)}°F`, sourceVar: 'waterTempView.sunrise', fieldKey: 'sunrise' });
     writeWaterTempField({ selector: '[data-water-field="midday"]', nextText: `${waterTempView.midday.toFixed(1)}°F`, sourceVar: 'waterTempView.midday', fieldKey: 'midday' });
     writeWaterTempField({ selector: '[data-water-field="sunset"]', nextText: `${waterTempView.sunset.toFixed(1)}°F`, sourceVar: 'waterTempView.sunset', fieldKey: 'sunset' });
-    if (isWaterTempTraceEnabled()) {
+    if (isWaterTempDebugEnabled()) {
         console.log('[FISHCAST BUILD]', { buildId: window.__FISHCAST_BUILD__ });
     }
     const computedWaterTemps = {
-        surface: waterTempView.surface,
+        surface: waterTempView.surfaceNow,
         sunrise: waterTempView.sunrise,
         midday: waterTempView.midday,
         sunset: waterTempView.sunset
@@ -918,6 +982,7 @@ export function renderForecast(data) {
     setTimeout(() => {
         assertRenderedWaterTemps({ computed: computedWaterTemps });
     }, 0);
+    hydrateRadarTiles(coords);
     resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
     
     // Store forecast data for sharing
@@ -1129,7 +1194,7 @@ window.showDayDetails = function(dayIndex, date) {
                     <div class="detail-row">
                         <span class="detail-label">Water Temperature</span>
                         <span class="detail-value">
-                            ${renderWaterPeriodBreakdown({ periods: dayWaterPeriods, waterType: data.waterType, date: new Date(`${date}T12:00:00`) })}
+                            ${renderWaterPeriodBreakdown({ periods: dayWaterPeriods, waterType: data.waterType, date: new Date(`${date}T12:00:00`), surfaceLabel: 'Surface (day)', surfaceValue: waterTempEstimate })}
                         </span>
                     </div>
                     <div class="detail-row">
