@@ -1,0 +1,311 @@
+Error reading localStorage key (fishcast_water_temp_memo_34.2500_-88.7000_pond): ReferenceError: localStorage is not defined
+    at safeGetRaw (file:///workspace/Publii-Cloudfare/fishcast/js/services/storage.js:17:9)
+    at Object.getWaterTempMemoEntry (file:///workspace/Publii-Cloudfare/fishcast/js/services/storage.js:205:23)
+    at estimateWaterTemp (file:///workspace/Publii-Cloudfare/fishcast/js/models/waterTemp.js:747:31)
+    at file:///workspace/Publii-Cloudfare/fishcast/js/tools/debugWaterTempUsage.mjs:17:30
+Error writing localStorage key (fishcast_water_temp_memo_34.2500_-88.7000_pond): ReferenceError: localStorage is not defined
+    at safeSetRaw (file:///workspace/Publii-Cloudfare/fishcast/js/services/storage.js:26:9)
+    at Object.setWaterTempMemo (file:///workspace/Publii-Cloudfare/fishcast/js/services/storage.js:231:16)
+    at estimateWaterTemp (file:///workspace/Publii-Cloudfare/fishcast/js/models/waterTemp.js:767:13)
+    at file:///workspace/Publii-Cloudfare/fishcast/js/tools/debugWaterTempUsage.mjs:17:30
+=== explainWaterTempTerms(today) ===
+{
+  "seasonalBase": 50.99354717267539,
+  "userCalibrationApplied": false,
+  "solarEffect": 0.31333872084947534,
+  "airEffect": 1.2234617385950044,
+  "windEffect": 0.6139194805194809,
+  "evaporationCooling": -0.18495370370370373,
+  "synopticEventStrength": null,
+  "trendKicker": 0,
+  "coldSeasonPondCorrection": 0,
+  "clampsApplied": {
+    "memoClamp": false,
+    "dailyDeltaEnvelope": null,
+    "physDeltaRange": null
+  },
+  "final": 53,
+  "usedFields": {
+    "exact": [
+      "forecast",
+      "forecast.current",
+      "forecast.current.precipitation",
+      "forecast.current.relative_humidity_2m",
+      "forecast.current.temperature_2m",
+      "forecast.current.weather_code",
+      "forecast.current.wind_speed_10m",
+      "forecast.hourly",
+      "forecast.hourly.cloud_cover",
+      "forecast.hourly.precipitation_probability",
+      "forecast.hourly.surface_pressure",
+      "forecast.hourly.time",
+      "forecast.hourly.weather_code",
+      "historical",
+      "historical.daily",
+      "historical.daily.cloud_cover_mean",
+      "historical.daily.temperature_2m_mean",
+      "historical.daily.wind_speed_10m_max",
+      "historical.daily.wind_speed_10m_mean",
+      "meta",
+      "meta.nowHourIndex",
+      "meta.units",
+      "meta.units.temp"
+    ],
+    "prefixes": [
+      "forecast.current",
+      "forecast.current.precipitation",
+      "forecast.current.relative_humidity_2m",
+      "forecast.current.temperature_2m",
+      "forecast.current.weather_code",
+      "forecast.current.wind_speed_10m",
+      "forecast.hourly",
+      "forecast.hourly.cloud_cover",
+      "forecast.hourly.precipitation_probability",
+      "forecast.hourly.surface_pressure",
+      "forecast.hourly.time",
+      "forecast.hourly.weather_code",
+      "historical.daily",
+      "historical.daily.cloud_cover_mean",
+      "historical.daily.temperature_2m_mean",
+      "historical.daily.wind_speed_10m_max",
+      "historical.daily.wind_speed_10m_mean"
+    ]
+  }
+}
+final estimateWaterTemp: 53
+
+=== explainWaterTempProjectionDay(day 1..3) ===
+[
+  {
+    "dayIndex": 1,
+    "breakdown": {
+      "seasonalBase": 51.02197192179964,
+      "userCalibrationApplied": false,
+      "solarEffect": 0.4319344585022613,
+      "airEffect": 1.031415683114054,
+      "windEffect": 1.413919480519481,
+      "evaporationCooling": -0.37540123456790125,
+      "synopticEventStrength": 0.16315330086580088,
+      "trendKicker": 0,
+      "coldSeasonPondCorrection": 0,
+      "clampsApplied": {
+        "memoClamp": false,
+        "dailyDeltaEnvelope": 3.791567922077922,
+        "physDeltaRange": {
+          "minDelta": null,
+          "maxDelta": null
+        }
+      },
+      "final": 55.501868387567896,
+      "usedFields": {
+        "exact": [
+          "forecast",
+          "forecast.current",
+          "forecast.current.precipitation",
+          "forecast.current.relative_humidity_2m",
+          "forecast.current.weather_code",
+          "forecast.current.wind_speed_10m",
+          "forecast.daily",
+          "forecast.daily.cloud_cover_mean",
+          "forecast.daily.precipitation_probability_max",
+          "forecast.daily.precipitation_sum",
+          "forecast.daily.temperature_2m_max",
+          "forecast.daily.temperature_2m_mean",
+          "forecast.daily.temperature_2m_min",
+          "forecast.daily.time",
+          "forecast.daily.wind_speed_10m_max",
+          "forecast.daily.wind_speed_10m_mean",
+          "forecast.hourly",
+          "forecast.meta",
+          "forecast.meta.nowHourIndex"
+        ],
+        "prefixes": [
+          "forecast.current",
+          "forecast.current.precipitation",
+          "forecast.current.relative_humidity_2m",
+          "forecast.current.weather_code",
+          "forecast.current.wind_speed_10m",
+          "forecast.daily",
+          "forecast.daily.cloud_cover_mean",
+          "forecast.daily.precipitation_probability_max",
+          "forecast.daily.precipitation_sum",
+          "forecast.daily.temperature_2m_max",
+          "forecast.daily.temperature_2m_mean",
+          "forecast.daily.temperature_2m_min",
+          "forecast.daily.time",
+          "forecast.daily.wind_speed_10m_max",
+          "forecast.daily.wind_speed_10m_mean",
+          "forecast.hourly",
+          "forecast.meta",
+          "forecast.meta.nowHourIndex"
+        ]
+      }
+    },
+    "projected": 55.501868387567896
+  },
+  {
+    "dayIndex": 2,
+    "breakdown": {
+      "seasonalBase": 51.0574870620526,
+      "userCalibrationApplied": false,
+      "solarEffect": 0.27819652357485886,
+      "airEffect": 0.2894464728572768,
+      "windEffect": 0,
+      "evaporationCooling": -0.37370081018518514,
+      "synopticEventStrength": 0.21926996753246758,
+      "trendKicker": -0.05115062281746041,
+      "coldSeasonPondCorrection": 0,
+      "clampsApplied": {
+        "memoClamp": false,
+        "dailyDeltaEnvelope": 3.926247922077922,
+        "physDeltaRange": {
+          "minDelta": null,
+          "maxDelta": null
+        }
+      },
+      "final": 55.64465995099739,
+      "usedFields": {
+        "exact": [
+          "forecast",
+          "forecast.current",
+          "forecast.current.precipitation",
+          "forecast.current.relative_humidity_2m",
+          "forecast.current.weather_code",
+          "forecast.current.wind_speed_10m",
+          "forecast.daily",
+          "forecast.daily.cloud_cover_mean",
+          "forecast.daily.precipitation_probability_max",
+          "forecast.daily.precipitation_sum",
+          "forecast.daily.temperature_2m_max",
+          "forecast.daily.temperature_2m_mean",
+          "forecast.daily.temperature_2m_min",
+          "forecast.daily.time",
+          "forecast.daily.wind_speed_10m_max",
+          "forecast.daily.wind_speed_10m_mean",
+          "forecast.hourly",
+          "forecast.meta",
+          "forecast.meta.nowHourIndex"
+        ],
+        "prefixes": [
+          "forecast.current",
+          "forecast.current.precipitation",
+          "forecast.current.relative_humidity_2m",
+          "forecast.current.weather_code",
+          "forecast.current.wind_speed_10m",
+          "forecast.daily",
+          "forecast.daily.cloud_cover_mean",
+          "forecast.daily.precipitation_probability_max",
+          "forecast.daily.precipitation_sum",
+          "forecast.daily.temperature_2m_max",
+          "forecast.daily.temperature_2m_mean",
+          "forecast.daily.temperature_2m_min",
+          "forecast.daily.time",
+          "forecast.daily.wind_speed_10m_max",
+          "forecast.daily.wind_speed_10m_mean",
+          "forecast.hourly",
+          "forecast.meta",
+          "forecast.meta.nowHourIndex"
+        ]
+      }
+    },
+    "projected": 55.64465995099739
+  },
+  {
+    "dayIndex": 3,
+    "breakdown": {
+      "seasonalBase": 51.10008206953173,
+      "userCalibrationApplied": false,
+      "solarEffect": 0.3849391847383448,
+      "airEffect": 0.18453299994612857,
+      "windEffect": 0,
+      "evaporationCooling": -0.3720003858024691,
+      "synopticEventStrength": 0.055553300865800896,
+      "trendKicker": -0.01697529611592111,
+      "coldSeasonPondCorrection": 0,
+      "clampsApplied": {
+        "memoClamp": false,
+        "dailyDeltaEnvelope": 3.533327922077922,
+        "physDeltaRange": {
+          "minDelta": null,
+          "maxDelta": null
+        }
+      },
+      "final": 55.82515645376346,
+      "usedFields": {
+        "exact": [
+          "forecast",
+          "forecast.current",
+          "forecast.current.precipitation",
+          "forecast.current.relative_humidity_2m",
+          "forecast.current.weather_code",
+          "forecast.current.wind_speed_10m",
+          "forecast.daily",
+          "forecast.daily.cloud_cover_mean",
+          "forecast.daily.precipitation_probability_max",
+          "forecast.daily.precipitation_sum",
+          "forecast.daily.temperature_2m_max",
+          "forecast.daily.temperature_2m_mean",
+          "forecast.daily.temperature_2m_min",
+          "forecast.daily.time",
+          "forecast.daily.wind_speed_10m_max",
+          "forecast.daily.wind_speed_10m_mean",
+          "forecast.hourly",
+          "forecast.meta",
+          "forecast.meta.nowHourIndex"
+        ],
+        "prefixes": [
+          "forecast.current",
+          "forecast.current.precipitation",
+          "forecast.current.relative_humidity_2m",
+          "forecast.current.weather_code",
+          "forecast.current.wind_speed_10m",
+          "forecast.daily",
+          "forecast.daily.cloud_cover_mean",
+          "forecast.daily.precipitation_probability_max",
+          "forecast.daily.precipitation_sum",
+          "forecast.daily.temperature_2m_max",
+          "forecast.daily.temperature_2m_mean",
+          "forecast.daily.temperature_2m_min",
+          "forecast.daily.time",
+          "forecast.daily.wind_speed_10m_max",
+          "forecast.daily.wind_speed_10m_mean",
+          "forecast.hourly",
+          "forecast.meta",
+          "forecast.meta.nowHourIndex"
+        ]
+      }
+    },
+    "projected": 55.82515645376346
+  }
+]
+
+USED FIELDS (prefixes):
+forecast.current
+forecast.current.precipitation
+forecast.current.relative_humidity_2m
+forecast.current.temperature_2m
+forecast.current.weather_code
+forecast.current.wind_speed_10m
+forecast.daily
+forecast.daily.cloud_cover_mean
+forecast.daily.precipitation_probability_max
+forecast.daily.precipitation_sum
+forecast.daily.temperature_2m_max
+forecast.daily.temperature_2m_mean
+forecast.daily.temperature_2m_min
+forecast.daily.time
+forecast.daily.wind_speed_10m_max
+forecast.daily.wind_speed_10m_mean
+forecast.hourly
+forecast.hourly.cloud_cover
+forecast.hourly.precipitation_probability
+forecast.hourly.surface_pressure
+forecast.hourly.time
+forecast.hourly.weather_code
+forecast.meta
+forecast.meta.nowHourIndex
+historical.daily
+historical.daily.cloud_cover_mean
+historical.daily.temperature_2m_mean
+historical.daily.wind_speed_10m_max
+historical.daily.wind_speed_10m_mean
