@@ -101,7 +101,7 @@ function toPrecipInches(value, weather) {
     if (!Number.isFinite(value)) return 0;
     const units = String(weather?.forecast?.daily_units?.precipitation_sum || weather?.meta?.units?.precip || 'in').toLowerCase();
     if (units.includes('in')) return value;
-    if (units.includes('mm')) return value / 25.4;
+    if (units.includes('mm')) return value;
     return value;
 }
 
