@@ -16,8 +16,9 @@ const debugLog = createLogger('water-temp');
 const WIND_FALLBACK_MAX_REDUCTION = 0.6;
 const FORECAST_MAX_WIND_GUST_WEIGHT = 0.2;
 const EXTERNAL_REPORTS_ENABLED = false;
-export const WATER_TEMP_MODEL_VERSION = '2.3.1';
-
+export const WATER_TEMP_MODEL_VERSION = '2.4.0';
+const OBSERVED_TEMP_CALIBRATION_MAX_OFFSET_F = 3;
+const OBSERVED_TEMP_CALIBRATION_DECAY_HOURS = 60;
 
 function warnIfUnitMismatch(message) {
     const isDev = typeof process !== 'undefined' && process?.env?.NODE_ENV !== 'production';
@@ -69,6 +70,41 @@ function average(values) {
 function normalizeWaterBodyType(value) {
     if (typeof value !== 'string') return '';
     return value.trim().toLowerCase();
+}
+
+function buildObservedCalibration(coords, waterType, currentDate) {
+    const observed = storage.getWaterTempObserved(coords.lat, coords.lon, waterType);
+    if (!observed || !Number.isFinite(observed.tempF) || typeof observed.timestamp !== 'string') {
+        return null;
+    }
+
+    const observedAt = new Date(observed.timestamp);
+    if (!Number.isFinite(observedAt.getTime())) return null;
+    const ageHours = (currentDate.getTime() - observedAt.getTime()) / (1000 * 60 * 60);
+    if (!Number.isFinite(ageHours) || ageHours < 0 || ageHours > 72) return null;
+
+    return { observedTempF: observed.tempF, observedTimestamp: observed.timestamp, ageHours };
+}
+
+function applyObservedCalibrationOffset(estimatedTemp, observedCalibration) {
+    if (!Number.isFinite(estimatedTemp) || !observedCalibration) {
+        return { calibratedTemp: estimatedTemp, offset: 0, decayWeight: 0 };
+    }
+
+    const decayWeight = clamp(1 - (observedCalibration.ageHours / OBSERVED_TEMP_CALIBRATION_DECAY_HOURS), 0, 1);
+    if (decayWeight <= 0) {
+        return { calibratedTemp: estimatedTemp, offset: 0, decayWeight };
+    }
+
+    const rawOffset = observedCalibration.observedTempF - estimatedTemp;
+    const boundedOffset = clamp(rawOffset, -OBSERVED_TEMP_CALIBRATION_MAX_OFFSET_F, OBSERVED_TEMP_CALIBRATION_MAX_OFFSET_F);
+    const offset = boundedOffset * decayWeight;
+
+    return {
+        calibratedTemp: estimatedTemp + offset,
+        offset,
+        decayWeight
+    };
 }
 
 function getDiurnalResponseByWaterType(waterType) {
@@ -391,8 +427,12 @@ function applyColdSeasonPondCorrection({ estimatedTemp, waterType, dayOfYear, ai
         ? clamp((62 - airInfluence.average) / 12, 0, 1)
         : 0;
 
-    const correction = seasonFactor * ((1.8 * coolAirSignal) + (2.6 * overcastSignal * (0.35 + (0.65 * coolAirSignal))));
-    return estimatedTemp - correction;
+    // Keep correction primarily tied to genuinely cold-air regimes; overcast alone should not
+    // stack into large additional cooling on top of solar damping + wind/evap terms.
+    const cloudAssist = 0.55 + (0.45 * coolAirSignal);
+    const correction = seasonFactor * ((1.45 * coolAirSignal) + (1.1 * overcastSignal * cloudAssist));
+    const boundedCorrection = Math.min(correction, 1.6 + (0.8 * coolAirSignal));
+    return estimatedTemp - boundedCorrection;
 }
 
 function getRelaxedDailyChangeLimit(baseLimit, userReports, coords) {
@@ -489,7 +529,8 @@ function calculateSolarDeviation(latitude, dayOfYear, cloudCoverArray, waterType
     const waterTypeSensitivity = getSolarSensitivity(waterType, body);
 
     const cloudDeviation = normalCloudCover - avgCloudCover;
-    return cloudDeviation * 0.08 * seasonalInsolationFactor * waterTypeSensitivity;
+    const solarDeviation = cloudDeviation * 0.08 * seasonalInsolationFactor * waterTypeSensitivity;
+    return Math.max(0, solarDeviation);
 }
 
 function calculateAirTempInfluence(airTemps, waterType, tempUnit = 'F') {
@@ -741,6 +782,10 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
         cloudCover
     });
 
+    const observedCalibration = buildObservedCalibration(coords, waterType, currentDate);
+    const observedAdjustment = applyObservedCalibrationOffset(estimatedTemp, observedCalibration);
+    estimatedTemp = observedAdjustment.calibratedTemp;
+
     const body = WATER_BODIES_V2[waterType];
     estimatedTemp = clamp(estimatedTemp, 32, 95);
 
@@ -780,7 +825,8 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     debugLog(
         `[water-temp terms] humidity term=${weatherSignals.humidityTerm.toFixed(2)} ` +
         `pressure-slope term=${pressureMixingBoost.toFixed(2)} precip regime term=${weatherSignals.precipRegimeTerm.toFixed(2)} ` +
-        `solar term=${solarEffect.toFixed(2)} wind term=${windEffect.toFixed(2)}`
+        `solar term=${solarEffect.toFixed(2)} wind term=${windEffect.toFixed(2)} ` +
+        `observed offset=${observedAdjustment.offset.toFixed(2)}`
     );
     debugLog(`✅ Final water temp estimate: ${finalTemp}°F`);
 
@@ -1093,7 +1139,8 @@ export async function explainWaterTempTerms({ coords, waterType, date, weatherPa
     const dayOfYear = getDayOfYear(date);
 
     const seasonalBase = getSeasonalBaseTemp(latitude, dayOfYear, waterType);
-    const userCalibrationApplied = false;
+    const observedCalibration = buildObservedCalibration(coords, waterType, date);
+    const userCalibrationApplied = Number.isFinite(observedCalibration?.observedTempF);
 
     const daily = getField(weatherPayload, 'historical.daily', trace) || {};
     const airTemps = getField(weatherPayload, 'historical.daily.temperature_2m_mean', trace) || [];
@@ -1148,13 +1195,15 @@ export async function explainWaterTempTerms({ coords, waterType, date, weatherPa
     const evaporationCooling = weatherSignals.evaporationCooling;
     const trendKicker = getSmoothTrendKicker(airInfluence.trend);
     const preCorrection = seasonalBase + solarEffect + airEffect + windEffect + evaporationCooling + trendKicker;
-    const corrected = applyColdSeasonPondCorrection({
+    const correctedNoObserved = applyColdSeasonPondCorrection({
         estimatedTemp: preCorrection,
         waterType,
         dayOfYear,
         airInfluence,
         cloudCover
     });
+    const observedAdjustment = applyObservedCalibrationOffset(correctedNoObserved, observedCalibration);
+    const corrected = observedAdjustment.calibratedTemp;
     const final = Math.round(clamp(corrected, 32, 95) * 10) / 10;
 
     return {
@@ -1166,7 +1215,8 @@ export async function explainWaterTempTerms({ coords, waterType, date, weatherPa
         evaporationCooling,
         synopticEventStrength: null,
         trendKicker,
-        coldSeasonPondCorrection: corrected - preCorrection,
+        coldSeasonPondCorrection: correctedNoObserved - preCorrection,
+        observedCalibrationOffset: observedAdjustment.offset,
         clampsApplied: {
             memoClamp: false,
             dailyDeltaEnvelope: null,

@@ -34,5 +34,6 @@ export const CACHE_KEYS = {
     NOTIFICATIONS_ENABLED: 'notifications_enabled',
     GEOCODE_CACHE_PREFIX: 'fishcast_geocode_cache_',
     WEATHER_CACHE_PREFIX: 'fishcast_weather_cache_',
-    WATER_TEMP_MEMO_PREFIX: 'fishcast_water_temp_memo_'
+    WATER_TEMP_MEMO_PREFIX: 'fishcast_water_temp_memo_',
+    WATER_TEMP_OBSERVED_PREFIX: 'fishcast_water_temp_observed_'
 };
