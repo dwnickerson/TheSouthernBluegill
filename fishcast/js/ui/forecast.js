@@ -11,6 +11,11 @@ import { createLogger } from '../utils/logger.js';
 import { toWindMph } from '../utils/units.js';
 
 const debugLog = createLogger('forecast');
+const FISHCAST_BUILD_ID = `${Date.now()}`;
+
+if (typeof window !== 'undefined') {
+    window.__FISHCAST_BUILD__ = FISHCAST_BUILD_ID;
+}
 
 // ============================================
 // HELPER: Get species data
@@ -153,6 +158,122 @@ function logWaterTempTrace(message, data) {
     console.log(`[UI water temp trace] ${message}`, data);
 }
 
+function getWaterTempDebugState() {
+    if (typeof window === 'undefined') {
+        return { enabled: false, lastWrites: {} };
+    }
+    if (!window.__fishcastWaterTempDebug) {
+        window.__fishcastWaterTempDebug = {
+            enabled: isWaterTempTraceEnabled(),
+            lastWrites: {}
+        };
+    }
+    window.__fishcastWaterTempDebug.enabled = isWaterTempTraceEnabled();
+    return window.__fishcastWaterTempDebug;
+}
+
+function describeElementIdentity(element) {
+    if (!element) return 'element:not-found';
+    const idPart = element.id ? `#${element.id}` : '';
+    const classPart = element.classList?.length ? `.${Array.from(element.classList).join('.')}` : '';
+    const dataField = element.dataset?.waterField ? `[data-water-field="${element.dataset.waterField}"]` : '';
+    return `${element.tagName?.toLowerCase() || 'unknown'}${idPart}${classPart}${dataField}`;
+}
+
+function writeWaterTempField({ selector, nextText, sourceVar, fieldKey }) {
+    const element = document.querySelector(selector);
+    const previousText = element?.textContent || '';
+    const assignedText = String(nextText);
+
+    if (element) {
+        element.textContent = assignedText;
+    }
+
+    const debugState = getWaterTempDebugState();
+    const stack = new Error().stack;
+    const payload = {
+        selector,
+        element: describeElementIdentity(element),
+        previousText,
+        newText: assignedText,
+        sourceVar,
+        fieldKey,
+        stack
+    };
+    debugState.lastWrites[fieldKey] = payload;
+
+    if (debugState.enabled) {
+        console.log('[WRITE water temp]', payload);
+    }
+
+    return payload;
+}
+
+function extractRenderedTempF(text) {
+    if (typeof text !== 'string') return null;
+    const match = text.match(/-?\d+(?:\.\d+)?/);
+    if (!match) return null;
+    return Number.parseFloat(match[0]);
+}
+
+function assertRenderedWaterTemps({ computed }) {
+    if (!isWaterTempTraceEnabled()) return;
+
+    const displayed = {
+        surface: extractRenderedTempF(document.querySelector('[data-water-field="surface"]')?.textContent || ''),
+        sunrise: extractRenderedTempF(document.querySelector('[data-water-field="sunrise"]')?.textContent || ''),
+        midday: extractRenderedTempF(document.querySelector('[data-water-field="midday"]')?.textContent || ''),
+        sunset: extractRenderedTempF(document.querySelector('[data-water-field="sunset"]')?.textContent || '')
+    };
+
+    const mismatches = Object.entries(computed).filter(([key, value]) => {
+        const shown = displayed[key];
+        if (!Number.isFinite(value) || !Number.isFinite(shown)) return true;
+        return Math.abs(value - shown) > 0.1;
+    });
+
+    if (mismatches.length > 0) {
+        const debugState = getWaterTempDebugState();
+        console.error('[ASSERT water temp mismatch]', {
+            computed,
+            displayed,
+            mismatches,
+            lastWrites: debugState.lastWrites
+        });
+    } else {
+        console.log('[ASSERT water temp match]', { computed, displayed });
+    }
+}
+
+function buildWaterTempViewModel({ waterTemp, waterType, weather, coords, date = new Date() }) {
+    const periods = getWaterTempsByPeriod({
+        dailySurfaceTemp: waterTemp,
+        waterType,
+        weather,
+        date,
+        coords
+    });
+
+    const surfaceNow = getSurfaceWaterNowTemp({ waterTemp, waterType, weather, coords });
+    const viewModel = {
+        surface: Number(surfaceNow.toFixed(1)),
+        sunrise: Number(periods.sunrise.toFixed(1)),
+        midday: Number(periods.midday.toFixed(1)),
+        sunset: Number(periods.sunset.toFixed(1)),
+        periods,
+        date
+    };
+
+    logWaterTempTrace('view-model', {
+        coords,
+        waterType,
+        dailySurfaceTemp: waterTemp,
+        viewModel
+    });
+
+    return viewModel;
+}
+
 function getCurrentPeriodByHour(hour24) {
     if (!Number.isFinite(hour24)) return 'midday';
     if (hour24 < 11) return 'morning';
@@ -281,15 +402,15 @@ function renderWaterPeriodBreakdown({ periods, waterType, date }) {
 
     return `
         <small style="color: var(--text-secondary); display: block; margin-top: 6px; line-height: 1.5;">
-            <strong>Sunrise temp:</strong> ${periods.sunrise.toFixed(1)}°F<br>
+            <strong>Sunrise temp:</strong> <span data-water-field="sunrise">${periods.sunrise.toFixed(1)}°F</span><br>
             <strong>Depths:</strong> 2ft: ${sunriseDepths.temp2ft}°F | 4ft: ${sunriseDepths.temp4ft}°F | 10ft: ${sunriseDepths.temp10ft}°F | 20ft: ${sunriseDepths.temp20ft}°F
         </small>
         <small style="color: var(--text-secondary); display: block; margin-top: 8px; line-height: 1.5;">
-            <strong>Midday temp:</strong> ${periods.midday.toFixed(1)}°F<br>
+            <strong>Midday temp:</strong> <span data-water-field="midday">${periods.midday.toFixed(1)}°F</span><br>
             <strong>Depths:</strong> 2ft: ${middayDepths.temp2ft}°F | 4ft: ${middayDepths.temp4ft}°F | 10ft: ${middayDepths.temp10ft}°F | 20ft: ${middayDepths.temp20ft}°F
         </small>
         <small style="color: var(--text-secondary); display: block; margin-top: 8px; line-height: 1.5;">
-            <strong>Sunset temp:</strong> ${periods.sunset.toFixed(1)}°F<br>
+            <strong>Sunset temp:</strong> <span data-water-field="sunset">${periods.sunset.toFixed(1)}°F</span><br>
             <strong>Depths:</strong> 2ft: ${sunsetDepths.temp2ft}°F | 4ft: ${sunsetDepths.temp4ft}°F | 10ft: ${sunsetDepths.temp10ft}°F | 20ft: ${sunsetDepths.temp20ft}°F
         </small>
     `;
@@ -589,15 +710,7 @@ export function renderForecast(data) {
     const feelsLikeTemp = toTempF(weather.forecast.current.apparent_temperature, weather);
     const humidity = Number(weather.forecast.current.relative_humidity_2m) || 0;
     const dewPointF = calculateDewPointF(toTempF(weather.forecast.current.temperature_2m, weather), humidity);
-    const currentSurfaceTemp = getSurfaceWaterNowTemp({ waterTemp, waterType, weather, coords });
-    const surfaceTemp = currentSurfaceTemp.toFixed(1);
-    const todaysWaterPeriods = getWaterTempsByPeriod({
-        dailySurfaceTemp: waterTemp,
-        waterType,
-        weather,
-        date: new Date(),
-        coords
-    });
+    const waterTempView = buildWaterTempViewModel({ waterTemp, waterType, weather, coords, date: new Date() });
     
     // NEW: Water clarity badge
     const clarityIcons = {
@@ -636,7 +749,7 @@ export function renderForecast(data) {
                 <div class="summary-card"><div class="label">Conditions</div><div class="value weather-condition-value"><span class="weather-symbol">${weatherIcon.icon}</span><span>${weatherIcon.label}</span></div></div>
                 <div class="summary-card"><div class="label">Air temp range</div><div class="value">${todayLowTemp.toFixed(0)}°F to ${todayHighTemp.toFixed(0)}°F</div></div>
                 <div class="summary-card"><div class="label">Feels like</div><div class="value">${feelsLikeTemp.toFixed(0)}°F</div></div>
-                <div class="summary-card"><div class="label">Water surface</div><div class="value">${surfaceTemp}°F</div></div>
+                <div class="summary-card"><div class="label">Water surface</div><div class="value" data-water-field="surface">${waterTempView.surface.toFixed(1)}°F</div></div>
                 <div class="summary-card"><div class="label">Wind</div><div class="value">${windSpeed.toFixed(0)} mph ${windDir}</div></div>
                 <div class="summary-card"><div class="label">Humidity / Dew point</div><div class="value">${humidity.toFixed(0)}% · ${dewPointF?.toFixed(0) ?? 'N/A'}°F</div></div>
             </div>
@@ -651,7 +764,7 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Water Temperature</span>
                     <span class="detail-value">
-                        ${renderWaterPeriodBreakdown({ periods: todaysWaterPeriods, waterType, date: new Date() })}
+                        ${renderWaterPeriodBreakdown({ periods: waterTempView.periods, waterType, date: waterTempView.date })}
                     </span>
                 </div>
                 <div class="detail-row">
@@ -761,9 +874,27 @@ export function renderForecast(data) {
         <div class="action-buttons action-buttons-bottom">
             <button class="action-btn" onclick="window.shareForecast()" aria-label="Share forecast">Share Forecast</button>
         </div>
+        ${isWaterTempTraceEnabled() ? `<div class="debug-build-stamp" style="margin-top:8px; font-size:0.85rem; color: var(--text-secondary);">Build ID: ${window.__FISHCAST_BUILD__}</div>` : ''}
     `;
     
     resultsDiv.innerHTML = html;
+    writeWaterTempField({ selector: '[data-water-field="surface"]', nextText: `${waterTempView.surface.toFixed(1)}°F`, sourceVar: 'waterTempView.surface', fieldKey: 'surface' });
+    writeWaterTempField({ selector: '[data-water-field="sunrise"]', nextText: `${waterTempView.sunrise.toFixed(1)}°F`, sourceVar: 'waterTempView.sunrise', fieldKey: 'sunrise' });
+    writeWaterTempField({ selector: '[data-water-field="midday"]', nextText: `${waterTempView.midday.toFixed(1)}°F`, sourceVar: 'waterTempView.midday', fieldKey: 'midday' });
+    writeWaterTempField({ selector: '[data-water-field="sunset"]', nextText: `${waterTempView.sunset.toFixed(1)}°F`, sourceVar: 'waterTempView.sunset', fieldKey: 'sunset' });
+    if (isWaterTempTraceEnabled()) {
+        console.log('[FISHCAST BUILD]', { buildId: window.__FISHCAST_BUILD__ });
+    }
+    const computedWaterTemps = {
+        surface: waterTempView.surface,
+        sunrise: waterTempView.sunrise,
+        midday: waterTempView.midday,
+        sunset: waterTempView.sunset
+    };
+    assertRenderedWaterTemps({ computed: computedWaterTemps });
+    setTimeout(() => {
+        assertRenderedWaterTemps({ computed: computedWaterTemps });
+    }, 0);
     resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
     
     // Store forecast data for sharing
