@@ -1,6 +1,36 @@
 // FishCast Service Worker
 const CACHE_NAME = 'fishcast-v6';
 const APP_PATH = '/fishcast/';
+const DEBUG_SW = false;
+const SW_API_HOSTS = new Set([
+  'api.open-meteo.com',
+  'archive-api.open-meteo.com',
+  'nominatim.openstreetmap.org',
+  'script.google.com'
+]);
+const swDebugKeys = new Set();
+
+function logSW(...args) {
+  if (DEBUG_SW) {
+    console.log('[FishCast SW]', ...args);
+  }
+}
+
+function logSWOnce(key, ...args) {
+  if (!DEBUG_SW || swDebugKeys.has(key)) {
+    return;
+  }
+
+  swDebugKeys.add(key);
+  console.warn('[FishCast SW]', ...args);
+}
+
+function offlineResponse() {
+  return new Response('Offline', {
+    status: 503,
+    headers: { 'Content-Type': 'text/plain' }
+  });
+}
 
 const urlsToCache = [
   APP_PATH,
@@ -55,46 +85,82 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') {
     return;
   }
+  event.respondWith(handleFetch(event.request));
+});
 
-  const url = new URL(event.request.url);
+async function handleFetch(request) {
+  try {
+    const url = new URL(request.url);
 
-  // Keep API calls network-only so we don't serve stale forecast data
-  if (
-    url.hostname === 'api.open-meteo.com' ||
-    url.hostname === 'archive-api.open-meteo.com' ||
-    url.hostname === 'nominatim.openstreetmap.org' ||
-    url.hostname === 'script.google.com'
-  ) {
-    event.respondWith(fetch(event.request));
-    return;
-  }
+    if (url.pathname.includes('/null') || url.pathname.endsWith('/null')) {
+      logSWOnce('null-path', 'Blocked invalid /null request', url.href);
+      return new Response(null, { status: 204 });
+    }
 
-  event.respondWith(
-    caches.match(event.request).then(cachedResponse => {
-      if (cachedResponse) {
-        return cachedResponse;
+    if (url.origin !== self.location.origin) {
+      logSW('bypass-cross-origin', url.href);
+      try {
+        return await fetch(request);
+      } catch (error) {
+        logSW('cross-origin-fetch-failed', url.href, error);
+        return offlineResponse();
+      }
+    }
+
+    // Keep selected APIs network-only so we don't serve stale forecast data.
+    if (SW_API_HOSTS.has(url.hostname)) {
+      logSW('network-only-api', url.href);
+      try {
+        return await fetch(request);
+      } catch (error) {
+        logSW('network-only-api-failed', url.href, error);
+        const fallback = await caches.match(request);
+        return fallback || offlineResponse();
+      }
+    }
+
+    const cachedResponse = await caches.match(request);
+    if (cachedResponse) {
+      logSW('cache-hit', url.href);
+      return cachedResponse;
+    }
+
+    try {
+      const networkResponse = await fetch(request);
+      if (!networkResponse) {
+        logSW('empty-network-response', url.href);
+        return offlineResponse();
       }
 
-      return fetch(event.request)
-        .then(networkResponse => {
-          if (!networkResponse || networkResponse.status !== 200) {
-            return networkResponse;
-          }
+      if (networkResponse.status === 200) {
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME)
+          .then(cache => cache.put(request, responseToCache))
+          .catch(error => logSW('cache-put-failed', url.href, error));
+      }
 
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(event.request, responseToCache);
-          });
+      logSW('network-ok', url.href);
+      return networkResponse;
+    } catch (error) {
+      logSW('network-failed', url.href, error);
+      if (request.mode === 'navigate') {
+        const appShell = await caches.match(`${APP_PATH}index.html`);
+        if (appShell) {
+          logSW('fallback-app-shell', url.href);
+          return appShell;
+        }
+      }
 
-          return networkResponse;
-        })
-        .catch(() => {
-          if (event.request.mode === 'navigate') {
-            return caches.match(`${APP_PATH}index.html`);
-          }
+      const cachedFallback = await caches.match(request);
+      if (cachedFallback) {
+        logSW('fallback-cache', url.href);
+        return cachedFallback;
+      }
 
-          return caches.match(event.request);
-        });
-    })
-  );
-});
+      return offlineResponse();
+    }
+  } catch (error) {
+    logSW('fetch-handler-error', error);
+    return offlineResponse();
+  }
+}
