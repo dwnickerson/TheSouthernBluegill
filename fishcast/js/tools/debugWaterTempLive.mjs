@@ -5,6 +5,7 @@ import {
   estimateWaterTempByPeriod,
   explainWaterTempTerms
 } from '../models/waterTemp.js';
+import fs from 'node:fs';
 import { buildModelPayload, payloadFingerprint } from './waterTempDebugShared.mjs';
 
 const coords = { lat: 34.25807, lon: -88.70464 };
@@ -36,11 +37,29 @@ function findSunTimes(weather, date) {
   };
 }
 
-const weather = await getWeather(coords.lat, coords.lon, 7);
+let weather;
+let source = 'LIVE';
+try {
+  weather = await getWeather(coords.lat, coords.lon, 7);
+} catch (error) {
+  source = 'FIXTURE_FALLBACK';
+  const fixturePath = new URL('./fixtures/weatherPayload.sample.json', import.meta.url);
+  weather = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
+  console.warn('Live weather fetch failed; using fixture fallback:', error?.message || error);
+}
 const modelPayload = buildModelPayload(weather);
-const anchorDate = modelPayload.anchorDate;
-const todayEstimate = await estimateWaterTemp(coords, waterType, modelPayload.estimateArgs.currentDate, modelPayload.estimateArgs.historicalWeather);
-const todayExplain = await explainWaterTempTerms({ coords, waterType, ...modelPayload.explainArgs });
+const sharedDate = modelPayload.anchorDate;
+modelPayload.estimateArgs.currentDate = sharedDate;
+modelPayload.explainArgs.date = sharedDate;
+const anchorDate = sharedDate;
+const todayEstimate = await estimateWaterTemp(coords, waterType, sharedDate, modelPayload.estimateArgs.historicalWeather);
+const todayExplain = await explainWaterTempTerms({
+  coords,
+  waterType,
+  date: sharedDate,
+  weatherPayload: modelPayload.explainArgs.weatherPayload
+});
+const deltaEstimateVsExplain = Math.abs(todayEstimate - todayExplain.final);
 
 const { timezone, sunriseTime, sunsetTime } = findSunTimes(weather, anchorDate);
 const sunrise = estimateWaterTempByPeriod({
@@ -81,14 +100,17 @@ console.log(JSON.stringify({
   coords,
   waterType,
   anchorDateISO: anchorDate.toISOString(),
-  source: 'LIVE',
+  source,
   fp: payloadFingerprint(weather)
 }, null, 2));
 console.log('coords:', coords, 'waterType:', waterType, 'timezone:', timezone);
+console.log('sharedDateISO:', sharedDate.toISOString());
 console.log('estimateWaterTemp() final:', todayEstimate);
 console.log('period temps:', { sunrise, midday, sunset });
 console.log('depth temp at ~1.7ft (sunrise):', Math.round(depth17 * 10) / 10);
 console.log('\n=== explainWaterTempTerms(today) ===');
 console.log(JSON.stringify(todayExplain, null, 2));
+console.log('explainWaterTempTerms(today).final:', todayExplain.final);
+console.log('delta (|estimate - explain.final|):', deltaEstimateVsExplain);
 console.log('\nUSED FIELDS (prefixes):');
 console.log((todayExplain?.usedFields?.prefixes || []).join('\n'));
