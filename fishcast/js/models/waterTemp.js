@@ -10,7 +10,7 @@ import { storage } from '../services/storage.js';
 
 const WIND_FALLBACK_MAX_REDUCTION = 0.6;
 const FORECAST_MAX_WIND_GUST_WEIGHT = 0.2;
-export const WATER_TEMP_MODEL_VERSION = '2.2.0';
+export const WATER_TEMP_MODEL_VERSION = '2.2.1';
 
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -283,6 +283,22 @@ function getRelaxedDailyChangeLimit(baseLimit, userReports, coords) {
     return baseLimit * trustBoost;
 }
 
+function hasTrustedRecentLocalReports(userReports, coords, waterType) {
+    if (!Array.isArray(userReports) || userReports.length === 0) return false;
+
+    const now = Date.now();
+    return userReports.some((report) => {
+        const distance = calculateDistance(coords.lat, coords.lon, report.latitude, report.longitude);
+        if (!Number.isFinite(distance) || distance > 6) return false;
+
+        const reportDate = new Date(report.timestamp);
+        const ageHours = (now - reportDate.getTime()) / (1000 * 60 * 60);
+        if (!Number.isFinite(ageHours) || ageHours > 30) return false;
+
+        return !report.waterBody || report.waterBody === waterType;
+    });
+}
+
 // Get seasonal baseline temperature using harmonic oscillation
 function getSeasonalBaseTemp(latitude, dayOfYear, waterType) {
     const body = WATER_BODIES_V2[waterType];
@@ -507,7 +523,9 @@ function calibrateWithUserData(seasonalBase, userReports, coords, waterType) {
 
     const userAverage = weightedSum / totalWeight;
     const reportCount = userReports.length;
-    const blendFactor = Math.min(0.8, reportCount * 0.15);
+    const hasTrustedLocalReports = hasTrustedRecentLocalReports(userReports, coords, waterType);
+    const blendFloor = hasTrustedLocalReports ? 0.58 : 0.2;
+    const blendFactor = clamp(Math.min(0.86, reportCount * 0.15), blendFloor, 0.86);
     const calibratedTemp = (userAverage * blendFactor) + (seasonalBase * (1 - blendFactor));
 
     console.log(`📊 Using ${reportCount} user reports. Blend: ${(blendFactor * 100).toFixed(0)}% user data, ${((1 - blendFactor) * 100).toFixed(0)}% model`);
@@ -574,11 +592,12 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     const memoDayKey = memoEntry?.dayKey || null;
     const memoModelVersion = memoEntry?.modelVersion || null;
     const currentDayKey = getLocalDayKey(currentDate);
+    const hasTrustedLocalReports = hasTrustedRecentLocalReports(userReports, coords, waterType);
     const shouldApplyDailyClamp = Number.isFinite(memoEstimate)
         && memoDayKey === currentDayKey
         && memoModelVersion === WATER_TEMP_MODEL_VERSION;
 
-    if (shouldApplyDailyClamp) {
+    if (shouldApplyDailyClamp && !hasTrustedLocalReports) {
         const dailyLimit = getRelaxedDailyChangeLimit(body.max_daily_change, userReports, coords);
         const change = estimatedTemp - memoEstimate;
         if (Math.abs(change) > dailyLimit) {
