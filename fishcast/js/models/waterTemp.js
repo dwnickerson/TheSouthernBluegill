@@ -69,9 +69,26 @@ function getDiurnalAdjustmentLimit(waterType) {
     return 1.8;
 }
 
-function getPeriodTargetHour(period) {
-    if (period === 'morning') return 9;
-    if (period === 'afternoon') return 15;
+function parseHourFromTimestamp(timestamp) {
+    if (typeof timestamp !== 'string') return null;
+    const match = timestamp.match(/T(\d{2}):(\d{2})/);
+    if (!match) return null;
+
+    const hour = Number.parseInt(match[1], 10);
+    const minutes = Number.parseInt(match[2], 10);
+    if (!Number.isFinite(hour) || !Number.isFinite(minutes)) return null;
+    return hour + (minutes / 60);
+}
+
+function getPeriodTargetHour(period, { sunriseTime, sunsetTime } = {}) {
+    if (period === 'morning') {
+        const sunriseHour = parseHourFromTimestamp(sunriseTime);
+        return Number.isFinite(sunriseHour) ? sunriseHour : 9;
+    }
+    if (period === 'afternoon') {
+        const sunsetHour = parseHourFromTimestamp(sunsetTime);
+        return Number.isFinite(sunsetHour) ? sunsetHour : 15;
+    }
     return 12;
 }
 
@@ -801,7 +818,9 @@ export function estimateWaterTempByPeriod({
     hourly,
     timezone = 'America/Chicago',
     date = new Date(),
-    period = 'midday'
+    period = 'midday',
+    sunriseTime = null,
+    sunsetTime = null
 }) {
     if (!Number.isFinite(dailySurfaceTemp)) return null;
 
@@ -814,7 +833,7 @@ export function estimateWaterTempByPeriod({
         return Math.round(dailySurfaceTemp * 10) / 10;
     }
 
-    const periodHour = getPeriodTargetHour(period);
+    const periodHour = getPeriodTargetHour(period, { sunriseTime, sunsetTime });
     const dateKey = new Intl.DateTimeFormat('en-CA', {
         timeZone: timezone,
         year: 'numeric',
@@ -872,7 +891,14 @@ export function estimateWaterTempByPeriod({
     const windMean = average(windSeries) || 0;
     const response = getDiurnalResponseByWaterType(waterType);
 
-    const normalizedHour = clamp((periodHour - 6) / 12, 0, 1);
+    const sunriseHour = parseHourFromTimestamp(sunriseTime);
+    const sunsetHour = parseHourFromTimestamp(sunsetTime);
+    const daylightHours = Number.isFinite(sunriseHour) && Number.isFinite(sunsetHour) && sunsetHour > sunriseHour
+        ? sunsetHour - sunriseHour
+        : 12;
+    const normalizedHour = Number.isFinite(sunriseHour)
+        ? clamp((periodHour - sunriseHour) / daylightHours, 0, 1)
+        : clamp((periodHour - 6) / 12, 0, 1);
     const solarPhase = Math.sin(Math.PI * normalizedHour);
     // Use both daily cloud context and target-hour cloud state. Heavy overcast can
     // suppress shortwave forcing much more than daily means imply.

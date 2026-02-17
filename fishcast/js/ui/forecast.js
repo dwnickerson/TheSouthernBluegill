@@ -153,6 +153,19 @@ function getSurfaceWaterNowTemp({ waterTemp, waterType, weather }) {
         hour12: false
     }).format(new Date()));
     const period = getCurrentPeriodByHour(localHour);
+    const todayKey = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(new Date());
+
+    const daily = weather?.forecast?.daily || {};
+    const dailyTimes = Array.isArray(daily.time) ? daily.time : [];
+    const dayIndex = dailyTimes.findIndex((value) => value === todayKey);
+    const fallbackIndex = dayIndex >= 0 ? dayIndex : 0;
+    const sunriseTime = Array.isArray(daily.sunrise) ? (daily.sunrise[fallbackIndex] || null) : null;
+    const sunsetTime = Array.isArray(daily.sunset) ? (daily.sunset[fallbackIndex] || null) : null;
 
     const periodTemp = estimateWaterTempByPeriod({
         dailySurfaceTemp: waterTemp,
@@ -160,7 +173,9 @@ function getSurfaceWaterNowTemp({ waterTemp, waterType, weather }) {
         hourly: weather?.forecast?.hourly,
         timezone,
         date: new Date(),
-        period
+        period,
+        sunriseTime,
+        sunsetTime
     });
 
     return Number.isFinite(periodTemp) ? periodTemp : waterTemp;
@@ -168,19 +183,38 @@ function getSurfaceWaterNowTemp({ waterTemp, waterType, weather }) {
 
 function getWaterTempsByPeriod({ dailySurfaceTemp, waterType, weather, date }) {
     const timezone = weather?.forecast?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago';
+    const dateKey = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(date);
+
+    const daily = weather?.forecast?.daily || {};
+    const sunriseEntries = Array.isArray(daily.sunrise) ? daily.sunrise : [];
+    const sunsetEntries = Array.isArray(daily.sunset) ? daily.sunset : [];
+    const dailyTimes = Array.isArray(daily.time) ? daily.time : [];
+
+    const dayIndex = dailyTimes.findIndex((value) => value === dateKey);
+    const fallbackIndex = dayIndex >= 0 ? dayIndex : 0;
+    const sunriseTime = sunriseEntries[fallbackIndex] || null;
+    const sunsetTime = sunsetEntries[fallbackIndex] || null;
+
     const buildPeriodTemp = (period) => estimateWaterTempByPeriod({
         dailySurfaceTemp,
         waterType,
         hourly: weather?.forecast?.hourly,
         timezone,
         date,
-        period
+        period,
+        sunriseTime,
+        sunsetTime
     });
 
     return {
-        morning: buildPeriodTemp('morning'),
+        sunrise: buildPeriodTemp('morning'),
         midday: buildPeriodTemp('midday'),
-        afternoon: buildPeriodTemp('afternoon')
+        sunset: buildPeriodTemp('afternoon')
     };
 }
 
@@ -194,22 +228,22 @@ function formatDepthTempsForSurface(surfaceTemp, waterType, date) {
 }
 
 function renderWaterPeriodBreakdown({ periods, waterType, date }) {
-    const morningDepths = formatDepthTempsForSurface(periods.morning, waterType, date);
+    const sunriseDepths = formatDepthTempsForSurface(periods.sunrise, waterType, date);
     const middayDepths = formatDepthTempsForSurface(periods.midday, waterType, date);
-    const afternoonDepths = formatDepthTempsForSurface(periods.afternoon, waterType, date);
+    const sunsetDepths = formatDepthTempsForSurface(periods.sunset, waterType, date);
 
     return `
         <small style="color: var(--text-secondary); display: block; margin-top: 6px; line-height: 1.5;">
-            <strong>Morning temp:</strong> ${periods.morning.toFixed(1)}°F<br>
-            <strong>Depths:</strong> 2ft: ${morningDepths.temp2ft}°F | 4ft: ${morningDepths.temp4ft}°F | 10ft: ${morningDepths.temp10ft}°F | 20ft: ${morningDepths.temp20ft}°F
+            <strong>Sunrise temp:</strong> ${periods.sunrise.toFixed(1)}°F<br>
+            <strong>Depths:</strong> 2ft: ${sunriseDepths.temp2ft}°F | 4ft: ${sunriseDepths.temp4ft}°F | 10ft: ${sunriseDepths.temp10ft}°F | 20ft: ${sunriseDepths.temp20ft}°F
         </small>
         <small style="color: var(--text-secondary); display: block; margin-top: 8px; line-height: 1.5;">
             <strong>Midday temp:</strong> ${periods.midday.toFixed(1)}°F<br>
             <strong>Depths:</strong> 2ft: ${middayDepths.temp2ft}°F | 4ft: ${middayDepths.temp4ft}°F | 10ft: ${middayDepths.temp10ft}°F | 20ft: ${middayDepths.temp20ft}°F
         </small>
         <small style="color: var(--text-secondary); display: block; margin-top: 8px; line-height: 1.5;">
-            <strong>Afternoon temp:</strong> ${periods.afternoon.toFixed(1)}°F<br>
-            <strong>Depths:</strong> 2ft: ${afternoonDepths.temp2ft}°F | 4ft: ${afternoonDepths.temp4ft}°F | 10ft: ${afternoonDepths.temp10ft}°F | 20ft: ${afternoonDepths.temp20ft}°F
+            <strong>Sunset temp:</strong> ${periods.sunset.toFixed(1)}°F<br>
+            <strong>Depths:</strong> 2ft: ${sunsetDepths.temp2ft}°F | 4ft: ${sunsetDepths.temp4ft}°F | 10ft: ${sunsetDepths.temp10ft}°F | 20ft: ${sunsetDepths.temp20ft}°F
         </small>
     `;
 }
@@ -791,7 +825,7 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
                 <div class="day-score ${scoreClass}"title="Estimated fishing score">${Math.round(estimatedScore)}</div>
                 <div class="day-temp">${minTemp.toFixed(0)}° → ${maxTemp.toFixed(0)}°</div>
                 <div class="day-precip">${precipProb}% rain</div>
-                <div style="font-size: 0.85em; color: #888; margin-top: 4px;">Water: ${dayWaterPeriods.morning.toFixed(0)}° / ${dayWaterPeriods.midday.toFixed(0)}° / ${dayWaterPeriods.afternoon.toFixed(0)}°F</div>
+                <div style="font-size: 0.85em; color: #888; margin-top: 4px;">Water: ${dayWaterPeriods.sunrise.toFixed(0)}° / ${dayWaterPeriods.midday.toFixed(0)}° / ${dayWaterPeriods.sunset.toFixed(0)}°F</div>
                 <div style="font-size: 0.85em; color: #888;">${windSpeed.toFixed(0)} mph ${windDir}</div>
                 <div class="day-hourly-trend">${precipAmountInches.toFixed(2)} in</div>
             </div>
