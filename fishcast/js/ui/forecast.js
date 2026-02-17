@@ -560,7 +560,6 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Water Temperature</span>
                     <span class="detail-value">
-                        Surface: ${surfaceTemp}°F<br>
                         ${renderWaterPeriodBreakdown({ periods: todaysWaterPeriods, waterType, date: new Date() })}
                     </span>
                 </div>
@@ -873,7 +872,6 @@ window.showDayDetails = function(dayIndex, date) {
                     <div class="detail-row">
                         <span class="detail-label">Water Temperature</span>
                         <span class="detail-value">
-                            Surface: ${waterTempEstimate.toFixed(1)}°F<br>
                             ${renderWaterPeriodBreakdown({ periods: dayWaterPeriods, waterType: data.waterType, date: new Date(`${date}T12:00:00`) })}
                         </span>
                     </div>
