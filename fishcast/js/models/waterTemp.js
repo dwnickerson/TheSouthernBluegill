@@ -10,6 +10,7 @@ import { storage } from '../services/storage.js';
 
 const WIND_FALLBACK_MAX_REDUCTION = 0.6;
 const FORECAST_MAX_WIND_GUST_WEIGHT = 0.2;
+export const WATER_TEMP_MODEL_VERSION = '2.1.0';
 
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -529,8 +530,11 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     const memoEntry = storage.getWaterTempMemoEntry(coords.lat, coords.lon, waterType);
     const memoEstimate = memoEntry?.temp;
     const memoDayKey = memoEntry?.dayKey || null;
+    const memoModelVersion = memoEntry?.modelVersion || null;
     const currentDayKey = getLocalDayKey(currentDate);
-    const shouldApplyDailyClamp = Number.isFinite(memoEstimate) && memoDayKey === currentDayKey;
+    const shouldApplyDailyClamp = Number.isFinite(memoEstimate)
+        && memoDayKey === currentDayKey
+        && memoModelVersion === WATER_TEMP_MODEL_VERSION;
 
     if (shouldApplyDailyClamp) {
         const dailyLimit = getRelaxedDailyChangeLimit(body.max_daily_change, userReports, coords);
@@ -540,7 +544,14 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
         }
     }
 
-    storage.setWaterTempMemo(coords.lat, coords.lon, waterType, estimatedTemp, currentDayKey);
+    storage.setWaterTempMemo(
+        coords.lat,
+        coords.lon,
+        waterType,
+        estimatedTemp,
+        currentDayKey,
+        WATER_TEMP_MODEL_VERSION
+    );
 
     const finalTemp = Math.round(estimatedTemp * 10) / 10;
     if (windEstimate.warnings.length) {

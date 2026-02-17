@@ -210,7 +210,8 @@ export const storage = {
             if (parsed && Number.isFinite(parsed.temp)) {
                 return {
                     temp: Number(parsed.temp),
-                    dayKey: typeof parsed.dayKey === 'string' ? parsed.dayKey : null
+                    dayKey: typeof parsed.dayKey === 'string' ? parsed.dayKey : null,
+                    modelVersion: typeof parsed.modelVersion === 'string' ? parsed.modelVersion : null
                 };
             }
         } catch (error) {
@@ -225,11 +226,12 @@ export const storage = {
         return null;
     },
 
-    setWaterTempMemo(lat, lon, waterType, temp, dayKey = null) {
+    setWaterTempMemo(lat, lon, waterType, temp, dayKey = null, modelVersion = null) {
         const key = this.getWaterTempMemoKey(lat, lon, waterType);
         return safeSetRaw(key, JSON.stringify({
             temp: Number(temp).toFixed(1),
-            dayKey
+            dayKey,
+            modelVersion
         }));
     },
 
