@@ -717,6 +717,164 @@ function calibrateWithUserData(seasonalBase, userReports, coords, waterType) {
     return calibratedTemp;
 }
 
+function directGet(source, path) {
+    return path.split('.').reduce((acc, key) => (acc == null ? acc : acc[key]), source);
+}
+
+function normalizeEstimatorWeatherPayload(weatherPayload) {
+    if (weatherPayload?.historical?.daily || weatherPayload?.forecast || weatherPayload?.meta) {
+        return {
+            historical: {
+                daily: weatherPayload?.historical?.daily || weatherPayload?.daily || {}
+            },
+            forecast: weatherPayload?.forecast || {},
+            meta: weatherPayload?.meta || {}
+        };
+    }
+
+    return {
+        historical: {
+            daily: weatherPayload?.daily || {}
+        },
+        forecast: weatherPayload?.forecast || {},
+        meta: weatherPayload?.meta || {}
+    };
+}
+
+async function computeWaterTempEstimateTerms({ coords, waterType, currentDate, weatherPayload, trace = null, persistMemo = false }) {
+    const getValue = (path, fallback = undefined) => {
+        const raw = trace ? getField(weatherPayload, path, trace) : directGet(weatherPayload, path);
+        return raw ?? fallback;
+    };
+
+    const latitude = coords.lat;
+    const dayOfYear = getDayOfYear(currentDate);
+    const seasonalBase = getSeasonalBaseTemp(latitude, dayOfYear, waterType);
+    const observedCalibration = buildObservedCalibration(coords, waterType, currentDate);
+    const userCalibrationApplied = Number.isFinite(observedCalibration?.observedTempF);
+
+    const daily = getValue('historical.daily', {});
+    const airTemps = getValue('historical.daily.temperature_2m_mean', []);
+    const cloudCover = getValue('historical.daily.cloud_cover_mean', []);
+    getValue('historical.daily.wind_speed_10m_mean');
+    getValue('historical.daily.wind_speed_10m_max');
+    const tempUnit = getValue('meta.units.temp', 'F');
+    if (String(tempUnit).toLowerCase().startsWith('c') && String(getValue('meta.units.temp', '')).toLowerCase().startsWith('f')) {
+        warnIfUnitMismatch('meta temp_unit is fahrenheit but downstream temp unit hint is Celsius; potential double conversion risk.');
+    }
+
+    const airInfluence = calculateAirTempInfluence(airTemps, waterType, tempUnit);
+    const hourly = getValue('forecast.hourly', {});
+    const pressureMixingBoost = getPressureMixingBoost(hourly);
+    const weatherSignals = getWeatherMixingSignals({
+        current: getValue('forecast.current', {}),
+        hourly,
+        nowHourIndex: getValue('meta.nowHourIndex')
+    });
+
+    const cloudContext = [...cloudCover];
+    if (Number.isFinite(weatherSignals.nearTermCloudMean)) cloudContext.push(weatherSignals.nearTermCloudMean);
+    const solarEffect = calculateSolarDeviation(latitude, dayOfYear, cloudContext, waterType) * (1 - weatherSignals.stormSolarDamping);
+    const thermalResponse = getThermalInertiaCoefficient(waterType, seasonalBase, airInfluence.average);
+    const airEffect = (airInfluence.average - seasonalBase) * thermalResponse;
+
+    const windEstimate = getWindEstimateMph({
+        daily,
+        forecast: {
+            hourly,
+            current: getValue('forecast.current', {})
+        },
+        meta: {
+            nowHourIndex: getValue('meta.nowHourIndex')
+        }
+    });
+    const windForcing = windEstimate.windMph + (pressureMixingBoost * 6) + (weatherSignals.stormMixingBoost * 4);
+    const windEffect = calculateWindMixingEffect(
+        windForcing,
+        waterType,
+        seasonalBase + solarEffect + airEffect,
+        airInfluence.average
+    );
+
+    const evaporationCooling = weatherSignals.evaporationCooling;
+    const trendKicker = getSmoothTrendKicker(airInfluence.trend);
+    const preCorrection = seasonalBase + solarEffect + airEffect + windEffect + evaporationCooling + trendKicker;
+    const correctedNoObserved = applyColdSeasonPondCorrection({
+        estimatedTemp: preCorrection,
+        waterType,
+        dayOfYear,
+        airInfluence,
+        cloudCover
+    });
+    const observedAdjustment = applyObservedCalibrationOffset(correctedNoObserved, observedCalibration);
+    let estimatedTemp = clamp(observedAdjustment.calibratedTemp, 32, 95);
+
+    const memoEntry = storage.getWaterTempMemoEntry(coords.lat, coords.lon, waterType);
+    const memoEstimate = memoEntry?.temp;
+    const memoDayKey = memoEntry?.dayKey || null;
+    const memoModelVersion = memoEntry?.modelVersion || null;
+    const currentDayKey = getLocalDayKey(currentDate);
+    const shouldApplyDailyClamp = Number.isFinite(memoEstimate)
+        && memoDayKey === currentDayKey
+        && memoModelVersion === WATER_TEMP_MODEL_VERSION;
+    const body = WATER_BODIES_V2[waterType];
+    let memoClamp = false;
+    let dailyDeltaEnvelope = null;
+
+    if (shouldApplyDailyClamp) {
+        const dailyLimit = getRelaxedDailyChangeLimit(body.max_daily_change, null, coords);
+        const change = estimatedTemp - memoEstimate;
+        dailyDeltaEnvelope = { min: memoEstimate - dailyLimit, max: memoEstimate + dailyLimit };
+        if (Math.abs(change) > dailyLimit) {
+            memoClamp = true;
+            estimatedTemp = memoEstimate + (Math.sign(change) * dailyLimit);
+        }
+    }
+
+    if (persistMemo) {
+        storage.setWaterTempMemo(
+            coords.lat,
+            coords.lon,
+            waterType,
+            estimatedTemp,
+            currentDayKey,
+            WATER_TEMP_MODEL_VERSION
+        );
+    }
+
+    const final = Math.round(estimatedTemp * 10) / 10;
+    return {
+        seasonalBase,
+        userCalibrationApplied,
+        solarEffect,
+        airEffect,
+        windEffect,
+        evaporationCooling,
+        synopticEventStrength: null,
+        trendKicker,
+        coldSeasonPondCorrection: correctedNoObserved - preCorrection,
+        observedCalibrationOffset: observedAdjustment.offset,
+        clampsApplied: {
+            memoClamp,
+            dailyDeltaEnvelope,
+            physDeltaRange: { min: 32, max: 95 }
+        },
+        windEstimate,
+        weatherSignals,
+        breakdownTerms: {
+            seasonalBase,
+            solarEffect,
+            airEffect,
+            windEffect,
+            evaporationCooling,
+            trendKicker,
+            coldSeasonPondCorrection: correctedNoObserved - preCorrection,
+            observedCalibrationOffset: observedAdjustment.offset
+        },
+        final
+    };
+}
+
 // Main water temperature estimation function
 export async function estimateWaterTemp(coords, waterType, currentDate, historicalWeather) {
     const latitude = coords.lat;
@@ -728,109 +886,28 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     // - precipitation: inches
     debugLog(`🌡️ Estimating water temp for ${waterType} at ${latitude.toFixed(2)}°N on day ${dayOfYear}`);
 
-    const seasonalBase = getSeasonalBaseTemp(latitude, dayOfYear, waterType);
-    debugLog(`📅 Seasonal baseline: ${seasonalBase.toFixed(1)}°F`);
-
-    const userReports = EXTERNAL_REPORTS_ENABLED
-        ? await getNearbyWaterTempReports(coords, waterType)
-        : null;
-    let calibratedBase = seasonalBase;
-
-    if (EXTERNAL_REPORTS_ENABLED && userReports && userReports.length > 0) {
-        calibratedBase = calibrateWithUserData(seasonalBase, userReports, coords, waterType);
-        debugLog(`👥 Calibrated with user data: ${calibratedBase.toFixed(1)}°F`);
-    }
-
-    const daily = historicalWeather?.daily || {};
-    const airTemps = daily.temperature_2m_mean || [];
-    const cloudCover = daily.cloud_cover_mean || [];
-
-    const tempUnit = historicalWeather?.meta?.units?.temp || 'F';
-    if (String(tempUnit).toLowerCase().startsWith('c') && String(historicalWeather?.meta?.units?.temp || '').toLowerCase().startsWith('f')) {
-        warnIfUnitMismatch('meta temp_unit is fahrenheit but downstream temp unit hint is Celsius; potential double conversion risk.');
-    }
-    const airInfluence = calculateAirTempInfluence(airTemps, waterType, tempUnit);
-    const hourly = historicalWeather?.forecast?.hourly || {};
-    const pressureMixingBoost = getPressureMixingBoost(hourly);
-    const weatherSignals = getWeatherMixingSignals({
-        current: historicalWeather?.forecast?.current || {},
-        hourly,
-        nowHourIndex: historicalWeather?.meta?.nowHourIndex
-    });
-    const cloudContext = [...cloudCover];
-    if (Number.isFinite(weatherSignals.nearTermCloudMean)) cloudContext.push(weatherSignals.nearTermCloudMean);
-    const solarEffect = calculateSolarDeviation(latitude, dayOfYear, cloudContext, waterType) * (1 - weatherSignals.stormSolarDamping);
-    const thermalResponse = getThermalInertiaCoefficient(waterType, calibratedBase, airInfluence.average);
-    const airDelta = airInfluence.average - calibratedBase;
-    const airEffect = airDelta * thermalResponse;
-
-    const windEstimate = getWindEstimateMph(historicalWeather);
-    const windEffect = calculateWindMixingEffect(
-        windEstimate.windMph + (pressureMixingBoost * 6) + (weatherSignals.stormMixingBoost * 4),
+    const normalizedPayload = normalizeEstimatorWeatherPayload(historicalWeather);
+    const computed = await computeWaterTempEstimateTerms({
+        coords,
         waterType,
-        calibratedBase + solarEffect + airEffect,
-        airInfluence.average
-    );
-
-    let estimatedTemp = calibratedBase + solarEffect + airEffect + windEffect + weatherSignals.evaporationCooling;
-    estimatedTemp += getSmoothTrendKicker(airInfluence.trend);
-    estimatedTemp = applyColdSeasonPondCorrection({
-        estimatedTemp,
-        waterType,
-        dayOfYear,
-        airInfluence,
-        cloudCover
+        currentDate,
+        weatherPayload: normalizedPayload,
+        persistMemo: true
     });
 
-    const observedCalibration = buildObservedCalibration(coords, waterType, currentDate);
-    const observedAdjustment = applyObservedCalibrationOffset(estimatedTemp, observedCalibration);
-    estimatedTemp = observedAdjustment.calibratedTemp;
-
-    const body = WATER_BODIES_V2[waterType];
-    estimatedTemp = clamp(estimatedTemp, 32, 95);
-
-    const memoEntry = storage.getWaterTempMemoEntry(coords.lat, coords.lon, waterType);
-    const memoEstimate = memoEntry?.temp;
-    const memoDayKey = memoEntry?.dayKey || null;
-    const memoModelVersion = memoEntry?.modelVersion || null;
-    const currentDayKey = getLocalDayKey(currentDate);
-    const hasTrustedLocalReports = EXTERNAL_REPORTS_ENABLED
-        ? hasTrustedRecentLocalReports(userReports, coords, waterType)
-        : false;
-    const shouldApplyDailyClamp = Number.isFinite(memoEstimate)
-        && memoDayKey === currentDayKey
-        && memoModelVersion === WATER_TEMP_MODEL_VERSION;
-
-    if (shouldApplyDailyClamp && !hasTrustedLocalReports) {
-        const dailyLimit = getRelaxedDailyChangeLimit(body.max_daily_change, userReports, coords);
-        const change = estimatedTemp - memoEstimate;
-        if (Math.abs(change) > dailyLimit) {
-            estimatedTemp = memoEstimate + (Math.sign(change) * dailyLimit);
-        }
-    }
-
-    storage.setWaterTempMemo(
-        coords.lat,
-        coords.lon,
-        waterType,
-        estimatedTemp,
-        currentDayKey,
-        WATER_TEMP_MODEL_VERSION
-    );
-
-    const finalTemp = Math.round(estimatedTemp * 10) / 10;
-    if (windEstimate.warnings.length) {
-        debugLog('⚠️ Wind estimation notes:', windEstimate.warnings.join('; '));
+    debugLog(`📅 Seasonal baseline: ${computed.seasonalBase.toFixed(1)}°F`);
+    if (computed.windEstimate.warnings.length) {
+        debugLog('⚠️ Wind estimation notes:', computed.windEstimate.warnings.join('; '));
     }
     debugLog(
-        `[water-temp terms] humidity term=${weatherSignals.humidityTerm.toFixed(2)} ` +
-        `pressure-slope term=${pressureMixingBoost.toFixed(2)} precip regime term=${weatherSignals.precipRegimeTerm.toFixed(2)} ` +
-        `solar term=${solarEffect.toFixed(2)} wind term=${windEffect.toFixed(2)} ` +
-        `observed offset=${observedAdjustment.offset.toFixed(2)}`
+        `[water-temp terms] humidity term=${computed.weatherSignals.humidityTerm.toFixed(2)} ` +
+        `pressure-slope term=${getPressureMixingBoost(normalizedPayload?.forecast?.hourly || {}).toFixed(2)} precip regime term=${computed.weatherSignals.precipRegimeTerm.toFixed(2)} ` +
+        `solar term=${computed.solarEffect.toFixed(2)} wind term=${computed.windEffect.toFixed(2)} ` +
+        `observed offset=${computed.observedCalibrationOffset.toFixed(2)}`
     );
-    debugLog(`✅ Final water temp estimate: ${finalTemp}°F`);
+    debugLog(`✅ Final water temp estimate: ${computed.final}°F`);
 
-    return finalTemp;
+    return computed.final;
 }
 
 // Estimate temperature by depth (stratification)
@@ -1135,94 +1212,17 @@ function collectUsedFieldPrefixes(trace) {
 
 export async function explainWaterTempTerms({ coords, waterType, date, weatherPayload }) {
     const trace = new Set();
-    const latitude = coords.lat;
-    const dayOfYear = getDayOfYear(date);
-
-    const seasonalBase = getSeasonalBaseTemp(latitude, dayOfYear, waterType);
-    const observedCalibration = buildObservedCalibration(coords, waterType, date);
-    const userCalibrationApplied = Number.isFinite(observedCalibration?.observedTempF);
-
-    const daily = getField(weatherPayload, 'historical.daily', trace) || {};
-    const airTemps = getField(weatherPayload, 'historical.daily.temperature_2m_mean', trace) || [];
-    const cloudCover = getField(weatherPayload, 'historical.daily.cloud_cover_mean', trace) || [];
-    getField(weatherPayload, 'historical.daily.wind_speed_10m_mean', trace);
-    getField(weatherPayload, 'historical.daily.wind_speed_10m_max', trace);
-    getField(weatherPayload, 'forecast.current.temperature_2m', trace);
-    getField(weatherPayload, 'forecast.current.relative_humidity_2m', trace);
-    getField(weatherPayload, 'forecast.current.wind_speed_10m', trace);
-    getField(weatherPayload, 'forecast.current.weather_code', trace);
-    getField(weatherPayload, 'forecast.current.precipitation', trace);
-    getField(weatherPayload, 'forecast.hourly.surface_pressure', trace);
-    getField(weatherPayload, 'forecast.hourly.time', trace);
-    getField(weatherPayload, 'forecast.hourly.weather_code', trace);
-    getField(weatherPayload, 'forecast.hourly.precipitation_probability', trace);
-    getField(weatherPayload, 'forecast.hourly.cloud_cover', trace);
-
-    const tempUnit = getField(weatherPayload, 'meta.units.temp', trace) || 'F';
-    const airInfluence = calculateAirTempInfluence(airTemps, waterType, tempUnit);
-    const hourly = getField(weatherPayload, 'forecast.hourly', trace) || {};
-    const pressureMixingBoost = getPressureMixingBoost(hourly);
-    const weatherSignals = getWeatherMixingSignals({
-        current: getField(weatherPayload, 'forecast.current', trace) || {},
-        hourly,
-        nowHourIndex: getField(weatherPayload, 'meta.nowHourIndex', trace)
-    });
-
-    const cloudContext = [...cloudCover];
-    if (Number.isFinite(weatherSignals.nearTermCloudMean)) cloudContext.push(weatherSignals.nearTermCloudMean);
-    const solarEffect = calculateSolarDeviation(latitude, dayOfYear, cloudContext, waterType) * (1 - weatherSignals.stormSolarDamping);
-    const thermalResponse = getThermalInertiaCoefficient(waterType, seasonalBase, airInfluence.average);
-    const airEffect = (airInfluence.average - seasonalBase) * thermalResponse;
-
-    const windEstimate = getWindEstimateMph({
-        daily,
-        forecast: {
-            hourly,
-            current: getField(weatherPayload, 'forecast.current', trace) || {}
-        },
-        meta: {
-            nowHourIndex: getField(weatherPayload, 'meta.nowHourIndex', trace)
-        }
-    });
-
-    const windEffect = calculateWindMixingEffect(
-        windEstimate.windMph + (pressureMixingBoost * 6) + (weatherSignals.stormMixingBoost * 4),
+    const normalizedPayload = normalizeEstimatorWeatherPayload(weatherPayload);
+    const computed = await computeWaterTempEstimateTerms({
+        coords,
         waterType,
-        seasonalBase + solarEffect + airEffect,
-        airInfluence.average
-    );
-
-    const evaporationCooling = weatherSignals.evaporationCooling;
-    const trendKicker = getSmoothTrendKicker(airInfluence.trend);
-    const preCorrection = seasonalBase + solarEffect + airEffect + windEffect + evaporationCooling + trendKicker;
-    const correctedNoObserved = applyColdSeasonPondCorrection({
-        estimatedTemp: preCorrection,
-        waterType,
-        dayOfYear,
-        airInfluence,
-        cloudCover
+        currentDate: date,
+        weatherPayload: normalizedPayload,
+        trace
     });
-    const observedAdjustment = applyObservedCalibrationOffset(correctedNoObserved, observedCalibration);
-    const corrected = observedAdjustment.calibratedTemp;
-    const final = Math.round(clamp(corrected, 32, 95) * 10) / 10;
 
     return {
-        seasonalBase,
-        userCalibrationApplied,
-        solarEffect,
-        airEffect,
-        windEffect,
-        evaporationCooling,
-        synopticEventStrength: null,
-        trendKicker,
-        coldSeasonPondCorrection: correctedNoObserved - preCorrection,
-        observedCalibrationOffset: observedAdjustment.offset,
-        clampsApplied: {
-            memoClamp: false,
-            dailyDeltaEnvelope: null,
-            physDeltaRange: null
-        },
-        final,
+        ...computed,
         usedFields: {
             exact: [...trace].sort(),
             prefixes: collectUsedFieldPrefixes(trace)
