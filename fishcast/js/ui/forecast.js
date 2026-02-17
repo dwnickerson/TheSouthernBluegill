@@ -669,11 +669,11 @@ export function renderForecast(data) {
                     <span class="detail-value">${moonIcon} ${solunar.moon_phase} (${solunar.moon_phase_percent}%)</span>
                 </div>
                 <div class="detail-row">
-                    <span class="detail-label">Official Sunrise</span>
+                    <span class="detail-label">Sunrise</span>
                     <span class="detail-value">${officialSunrise}</span>
                 </div>
                 <div class="detail-row">
-                    <span class="detail-label">Official Sunset</span>
+                    <span class="detail-label">Sunset</span>
                     <span class="detail-value">${officialSunset}</span>
                 </div>
                 <div class="detail-row">
