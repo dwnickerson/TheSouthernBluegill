@@ -6,7 +6,7 @@ import { formatDate, formatDateShort } from '../utils/date.js';
 import { getPressureTrend } from '../models/fishingScore.js';
 import { calculateSpeciesAwareDayScore } from '../models/forecastEngine.js';
 import { calculateSolunar } from '../models/solunar.js';
-import { estimateTempByDepth, projectWaterTemps } from '../models/waterTemp.js';
+import { estimateTempByDepth, estimateWaterTempByPeriod, projectWaterTemps } from '../models/waterTemp.js';
 
 const DEBUG = false;
 const debugLog = (...args) => {
@@ -138,6 +138,34 @@ function getHourlyDetailRowsForDate(hourlyForecast, targetDate) {
     });
 
     return detailRows;
+}
+
+function getCurrentPeriodByHour(hour24) {
+    if (!Number.isFinite(hour24)) return 'midday';
+    if (hour24 < 11) return 'morning';
+    if (hour24 < 14) return 'midday';
+    return 'afternoon';
+}
+
+function getSurfaceWaterNowTemp({ waterTemp, waterType, weather }) {
+    const timezone = weather?.forecast?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago';
+    const localHour = Number(new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        hour: '2-digit',
+        hour12: false
+    }).format(new Date()));
+    const period = getCurrentPeriodByHour(localHour);
+
+    const periodTemp = estimateWaterTempByPeriod({
+        dailySurfaceTemp: waterTemp,
+        waterType,
+        hourly: weather?.forecast?.hourly,
+        timezone,
+        date: new Date(),
+        period
+    });
+
+    return Number.isFinite(periodTemp) ? periodTemp : waterTemp;
 }
 
 function renderDayDetailTrendCharts(hourlyDetails, dayIndex) {
@@ -423,7 +451,7 @@ export function renderForecast(data) {
     const feelsLikeTemp = toTempF(weather.forecast.current.apparent_temperature, weather);
     const humidity = Number(weather.forecast.current.relative_humidity_2m) || 0;
     const dewPointF = calculateDewPointF(toTempF(weather.forecast.current.temperature_2m, weather), humidity);
-    const surfaceTemp = waterTemp.toFixed(1);
+    const surfaceTemp = getSurfaceWaterNowTemp({ waterTemp, waterType, weather }).toFixed(1);
     const temp2ft = estimateTempByDepth(waterTemp, waterType, 2, new Date()).toFixed(1);
     const temp4ft = estimateTempByDepth(waterTemp, waterType, 4, new Date()).toFixed(1);
     const temp10ft = estimateTempByDepth(waterTemp, waterType, 10, new Date()).toFixed(1);
