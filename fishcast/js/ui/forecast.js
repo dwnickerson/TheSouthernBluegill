@@ -139,6 +139,20 @@ function getHourlyDetailRowsForDate(hourlyForecast, targetDate, windUnitHint = '
     return detailRows;
 }
 
+
+function isWaterTempTraceEnabled() {
+    try {
+        return typeof window !== 'undefined' && window.localStorage?.getItem('fishcast_debug_water_temp') === 'true';
+    } catch (error) {
+        return false;
+    }
+}
+
+function logWaterTempTrace(message, data) {
+    if (!isWaterTempTraceEnabled()) return;
+    console.log(`[UI water temp trace] ${message}`, data);
+}
+
 function getCurrentPeriodByHour(hour24) {
     if (!Number.isFinite(hour24)) return 'midday';
     if (hour24 < 11) return 'morning';
@@ -146,7 +160,7 @@ function getCurrentPeriodByHour(hour24) {
     return 'afternoon';
 }
 
-function getSurfaceWaterNowTemp({ waterTemp, waterType, weather }) {
+function getSurfaceWaterNowTemp({ waterTemp, waterType, weather, coords = null }) {
     const timezone = weather?.forecast?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago';
     const localHour = Number(new Intl.DateTimeFormat('en-US', {
         timeZone: timezone,
@@ -179,10 +193,24 @@ function getSurfaceWaterNowTemp({ waterTemp, waterType, weather }) {
         sunsetTime
     });
 
-    return Number.isFinite(periodTemp) ? periodTemp : waterTemp;
+    const resolvedTemp = Number.isFinite(periodTemp) ? periodTemp : waterTemp;
+    logWaterTempTrace('surface-now', {
+        coords,
+        waterType,
+        localHour,
+        period,
+        dailySurfaceTemp: waterTemp,
+        sunriseTime,
+        sunsetTime,
+        periodTemp,
+        resolvedTemp,
+        source: Number.isFinite(periodTemp) ? 'estimateWaterTempByPeriod' : 'dailySurfaceTemp_fallback'
+    });
+
+    return resolvedTemp;
 }
 
-function getWaterTempsByPeriod({ dailySurfaceTemp, waterType, weather, date }) {
+function getWaterTempsByPeriod({ dailySurfaceTemp, waterType, weather, date, coords = null }) {
     const timezone = weather?.forecast?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago';
     const dateKey = new Intl.DateTimeFormat('en-CA', {
         timeZone: timezone,
@@ -212,11 +240,29 @@ function getWaterTempsByPeriod({ dailySurfaceTemp, waterType, weather, date }) {
         sunsetTime
     });
 
-    return {
+    const periods = {
         sunrise: buildPeriodTemp('morning'),
         midday: buildPeriodTemp('midday'),
         sunset: buildPeriodTemp('afternoon')
     };
+
+    const sunriseDepths = formatDepthTempsForSurface(periods.sunrise, waterType, date);
+    logWaterTempTrace('periods', {
+        coords,
+        waterType,
+        dateKey,
+        dailySurfaceTemp,
+        sunriseTime,
+        sunsetTime,
+        sunriseTemp: periods.sunrise,
+        middayTemp: periods.midday,
+        sunsetTemp: periods.sunset,
+        depthTemps: sunriseDepths,
+        displayedSunrise: Number(periods.sunrise?.toFixed?.(1) ?? periods.sunrise),
+        displayedSunriseSource: 'todaysWaterPeriods.sunrise'
+    });
+
+    return periods;
 }
 
 function formatDepthTempsForSurface(surfaceTemp, waterType, date) {
@@ -543,13 +589,14 @@ export function renderForecast(data) {
     const feelsLikeTemp = toTempF(weather.forecast.current.apparent_temperature, weather);
     const humidity = Number(weather.forecast.current.relative_humidity_2m) || 0;
     const dewPointF = calculateDewPointF(toTempF(weather.forecast.current.temperature_2m, weather), humidity);
-    const currentSurfaceTemp = getSurfaceWaterNowTemp({ waterTemp, waterType, weather });
+    const currentSurfaceTemp = getSurfaceWaterNowTemp({ waterTemp, waterType, weather, coords });
     const surfaceTemp = currentSurfaceTemp.toFixed(1);
     const todaysWaterPeriods = getWaterTempsByPeriod({
-        dailySurfaceTemp: currentSurfaceTemp,
+        dailySurfaceTemp: waterTemp,
         waterType,
         weather,
-        date: new Date()
+        date: new Date(),
+        coords
     });
     
     // NEW: Water clarity badge

@@ -1062,7 +1062,14 @@ export function estimateWaterTempByPeriod({
         ? (targetAir - dailyAirMean) * response.airCoupling * windDamping
         : 0;
     const adjustmentLimit = getDiurnalAdjustmentLimit(waterType);
-    const totalAdjustment = clamp(solarTerm + airAnomalyTerm, -adjustmentLimit, adjustmentLimit);
+    let totalAdjustment = clamp(solarTerm + airAnomalyTerm, -adjustmentLimit, adjustmentLimit);
+
+    if (waterType === 'pond' && period === 'morning') {
+        const windyMorning = windMean >= 10;
+        const heavyCloudMorning = cloudBlend >= 80;
+        const strongCoolingFloor = (windyMorning || heavyCloudMorning) ? -2.4 : -1.5;
+        totalAdjustment = Math.max(totalAdjustment, strongCoolingFloor);
+    }
 
     return Math.round(clamp(dailySurfaceTemp + totalAdjustment, 32, 95) * 10) / 10;
 }
