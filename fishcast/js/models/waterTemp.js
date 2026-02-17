@@ -41,12 +41,12 @@ function normalizeWaterBodyType(value) {
 function getDiurnalResponseByWaterType(waterType) {
     if (waterType === 'pond') {
         return {
-            // Tuned against Feb-2026 Tupelo probe observations where shallow-pond
-            // heating was highly sensitive to sky cover and weakly coupled to short
-            // lived warm-air spikes under overcast conditions.
-            solarGain: 0.27,
-            airCoupling: 0.16,
-            windDamping: 0.03
+            // Tuned against Tupelo field observations. Pond intraday swings should
+            // respond to clear/calm conditions, but earlier weights over-reacted and
+            // produced +5°F to +7°F offsets versus reported surface checks.
+            solarGain: 0.19,
+            airCoupling: 0.11,
+            windDamping: 0.035
         };
     }
     if (waterType === 'lake') {
@@ -61,6 +61,12 @@ function getDiurnalResponseByWaterType(waterType) {
         airCoupling: 0.12,
         windDamping: 0.015
     };
+}
+
+function getDiurnalAdjustmentLimit(waterType) {
+    if (waterType === 'pond') return 4.6;
+    if (waterType === 'lake') return 2.3;
+    return 1.8;
 }
 
 function getPeriodTargetHour(period) {
@@ -879,8 +885,10 @@ export function estimateWaterTempByPeriod({
     const airAnomalyTerm = Number.isFinite(targetAir)
         ? (targetAir - dailyAirMean) * response.airCoupling * windDamping
         : 0;
+    const adjustmentLimit = getDiurnalAdjustmentLimit(waterType);
+    const totalAdjustment = clamp(solarTerm + airAnomalyTerm, -adjustmentLimit, adjustmentLimit);
 
-    return Math.round(clamp(dailySurfaceTemp + solarTerm + airAnomalyTerm, 32, 95) * 10) / 10;
+    return Math.round(clamp(dailySurfaceTemp + totalAdjustment, 32, 95) * 10) / 10;
 }
 
 // Get complete temperature profile
