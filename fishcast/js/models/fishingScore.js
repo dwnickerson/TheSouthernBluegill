@@ -2,6 +2,7 @@
 // Includes: moon phase, water clarity, pressure trend stability improvements
 
 import { SPECIES_DATA } from '../config/species.js';
+import { toWindMph } from '../utils/units.js';
 
 const PHASE_PRIORITY = [
     'spawn',
@@ -34,15 +35,6 @@ function getSafeNumber(value, fallback = 0) {
     return Number.isFinite(value) ? value : fallback;
 }
 
-
-function toWindMph(value, units = 'kmh') {
-    if (!Number.isFinite(value)) return 0;
-    const unitText = String(units || 'kmh').toLowerCase();
-    if (unitText.includes('mph') || unitText.includes('mp/h') || unitText.includes('mi/h') || unitText.includes('mile')) return value;
-    if (unitText.includes('m/s') || unitText.includes('ms')) return value * 2.23694;
-    if (unitText.includes('kn')) return value * 1.15078;
-    return value * 0.621371;
-}
 
 function parseTimeToMillis(timeValue) {
     if (!timeValue) return NaN;
@@ -239,11 +231,10 @@ export function getFishPhase(waterTemp, speciesData) {
     return { name: 'inactive', data: { temp_range: [0, 0], score_bonus: 0 } };
 }
 
-// Calculate water clarity from Open-Meteo precipitation totals (mm)
-export function calculateWaterClarity(precipLast3DaysMm) {
-    const safePrecip = Array.isArray(precipLast3DaysMm) ? precipLast3DaysMm : [0, 0, 0];
-    const totalMm = safePrecip.reduce((sum, val) => sum + (Number(val) || 0), 0);
-    const totalInches = totalMm / 25.4;
+// Calculate water clarity from Open-Meteo precipitation totals (inches)
+export function calculateWaterClarity(precipLast3DaysIn) {
+    const safePrecipIn = Array.isArray(precipLast3DaysIn) ? precipLast3DaysIn : [0, 0, 0];
+    const totalInches = safePrecipIn.reduce((sum, val) => sum + (Number(val) || 0), 0);
 
     if (totalInches >= 1.5) return 'muddy';
     if (totalInches >= 0.5) return 'stained';
@@ -363,7 +354,7 @@ export function calculateFishingScore(weather, waterTemp, speciesKey, moonPhaseP
     }
 
     const windUnits = weather?.current_units?.wind_speed_10m || weather?.hourly_units?.wind_speed_10m || 'kmh';
-    const windSpeed = toWindMph(getSafeNumber(weather?.current?.wind_speed_10m, 0), windUnits);
+    const windSpeed = toWindMph(getSafeNumber(weather?.current?.wind_speed_10m, 0), windUnits) ?? 0;
     const windIdeal = getWindIdealRange(speciesKey, prefs, isCrappie, isSunfish, isBass);
     const windEffect = computeWindEffect(windSpeed, windIdeal);
     if (windEffect !== 0) {

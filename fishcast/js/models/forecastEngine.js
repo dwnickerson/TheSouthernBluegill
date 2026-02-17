@@ -342,7 +342,7 @@ export function buildDayWindows(weather, dayKey) {
             tempAvgF: average(dayTempsF),
             airTempTrendFPerDay: tempTrendFPerDay,
             pressureTrend: calculatePressureTrend(pastPressures.concat(dayPressures.slice(0, 3))),
-            precip3DayMm: (weather.historical?.daily?.precipitation_sum || [])
+            precip3DayIn: (weather.historical?.daily?.precipitation_sum || [])
                 .slice(-2)
                 .concat((weather.forecast?.daily?.precipitation_sum || []).slice(0, 1))
         }

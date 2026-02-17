@@ -8,12 +8,15 @@ import { getDayOfYear } from '../utils/date.js';
 import { calculateDistance } from '../utils/math.js';
 import { storage } from '../services/storage.js';
 import { createLogger } from '../utils/logger.js';
+import { getPressureRate } from './fishingScore.js';
+import { toWindMph } from '../utils/units.js';
 
 const debugLog = createLogger('water-temp');
 
 const WIND_FALLBACK_MAX_REDUCTION = 0.6;
 const FORECAST_MAX_WIND_GUST_WEIGHT = 0.2;
-export const WATER_TEMP_MODEL_VERSION = '2.2.1';
+const EXTERNAL_REPORTS_ENABLED = false;
+export const WATER_TEMP_MODEL_VERSION = '2.3.0';
 
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -114,26 +117,6 @@ function normalizeLikelyWindMph(value) {
     return value;
 }
 
-function toWindMph(value, unitHint = '') {
-    if (!Number.isFinite(value)) return null;
-    const normalizedUnit = String(unitHint || '').toLowerCase();
-
-    if (normalizedUnit.includes('mph') || normalizedUnit.includes('mp/h') || normalizedUnit.includes('mi/h') || normalizedUnit.includes('mile')) {
-        return value;
-    }
-    if (normalizedUnit.includes('m/s') || normalizedUnit.includes('ms')) {
-        return value * 2.23694;
-    }
-    if (normalizedUnit.includes('kn')) {
-        return value * 1.15078;
-    }
-    if (normalizedUnit.includes('km') || normalizedUnit.includes('kph')) {
-        return value * 0.621371;
-    }
-
-    return normalizeLikelyWindMph(value);
-}
-
 function getForecastWindUnit(forecastData) {
     const dailyUnits = forecastData?.daily_units || {};
     const hourlyUnits = forecastData?.hourly_units || {};
@@ -151,15 +134,11 @@ function normalizePrecipToInches(value, unitHint = '') {
     if (!Number.isFinite(value) || value < 0) return 0;
     const normalizedUnit = String(unitHint || '').toLowerCase();
 
-    if (normalizedUnit.includes('inch') || normalizedUnit === 'in') {
+    if (!normalizedUnit || normalizedUnit.includes('inch') || normalizedUnit === 'in') {
         return value;
     }
-    if (normalizedUnit.includes('mm')) {
-        return value / 25.4;
-    }
-    if (normalizedUnit.includes('cm')) {
-        return value / 2.54;
-    }
+    if (normalizedUnit.includes('mm')) return value / 25.4;
+    if (normalizedUnit.includes('cm')) return value / 2.54;
 
     return value;
 }
@@ -258,6 +237,50 @@ function getSynopticEventStrength(daily, dayIndex, prevAirTemp, airTemp, windMph
     return clamp((airJumpSignal * 0.55) + (windSignal * 0.25) + (precipSignal * 0.2), 0, 1);
 }
 
+
+function getPressureMixingBoost(hourly = {}) {
+    const pressures = Array.isArray(hourly.surface_pressure) ? hourly.surface_pressure : [];
+    const times = Array.isArray(hourly.time) ? hourly.time : [];
+    const analysis = getPressureRate(pressures, times);
+    const slopeMagnitude = clamp(Math.abs(analysis.rate) / 2.2, 0, 1);
+    return clamp(slopeMagnitude * 0.15, 0, 0.15);
+}
+
+function getWeatherMixingSignals({ current = {}, hourly = {}, dayIndex = 0, nowHourIndex = null }) {
+    const humidity = Number(current.relative_humidity_2m);
+    const airTempF = Number(current.temperature_2m);
+    const windMph = Number(current.wind_speed_10m);
+    const weatherCode = Number(current.weather_code);
+    const precipNowIn = Number(current.precipitation);
+
+    // Evaporative cooling proxy: driest air + breezy conditions accelerate latent heat loss.
+    const drySignal = Number.isFinite(humidity) ? clamp((70 - humidity) / 55, 0, 1) : 0;
+    const warmSignal = Number.isFinite(airTempF) ? clamp((airTempF - 52) / 35, 0, 1) : 0;
+    const windSignal = Number.isFinite(windMph) ? clamp(windMph / 20, 0, 1) : 0;
+    const evaporationCooling = clamp(drySignal * warmSignal * windSignal, 0, 1) * -1.0;
+
+    const hourlyCodes = Array.isArray(hourly.weather_code) ? hourly.weather_code : [];
+    const codeWindowStart = Number.isFinite(nowHourIndex) ? Math.max(0, nowHourIndex - 2) : 0;
+    const codeWindowEnd = Number.isFinite(nowHourIndex) ? nowHourIndex + 4 : Math.min(hourlyCodes.length, 6);
+    const nearTermCodes = hourlyCodes.slice(codeWindowStart, codeWindowEnd).filter(Number.isFinite);
+    const stormyCode = [95, 96, 99].includes(weatherCode) || nearTermCodes.some((code) => [95, 96, 99, 65, 82].includes(code));
+
+    const hourlyPrecipProb = Array.isArray(hourly.precipitation_probability) ? hourly.precipitation_probability : [];
+    const precipProb = Number.isFinite(hourlyPrecipProb[dayIndex]) ? hourlyPrecipProb[dayIndex] : 0;
+    const wetSignal = clamp((Number.isFinite(precipNowIn) ? precipNowIn : 0) / 0.35, 0, 1);
+    const precipProbSignal = clamp(precipProb / 100, 0, 1);
+
+    const cloudCover = Array.isArray(hourly.cloud_cover) ? hourly.cloud_cover : [];
+    const cloudWindow = cloudCover.slice(codeWindowStart, codeWindowEnd).filter(Number.isFinite);
+    const nearTermCloudMean = Number.isFinite(average(cloudWindow)) ? average(cloudWindow) : null;
+
+    return {
+        evaporationCooling,
+        stormMixingBoost: stormyCode ? 0.12 : clamp((wetSignal * 0.08) + (precipProbSignal * 0.05), 0, 0.12),
+        stormSolarDamping: stormyCode ? 0.35 : clamp((wetSignal * 0.2) + (precipProbSignal * 0.1), 0, 0.35),
+        nearTermCloudMean
+    };
+}
 function applyColdSeasonPondCorrection({ estimatedTemp, waterType, dayOfYear, airInfluence, cloudCover }) {
     if (waterType !== 'pond' || !Number.isFinite(estimatedTemp)) {
         return estimatedTemp;
@@ -562,7 +585,9 @@ function calibrateWithUserData(seasonalBase, userReports, coords, waterType) {
 
     const userAverage = weightedSum / totalWeight;
     const reportCount = userReports.length;
-    const hasTrustedLocalReports = hasTrustedRecentLocalReports(userReports, coords, waterType);
+    const hasTrustedLocalReports = EXTERNAL_REPORTS_ENABLED
+        ? hasTrustedRecentLocalReports(userReports, coords, waterType)
+        : false;
     const blendFloor = hasTrustedLocalReports ? 0.58 : 0.2;
     const blendFactor = clamp(Math.min(0.86, reportCount * 0.15), blendFloor, 0.86);
     const calibratedTemp = (userAverage * blendFactor) + (seasonalBase * (1 - blendFactor));
@@ -586,10 +611,12 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     const seasonalBase = getSeasonalBaseTemp(latitude, dayOfYear, waterType);
     debugLog(`📅 Seasonal baseline: ${seasonalBase.toFixed(1)}°F`);
 
-    const userReports = await getNearbyWaterTempReports(coords, waterType);
+    const userReports = EXTERNAL_REPORTS_ENABLED
+        ? await getNearbyWaterTempReports(coords, waterType)
+        : null;
     let calibratedBase = seasonalBase;
 
-    if (userReports && userReports.length > 0) {
+    if (EXTERNAL_REPORTS_ENABLED && userReports && userReports.length > 0) {
         calibratedBase = calibrateWithUserData(seasonalBase, userReports, coords, waterType);
         debugLog(`👥 Calibrated with user data: ${calibratedBase.toFixed(1)}°F`);
     }
@@ -600,20 +627,29 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
 
     const tempUnit = historicalWeather?.meta?.units?.temp || 'F';
     const airInfluence = calculateAirTempInfluence(airTemps, waterType, tempUnit);
-    const solarEffect = calculateSolarDeviation(latitude, dayOfYear, cloudCover, waterType);
+    const hourly = historicalWeather?.forecast?.hourly || {};
+    const pressureMixingBoost = getPressureMixingBoost(hourly);
+    const weatherSignals = getWeatherMixingSignals({
+        current: historicalWeather?.forecast?.current || {},
+        hourly,
+        nowHourIndex: historicalWeather?.meta?.nowHourIndex
+    });
+    const cloudContext = [...cloudCover];
+    if (Number.isFinite(weatherSignals.nearTermCloudMean)) cloudContext.push(weatherSignals.nearTermCloudMean);
+    const solarEffect = calculateSolarDeviation(latitude, dayOfYear, cloudContext, waterType) * (1 - weatherSignals.stormSolarDamping);
     const thermalResponse = getThermalInertiaCoefficient(waterType, calibratedBase, airInfluence.average);
     const airDelta = airInfluence.average - calibratedBase;
     const airEffect = airDelta * thermalResponse;
 
     const windEstimate = getWindEstimateMph(historicalWeather);
     const windEffect = calculateWindMixingEffect(
-        windEstimate.windMph,
+        windEstimate.windMph + (pressureMixingBoost * 6) + (weatherSignals.stormMixingBoost * 4),
         waterType,
         calibratedBase + solarEffect + airEffect,
         airInfluence.average
     );
 
-    let estimatedTemp = calibratedBase + solarEffect + airEffect + windEffect;
+    let estimatedTemp = calibratedBase + solarEffect + airEffect + windEffect + weatherSignals.evaporationCooling;
     estimatedTemp += getSmoothTrendKicker(airInfluence.trend);
     estimatedTemp = applyColdSeasonPondCorrection({
         estimatedTemp,
@@ -631,7 +667,9 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     const memoDayKey = memoEntry?.dayKey || null;
     const memoModelVersion = memoEntry?.modelVersion || null;
     const currentDayKey = getLocalDayKey(currentDate);
-    const hasTrustedLocalReports = hasTrustedRecentLocalReports(userReports, coords, waterType);
+    const hasTrustedLocalReports = EXTERNAL_REPORTS_ENABLED
+        ? hasTrustedRecentLocalReports(userReports, coords, waterType)
+        : false;
     const shouldApplyDailyClamp = Number.isFinite(memoEstimate)
         && memoDayKey === currentDayKey
         && memoModelVersion === WATER_TEMP_MODEL_VERSION;
@@ -709,6 +747,7 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
     const tempUnit = options.tempUnit || 'F';
     const windUnit = options.windUnit || getForecastWindUnit(forecastData);
     const precipUnit = options.precipUnit || getForecastPrecipUnit(forecastData);
+    const pressureMixingBoost = getPressureMixingBoost(forecastData?.hourly || {});
     const anchorDate = options.anchorDate instanceof Date ? options.anchorDate : new Date();
     const historicalDaily = options.historicalDaily || {};
     const historicalAirMeans = Array.isArray(historicalDaily.temperature_2m_mean)
@@ -737,7 +776,14 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
         const dayOfYear = getDayOfYear(dayDate);
         const cloudContext = historicalCloudCover.slice(-6)
             .concat(cloudCover.slice(0, dayIndex + 1).filter(Number.isFinite));
-        const solarEffect = calculateSolarDeviation(latitude, dayOfYear, cloudContext, waterType);
+        const weatherSignals = getWeatherMixingSignals({
+            current: forecastData?.current || {},
+            hourly: forecastData?.hourly || {},
+            dayIndex,
+            nowHourIndex: forecastData?.meta?.nowHourIndex
+        });
+        if (Number.isFinite(weatherSignals.nearTermCloudMean)) cloudContext.push(weatherSignals.nearTermCloudMean);
+        const solarEffect = calculateSolarDeviation(latitude, dayOfYear, cloudContext, waterType) * (1 - weatherSignals.stormSolarDamping);
 
         const thermalResponse = getThermalInertiaCoefficient(waterType, prevTemp, airTemp);
         const thermalEffect = (airTemp - prevTemp) * thermalResponse;
@@ -756,7 +802,7 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
             dayIndex,
             prevAirTemp,
             airTemp,
-            windEstimate.windMph,
+            windEstimate.windMph + (pressureMixingBoost * 6) + (weatherSignals.stormMixingBoost * 4),
             precipUnit
         );
         const trendGain = getWaterTypeTrendGain(waterType, synopticEventStrength);
@@ -765,13 +811,13 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
         const trendKicker = clamp(trendRaw, -trendLimit, trendLimit);
 
         const windEffect = calculateWindMixingEffect(
-            windEstimate.windMph,
+            windEstimate.windMph + (pressureMixingBoost * 6) + (weatherSignals.stormMixingBoost * 4),
             waterType,
             prevTemp + thermalEffect + solarEffect,
             airTemp
         );
 
-        let projectedTemp = prevTemp + thermalEffect + solarEffect + windEffect + trendKicker;
+        let projectedTemp = prevTemp + thermalEffect + solarEffect + windEffect + trendKicker + weatherSignals.evaporationCooling;
 
         const physicalDeltaRange = getPhysicallyBoundedDeltaRange({
             waterType,
