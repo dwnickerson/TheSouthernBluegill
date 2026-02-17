@@ -1,194 +1,128 @@
-# FishCast / Site Technical Review and Next-Step Plan
+# FishCast Re-Evaluation and Updated Next Steps Report
 
 ## Executive summary
 
-The app has a strong foundation (modular JS, offline support, favorites, quick reporting), but the biggest risks now are **data consistency**, **resilience under API failures**, and **maintainability drift** from duplicated state patterns.
+FishCast has materially improved since the prior audit. The app now includes stronger storage migration handling, explicit stale-data fallbacks for core network services, and an actual automated test baseline (unit + smoke) that currently passes.
 
-If we prioritize only three things this cycle:
-1. Unify local storage and clear-data behavior into one source of truth.
-2. Harden API/network error handling and add a graceful degraded mode.
-3. Add a lightweight test harness (unit + smoke) for core forecast paths.
+The next delivery cycle should shift from “build missing foundations” to “reduce operational risk and polish release hygiene.”
 
-## Current strengths worth preserving
+Top 3 priorities for this cycle:
+1. Improve service-worker/API resilience so offline/poor-network behavior is consistent with stale fallback logic already in JS services.
+2. Eliminate remaining Node/localStorage test-environment noise and make CI signal cleaner.
+3. Raise maintainability/accessibility quality in UI modal/event patterns.
 
-- Clean modular split (`services`, `models`, `ui`, `config`) and ES modules.
-- Practical PWA shell with service worker and manifest.
-- Nice product features already in place: geolocation, favorites, water-temp reporting, quick report flows.
+---
 
-## Key issues and opportunities
+## What improved since last review
 
-### 1) Product consistency: storage state is fragmented
+### 1) Storage consistency and migration hygiene are better
 
-**What I saw**
-- `storage.js` defines typed keys and helper methods for app data (`CACHE_KEYS`, favorites, catches, settings), but key user data is also written directly via raw `localStorage` strings in multiple modules.
-- Examples include `waterBodyFavorites`, `recentReports`, `lastSelectedSpecies`, and water temperature memoization keys.
+- `storage.js` now has typed key usage, migration helpers for legacy keys/prefixes, and a `STORAGE_VERSION` migration flow.
+- `clearAll()` removes both current and legacy prefixed/discrete keys, reducing stale data leftovers.
+- Settings defaults now derive selectable options from actual form controls, reducing enum drift risk.
 
-**Why this matters**
-- “Clear all data” can leave behind data because it only removes keys listed in `CACHE_KEYS`.
-- Migration/versioning becomes hard (you can’t evolve schema safely when keys are scattered).
-- Bugs become harder to reason about due to hidden side effects.
+**Assessment:** This area moved from **high risk** to **medium/low risk**.
 
-**Recommendation**
-- Introduce a single storage schema namespace (e.g., `fishcast:*`) and move all key writes through `storage.js`.
-- Add a `storage.clearAll({ includeDerived: true })` path that also clears derived keys (like water temp memoized values).
-- Add a migration map (`versionedStorageMigrations`) so future changes don’t break returning users.
+### 2) Network fallback behavior is stronger in data services
 
-### 2) UX mismatch in species defaults
+- `weatherAPI.js` implements retry attempts and stale-cache fallback on API failures.
+- `geocoding.js` does the same with retry and stale-cache fallback.
+- Metadata from weather responses is normalized/validated, including warnings for time-series issues.
 
-**What I saw**
-- Main species list includes `white_crappie` and `black_crappie`.
-- Settings modal default species uses `crappie` (generic), which is not a selectable forecast species value.
+**Assessment:** Reliability improved meaningfully for app runtime requests.
 
-**Why this matters**
-- Users can save a default value that won’t match any option in the primary species selector, causing silent fallback behavior and confusion.
+### 3) QA maturity is no longer “missing”
 
-**Recommendation**
-- Normalize settings options to exact values used by forecast form.
-- Add validation on save settings to reject unknown enum values.
+- Repository now has a substantial automated Node test suite and smoke checks.
+- `npm test` and `npm run test:smoke` pass in current state.
 
-### 3) Operational reliability: network-only API strategy can fail hard
+**Assessment:** Testing moved from **critical gap** to **good baseline**.
 
-**What I saw**
-- Service worker explicitly routes API calls network-only (Open-Meteo, Nominatim, Google Script).
-- `getWeather` and geolocation reverse lookup throw on non-OK responses, with no retry/backoff/circuit-breaker behavior.
+---
 
-**Why this matters**
-- Any transient outage creates a hard failure experience.
-- Field users often have weak connectivity; this is a critical product context risk.
+## Current risks and gaps (re-evaluated)
 
-**Recommendation**
-- Add retry with jitter for transient HTTP/network errors.
-- Cache last successful forecast summary and show “last known forecast + stale badge” when APIs fail.
-- Instrument client-side error telemetry to quantify failure causes before deeper optimization.
+### A) Service worker still uses network-only API fetches
 
-### 4) Versioning and cache invalidation still feel brittle
+Even though service modules support stale fallback, the service worker still forces network-only strategy for API hosts. If a request is intercepted there and fails at fetch layer, behavior may not align with “graceful degraded mode” expectations.
 
-**What I saw**
-- HTML uses query-string versions (`main.css?v=3.3.1`, `app.js?v=3.3.1`).
-- Service worker pre-cache list references non-versioned paths and manual cache name bumps (`fishcast-v5`).
-- There is a dedicated `check-version.html`, indicating this has been a recurring issue.
+**Why this matters:** runtime logic and SW fetch policy are not fully aligned; reliability may differ by request context and browser lifecycle.
 
-**Why this matters**
-- Deployment correctness depends on manual sync between URL params, service worker cache names, and file list updates.
-- Cache drift is likely during fast iteration.
+**Recommendation:**
+- Move API route handling to network-first-with-timeout + cached fallback where safe.
+- At minimum, fail with controlled synthetic responses that allow UI stale-state messaging.
 
-**Recommendation**
-- Move to build-generated content hashes for static assets or, minimally, a manifest-driven pre-cache file generated at deploy time.
-- Automate service-worker cache version derivation from build metadata.
+### B) Versioning/cache invalidation is still manual
 
-### 5) Security and abuse-hardening gaps
+- SW cache names are manually bumped.
+- App shell pre-cache list is manually curated.
+- Asset query-version patterns remain manual.
 
-**What I saw**
-- Water temperature submit endpoint is a public Google Script URL in client config.
-- External scripts are loaded via CDN without SRI/crossorigin integrity pins.
+**Why this matters:** human error in deploy steps can still cause stale-client mismatches.
 
-**Why this matters**
-- Public write endpoints are scrape/spam targets.
-- Supply chain risk increases without script integrity checks.
+**Recommendation:**
+- Generate pre-cache manifest automatically during build/deploy.
+- Derive cache version from build metadata (or content hash).
 
-**Recommendation**
-- Move submissions through a protected backend proxy with rate limits and bot mitigation.
-- Add SRI hashes for CDN assets, and consider self-hosting critical libs if practical.
+### C) Test output has environment-noise from `localStorage` access in Node
 
-### 6) Accessibility and interaction polish gaps
+Tests pass, but weather API unit tests currently emit storage errors because Node environment lacks browser `localStorage` unless mocked.
 
-**What I saw**
-- Many controls rely on emoji-only button labels; no obvious `aria-label` coverage in several interactive elements.
-- Heavy use of inline handlers and inline styles in modal markup limits systematic accessibility improvements.
+**Why this matters:** noisy logs reduce confidence and make true regressions harder to spot.
 
-**Why this matters**
-- Screen reader clarity and keyboard workflows can degrade quickly.
-- Accessibility fixes become expensive when not centralized.
+**Recommendation:**
+- Provide deterministic storage mocks in test setup.
+- Treat unexpected console error output as test failure in CI.
 
-**Recommendation**
-- Add explicit `aria-label`s for icon-only controls.
-- Standardize modal component patterns and keyboard trap/escape handling.
-- Add a basic accessibility acceptance checklist in PR workflow.
+### D) UI maintainability and accessibility still need a focused pass
 
-### 7) Maintainability debt from mixed architecture patterns
+- Significant modal markup is generated inline with inline handlers.
+- Some controls are still icon-centric; accessibility robustness should be systematically checked.
 
-**What I saw**
-- Modular ES import architecture coexists with many `window.*` global assignments for onclick compatibility.
-- Significant debug logging is always on in production path.
+**Why this matters:** inline/global patterns increase regression surface and make keyboard/screen-reader upgrades slower.
 
-**Why this matters**
-- Global namespace coupling raises regression risk.
-- Excess logs can leak implementation detail and clutter troubleshooting.
+**Recommendation:**
+- Standardize modal construction + delegated event handlers.
+- Add basic accessibility checks (labels, focus trap, escape handling) to smoke/CI.
 
-**Recommendation**
-- Gradually replace inline onclick dependencies with delegated event listeners.
-- Add environment-based logger levels (`debug/info/error`) and strip debug logs in production build.
+### E) Security hardening remains partially open
 
-### 8) Quality assurance maturity is the biggest leverage point
+- Public-facing submission flows and external dependencies should continue hardening.
 
-**What I saw**
-- There are diagnostic HTML pages, but no formal automated test layer in repo for core model/service behavior.
+**Recommendation:**
+- Add endpoint abuse controls (rate limits / bot mitigation path).
+- Add SRI/crossorigin integrity where CDN assets are used.
 
-**Why this matters**
-- Forecast quality regressions and storage migrations are hard to catch before release.
+---
 
-**Recommendation**
-- Start small: add tests for `waterTemp` model, favorites dedupe behavior, settings validation, and error-state rendering.
-- Add a CI smoke test (Playwright): load app, submit a known location, assert forecast card appears.
+## Updated next-step plan
 
+### Phase 1 (1 sprint): Operational correctness
+- Align SW API strategy with stale-fallback product behavior.
+- Add test setup for browser API mocks (`localStorage`, optionally `fetch` fixtures).
+- Remove noisy error logs from green test runs.
 
+### Phase 2 (1 sprint): Release hardening
+- Automate asset pre-cache manifest + cache version derivation.
+- Introduce CI check for deterministic asset/version sync.
 
-## Data used for this next-steps report (full inventory)
+### Phase 3 (ongoing): UX quality and trust
+- Accessibility pass for modals/icon controls.
+- Security tightening for report submission + third-party script integrity.
+- Expand smoke suite with one end-to-end forecast render path + stale-mode UI assertion.
 
-This plan was derived from code and docs present in-repo plus the app's declared integrations.
+---
 
-### Runtime/operational data considered
-- Open-Meteo weather forecast and archive responses used by forecast generation.
-- Geocoding/reverse-geocoding API responses used to resolve user location context.
-- Report-submission payloads and response handling behavior for community inputs.
+## Validation run for this re-evaluation
 
-### Application state data considered
-- LocalStorage schema (typed keys and direct/raw keys), including favorites, settings, selected species, catches/reports, and memoized forecast/water-temp entries.
-- Service-worker cache name/versioning and pre-cache/runtime-cached asset lists.
+Executed during this re-review:
+- `npm test` (pass)
+- `npm run test:smoke` (pass)
 
-### Code/test evidence considered
-- JS source in `fishcast/js/services`, `fishcast/js/models`, `fishcast/js/ui`, and `fishcast/js/config`.
-- PWA/runtime files (`sw.js`, `manifest.json`, HTML shell/version check pages).
-- Automated tests and smoke fixtures in `fishcast/tests` plus model unit tests.
+Both checks passed, confirming the app has a meaningful automated quality baseline in place.
 
-### External context explicitly referenced in recommendations
-- API/network failure modes (transient HTTP failures, weak-connectivity usage context, endpoint outage behavior).
-- Front-end supply-chain/security posture for CDN assets and public write endpoints.
-
-### Not available during this review
-- Production telemetry dashboards and real-world failure-rate distributions.
-- Historical backend logs for report submissions and abuse traffic.
-
-## Suggested roadmap
-
-### Phase 1 (1–2 weeks): Stabilize core behavior
-- Storage unification + migration support.
-- Species enum consistency fix.
-- Retry + stale fallback for weather/geocoding.
-
-### Phase 2 (2–3 weeks): Delivery hardening
-- Deterministic asset versioning and service-worker pre-cache manifest automation.
-- SRI on external scripts + endpoint protection design.
-- Add lightweight telemetry for forecast failures and submit failures.
-
-### Phase 3 (ongoing): Product quality and growth
-- Test automation baseline (unit + smoke).
-- Accessibility pass for icon controls/modals.
-- Forecast explainability UX (show score contributors and confidence).
-
-## High-impact ideas for “what next” (feature side)
-
-1. **Confidence score + uncertainty messaging**
-   - Explain when forecast certainty is low (sparse data, high weather volatility).
-2. **User feedback loop**
-   - “Did the forecast match reality?” prompt to tune heuristics over time.
-3. **Personalized bite windows**
-   - Save user outcomes by species/water body and adapt recommendations.
-4. **Regional trend intelligence**
-   - Aggregate anonymized reports by area and show “warming/cooling bite trend.”
-5. **Trip planner mode**
-   - Compare multiple saved spots by next-best 3-day windows.
+---
 
 ## Bottom line
 
-You have a compelling and differentiated niche product already. The next win is not “more features first”; it is **reliability + data discipline + test coverage** so every new feature lands on stable ground.
+FishCast is in a stronger position than the earlier report suggested. Core architectural risk has shifted from “missing basics” to “operational polish and deployment rigor.” If the team executes the next two sprints on SW/cache/test hygiene, feature development can proceed with much lower regression risk.
