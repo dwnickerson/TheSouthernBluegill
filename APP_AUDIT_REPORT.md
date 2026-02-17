@@ -148,6 +148,38 @@ The forecast stack itself is structured and defensible:
 
 ---
 
+## 8) Data used for this app audit (full inventory)
+
+This audit was based on repository evidence and runtime integration points (not assumptions). Data reviewed:
+
+### A) Runtime input data used by the app
+- Open-Meteo forecast hourly fields: pressure, wind, cloud cover, precipitation probability, air temperature.
+- Open-Meteo archive/daily fields used for recent-history context (including precipitation totals).
+- Geocoding/reverse-geocoding payloads used for location resolution.
+- User-submitted water-temperature/community report payloads sent to configured report endpoints.
+
+### B) Internal model/config data used by the app
+- Species profiles and scoring heuristics in fish model modules.
+- Water-body defaults and constants (pond/lake/river assumptions, thermal behavior constants, stability thresholds).
+- Date/time handling and timezone logic used for day slicing and tomorrow-freeze behavior.
+
+### C) Client persistence data used by the app
+- LocalStorage keys for favorites, recent reports/catches, selected species, settings, and memoized forecast/water-temperature artifacts.
+- Service-worker cache entries for shell assets and runtime requests.
+
+### D) Evidence used to write this report
+- Application source modules in `fishcast/js/{app,services,models,ui,config}`.
+- Service worker and manifest/runtime shell files.
+- Automated tests and smoke scenarios under `fishcast/tests` and model unit tests.
+- Existing operator/audit documentation in this repository.
+
+### E) Out-of-scope / unavailable data during this audit
+- Production analytics/telemetry streams.
+- Historical incident payload archives not committed to this repo.
+- Backend logs for external report endpoints.
+
+---
+
 ## Final judgment
 
 FishCast’s core forecasting engine is in good condition and supported by meaningful tests. The primary issue is not model collapse; it is **product/architecture inconsistency around legacy reporting infrastructure that should have been fully retired (or formally retained and modernized).**
