@@ -5,10 +5,10 @@ import {
   estimateWaterTempByPeriod,
   explainWaterTempTerms
 } from '../models/waterTemp.js';
+import { buildModelPayload, payloadFingerprint } from './waterTempDebugShared.mjs';
 
 const coords = { lat: 34.25807, lon: -88.70464 };
 const waterType = 'pond';
-const now = new Date();
 
 function estimateShallowDepthTemp(periodSurfaceTemp, depthFt, date) {
   const at2ft = estimateTempByDepth(periodSurfaceTemp, waterType, 2, date);
@@ -37,16 +37,18 @@ function findSunTimes(weather, date) {
 }
 
 const weather = await getWeather(coords.lat, coords.lon, 7);
-const todayEstimate = await estimateWaterTemp(coords, waterType, now, weather);
-const todayExplain = await explainWaterTempTerms({ coords, waterType, date: now, weatherPayload: weather });
+const modelPayload = buildModelPayload(weather);
+const anchorDate = modelPayload.anchorDate;
+const todayEstimate = await estimateWaterTemp(coords, waterType, modelPayload.estimateArgs.currentDate, modelPayload.estimateArgs.historicalWeather);
+const todayExplain = await explainWaterTempTerms({ coords, waterType, ...modelPayload.explainArgs });
 
-const { timezone, sunriseTime, sunsetTime } = findSunTimes(weather, now);
+const { timezone, sunriseTime, sunsetTime } = findSunTimes(weather, anchorDate);
 const sunrise = estimateWaterTempByPeriod({
   dailySurfaceTemp: todayEstimate,
   waterType,
   hourly: weather.forecast.hourly,
   timezone,
-  date: now,
+  date: anchorDate,
   period: 'morning',
   sunriseTime,
   sunsetTime
@@ -56,7 +58,7 @@ const midday = estimateWaterTempByPeriod({
   waterType,
   hourly: weather.forecast.hourly,
   timezone,
-  date: now,
+  date: anchorDate,
   period: 'midday',
   sunriseTime,
   sunsetTime
@@ -66,15 +68,22 @@ const sunset = estimateWaterTempByPeriod({
   waterType,
   hourly: weather.forecast.hourly,
   timezone,
-  date: now,
+  date: anchorDate,
   period: 'afternoon',
   sunriseTime,
   sunsetTime
 });
 
-const depth17 = estimateShallowDepthTemp(sunrise, 1.7, now);
+const depth17 = estimateShallowDepthTemp(sunrise, 1.7, anchorDate);
 
 console.log('=== Live Water Temp Debug ===');
+console.log(JSON.stringify({
+  coords,
+  waterType,
+  anchorDateISO: anchorDate.toISOString(),
+  source: 'LIVE',
+  fp: payloadFingerprint(weather)
+}, null, 2));
 console.log('coords:', coords, 'waterType:', waterType, 'timezone:', timezone);
 console.log('estimateWaterTemp() final:', todayEstimate);
 console.log('period temps:', { sunrise, midday, sunset });

@@ -903,6 +903,7 @@ export async function handleTempReportSubmit() {
         const reports = storage.get('waterTempReports') || [];
         reports.unshift(data);
         storage.set('waterTempReports', reports.slice(0, 200));
+        storage.setWaterTempObserved(lat, lon, waterBody, temperature, measurementDateTime.toISOString());
         debugLog('Updating stats...');
         const updatedStats = updateUserStats();
         debugLog('Updated stats:', updatedStats);

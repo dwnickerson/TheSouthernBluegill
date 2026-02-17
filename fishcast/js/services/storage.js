@@ -23,7 +23,8 @@ const LEGACY_KEYS = {
     RECENT_REPORTS: 'recentReports',
     GEOCODE_CACHE_PREFIX: 'geocode_',
     WEATHER_CACHE_PREFIX: 'weather_',
-    WATER_TEMP_MEMO_PREFIX: 'waterTemp_'
+    WATER_TEMP_MEMO_PREFIX: 'waterTemp_',
+    WATER_TEMP_OBSERVED_PREFIX: 'waterTempObserved_'
 };
 
 function safeGetRaw(key) {
@@ -130,6 +131,7 @@ export const storage = {
         migratePrefixedKeys(LEGACY_KEYS.GEOCODE_CACHE_PREFIX, CACHE_KEYS.GEOCODE_CACHE_PREFIX);
         migratePrefixedKeys(LEGACY_KEYS.WEATHER_CACHE_PREFIX, CACHE_KEYS.WEATHER_CACHE_PREFIX);
         migratePrefixedKeys(LEGACY_KEYS.WATER_TEMP_MEMO_PREFIX, CACHE_KEYS.WATER_TEMP_MEMO_PREFIX);
+        migratePrefixedKeys(LEGACY_KEYS.WATER_TEMP_OBSERVED_PREFIX, CACHE_KEYS.WATER_TEMP_OBSERVED_PREFIX);
 
         safeSetRaw(CACHE_KEYS.STORAGE_VERSION, String(STORAGE_VERSION));
     },
@@ -145,9 +147,11 @@ export const storage = {
             CACHE_KEYS.GEOCODE_CACHE_PREFIX,
             CACHE_KEYS.WEATHER_CACHE_PREFIX,
             CACHE_KEYS.WATER_TEMP_MEMO_PREFIX,
+            CACHE_KEYS.WATER_TEMP_OBSERVED_PREFIX,
             LEGACY_KEYS.GEOCODE_CACHE_PREFIX,
             LEGACY_KEYS.WEATHER_CACHE_PREFIX,
-            LEGACY_KEYS.WATER_TEMP_MEMO_PREFIX
+            LEGACY_KEYS.WATER_TEMP_MEMO_PREFIX,
+            LEGACY_KEYS.WATER_TEMP_OBSERVED_PREFIX
         ];
 
         const legacyDiscreteKeys = [
@@ -261,6 +265,41 @@ export const storage = {
             temp: Number(temp).toFixed(1),
             dayKey,
             modelVersion
+        }));
+    },
+
+
+    getWaterTempObservedKey(lat, lon, waterType) {
+        return `${CACHE_KEYS.WATER_TEMP_OBSERVED_PREFIX}${Number(lat).toFixed(4)}_${Number(lon).toFixed(4)}_${waterType}`;
+    },
+
+    getWaterTempObserved(lat, lon, waterType) {
+        const key = this.getWaterTempObservedKey(lat, lon, waterType);
+        const value = safeGetRaw(key);
+        if (!value) return null;
+
+        try {
+            const parsed = JSON.parse(value);
+            if (parsed && Number.isFinite(Number(parsed.tempF)) && typeof parsed.timestamp === 'string') {
+                return {
+                    tempF: Number(parsed.tempF),
+                    timestamp: parsed.timestamp,
+                    waterType: typeof parsed.waterType === 'string' ? parsed.waterType : waterType
+                };
+            }
+        } catch (error) {
+            console.error('Error reading observed water temp entry:', error);
+        }
+
+        return null;
+    },
+
+    setWaterTempObserved(lat, lon, waterType, tempF, timestamp) {
+        const key = this.getWaterTempObservedKey(lat, lon, waterType);
+        return safeSetRaw(key, JSON.stringify({
+            tempF: Number(tempF).toFixed(1),
+            timestamp,
+            waterType
         }));
     },
 
