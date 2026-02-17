@@ -37,6 +37,34 @@
 | `waterTempF` | Estimated water temp | °F | model-estimated | scalar/day | Lagged seasonal + recent weather |
 | `pressureTrend` | Trend classification from rolling 4-hour pressure slope | enum | derived | hourly->daily | past+early-current |
 
+
+
+### Complete data inventory used by the forecast pipeline
+
+#### External weather/location datasets
+- Open-Meteo **forecast hourly** arrays: `surface_pressure`, `wind_speed_10m`, `cloud_cover`, `precipitation_probability`, `temperature_2m`, and hourly `time` index.
+- Open-Meteo **archive daily/hourly** context used for short historical conditioning (recent precip/runoff proxy and trend context).
+- Geocoding/reverse-geocoding provider responses for lat/lon + location naming used in UI and cache keys.
+
+#### Internal/derived forecast datasets
+- Derived pressure trend classification from rolling pressure slope.
+- Water-temperature estimate from seasonal baseline + weather forcing + lag/inertia corrections.
+- Species profile coefficients (temp windows, seasonal multipliers, score caps, stability thresholds).
+- Deterministic stability state for prior score anchors (species + date + location key).
+
+#### User/community datasets
+- User report payloads (when enabled): reported water temp, optional notes/metadata, location context.
+- Trust/blend inputs: report recency, distance, source/type weighting used to blend into forecast context.
+
+#### Persistence/caching datasets
+- Forecast cache payload snapshots keyed by rounded lat/lon + day horizon.
+- Water-temp memoized values keyed by rounded lat/lon + water type.
+- Species selection and settings values persisted in localStorage for repeat sessions.
+
+#### Test/validation datasets used for this audit
+- Deterministic unit-test fixtures for water-temp and scoring engines.
+- Smoke-test scenario fixtures validating invariant behavior (units, trend smoothness, stability, UI assumptions).
+
 Standard windows (local America/Chicago):
 - Past window for trend/stability: prior 48 hours before day start.
 - Current-day bite window: scored day local `00:00–23:59`.

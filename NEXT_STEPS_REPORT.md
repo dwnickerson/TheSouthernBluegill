@@ -131,6 +131,34 @@ If we prioritize only three things this cycle:
 - Start small: add tests for `waterTemp` model, favorites dedupe behavior, settings validation, and error-state rendering.
 - Add a CI smoke test (Playwright): load app, submit a known location, assert forecast card appears.
 
+
+
+## Data used for this next-steps report (full inventory)
+
+This plan was derived from code and docs present in-repo plus the app's declared integrations.
+
+### Runtime/operational data considered
+- Open-Meteo weather forecast and archive responses used by forecast generation.
+- Geocoding/reverse-geocoding API responses used to resolve user location context.
+- Report-submission payloads and response handling behavior for community inputs.
+
+### Application state data considered
+- LocalStorage schema (typed keys and direct/raw keys), including favorites, settings, selected species, catches/reports, and memoized forecast/water-temp entries.
+- Service-worker cache name/versioning and pre-cache/runtime-cached asset lists.
+
+### Code/test evidence considered
+- JS source in `fishcast/js/services`, `fishcast/js/models`, `fishcast/js/ui`, and `fishcast/js/config`.
+- PWA/runtime files (`sw.js`, `manifest.json`, HTML shell/version check pages).
+- Automated tests and smoke fixtures in `fishcast/tests` plus model unit tests.
+
+### External context explicitly referenced in recommendations
+- API/network failure modes (transient HTTP failures, weak-connectivity usage context, endpoint outage behavior).
+- Front-end supply-chain/security posture for CDN assets and public write endpoints.
+
+### Not available during this review
+- Production telemetry dashboards and real-world failure-rate distributions.
+- Historical backend logs for report submissions and abuse traffic.
+
 ## Suggested roadmap
 
 ### Phase 1 (1–2 weeks): Stabilize core behavior
