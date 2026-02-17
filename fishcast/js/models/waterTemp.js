@@ -10,6 +10,7 @@ import { storage } from '../services/storage.js';
 import { createLogger } from '../utils/logger.js';
 import { getPressureRate } from './fishingScore.js';
 import { toWindMph } from '../utils/units.js';
+import { getLocalDayKey, normalizeWeatherPayload } from '../utils/weatherPayload.js';
 
 const debugLog = createLogger('water-temp');
 
@@ -53,12 +54,6 @@ function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
 }
 
-function getLocalDayKey(date = new Date()) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
 
 function average(values) {
     if (!Array.isArray(values) || values.length === 0) return null;
@@ -435,6 +430,40 @@ function applyColdSeasonPondCorrection({ estimatedTemp, waterType, dayOfYear, ai
     return estimatedTemp - boundedCorrection;
 }
 
+
+function applyLivePondColdSeasonGuardrail({
+    correctedTemp,
+    preCorrectionTemp,
+    waterType,
+    latitude,
+    cloudCover,
+    nearTermCloudMean,
+    airTempF,
+    source
+}) {
+    if (source !== 'LIVE' || waterType !== 'pond' || !Number.isFinite(correctedTemp) || !Number.isFinite(preCorrectionTemp)) {
+        return correctedTemp;
+    }
+    if (!Number.isFinite(latitude) || latitude >= 36) {
+        return correctedTemp;
+    }
+
+    const coldSeasonCorrection = correctedTemp - preCorrectionTemp;
+    if (coldSeasonCorrection >= 0) return correctedTemp;
+
+    const meanCloud = average([...(Array.isArray(cloudCover) ? cloudCover.filter(Number.isFinite) : []), nearTermCloudMean].filter(Number.isFinite));
+    const cloudHeavy = Number.isFinite(meanCloud) && meanCloud >= 80;
+    const airAboveSurface = Number.isFinite(airTempF) ? (airTempF - correctedTemp) : 0;
+    if (!cloudHeavy || airAboveSurface <= 3) {
+        return correctedTemp;
+    }
+
+    const minCorrection = meanCloud >= 90 ? -0.4 : -0.6;
+    const guardedCorrection = Math.max(coldSeasonCorrection, minCorrection);
+    const guardedTemp = preCorrectionTemp + guardedCorrection;
+    return Math.min(correctedTemp + 1.0, guardedTemp);
+}
+
 function getRelaxedDailyChangeLimit(baseLimit, userReports, coords) {
     if (!Array.isArray(userReports) || userReports.length < 2) {
         return baseLimit;
@@ -721,24 +750,8 @@ function directGet(source, path) {
     return path.split('.').reduce((acc, key) => (acc == null ? acc : acc[key]), source);
 }
 
-function normalizeEstimatorWeatherPayload(weatherPayload) {
-    if (weatherPayload?.historical?.daily || weatherPayload?.forecast || weatherPayload?.meta) {
-        return {
-            historical: {
-                daily: weatherPayload?.historical?.daily || weatherPayload?.daily || {}
-            },
-            forecast: weatherPayload?.forecast || {},
-            meta: weatherPayload?.meta || {}
-        };
-    }
-
-    return {
-        historical: {
-            daily: weatherPayload?.daily || {}
-        },
-        forecast: weatherPayload?.forecast || {},
-        meta: weatherPayload?.meta || {}
-    };
+function normalizeEstimatorWeatherPayload(weatherPayload, currentDate = new Date()) {
+    return normalizeWeatherPayload(weatherPayload, { now: currentDate, source: weatherPayload?.meta?.source || 'FIXTURE' });
 }
 
 async function computeWaterTempEstimateTerms({ coords, waterType, currentDate, weatherPayload, trace = null, persistMemo = false }) {
@@ -799,12 +812,22 @@ async function computeWaterTempEstimateTerms({ coords, waterType, currentDate, w
     const evaporationCooling = weatherSignals.evaporationCooling;
     const trendKicker = getSmoothTrendKicker(airInfluence.trend);
     const preCorrection = seasonalBase + solarEffect + airEffect + windEffect + evaporationCooling + trendKicker;
-    const correctedNoObserved = applyColdSeasonPondCorrection({
+    const coldSeasonCorrected = applyColdSeasonPondCorrection({
         estimatedTemp: preCorrection,
         waterType,
         dayOfYear,
         airInfluence,
         cloudCover
+    });
+    const correctedNoObserved = applyLivePondColdSeasonGuardrail({
+        correctedTemp: coldSeasonCorrected,
+        preCorrectionTemp: preCorrection,
+        waterType,
+        latitude,
+        cloudCover,
+        nearTermCloudMean: weatherSignals.nearTermCloudMean,
+        airTempF: Number.isFinite(getValue('forecast.current.temperature_2m')) ? Number(getValue('forecast.current.temperature_2m')) : airInfluence.average,
+        source: String(getValue('meta.source', 'FIXTURE')).toUpperCase()
     });
     const observedAdjustment = applyObservedCalibrationOffset(correctedNoObserved, observedCalibration);
     let estimatedTemp = clamp(observedAdjustment.calibratedTemp, 32, 95);
@@ -813,7 +836,7 @@ async function computeWaterTempEstimateTerms({ coords, waterType, currentDate, w
     const memoEstimate = memoEntry?.temp;
     const memoDayKey = memoEntry?.dayKey || null;
     const memoModelVersion = memoEntry?.modelVersion || null;
-    const currentDayKey = getLocalDayKey(currentDate);
+    const currentDayKey = getLocalDayKey(currentDate, weatherPayload?.meta?.timezone || 'UTC');
     const shouldApplyDailyClamp = Number.isFinite(memoEstimate)
         && memoDayKey === currentDayKey
         && memoModelVersion === WATER_TEMP_MODEL_VERSION;
@@ -886,7 +909,7 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     // - precipitation: inches
     debugLog(`🌡️ Estimating water temp for ${waterType} at ${latitude.toFixed(2)}°N on day ${dayOfYear}`);
 
-    const normalizedPayload = normalizeEstimatorWeatherPayload(historicalWeather);
+    const normalizedPayload = normalizeEstimatorWeatherPayload(historicalWeather, currentDate);
     const computed = await computeWaterTempEstimateTerms({
         coords,
         waterType,
@@ -1212,7 +1235,7 @@ function collectUsedFieldPrefixes(trace) {
 
 export async function explainWaterTempTerms({ coords, waterType, date, weatherPayload }) {
     const trace = new Set();
-    const normalizedPayload = normalizeEstimatorWeatherPayload(weatherPayload);
+    const normalizedPayload = normalizeEstimatorWeatherPayload(weatherPayload, date);
     const computed = await computeWaterTempEstimateTerms({
         coords,
         waterType,

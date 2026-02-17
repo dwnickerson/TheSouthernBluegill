@@ -256,7 +256,7 @@ function buildWaterTempViewModel({ waterTemp, waterType, weather, coords, date =
 
     const surfaceNow = getSurfaceWaterNowTemp({ waterTemp, waterType, weather, coords });
     const viewModel = {
-        surface: Number(surfaceNow.toFixed(1)),
+        surface: Number(surfaceNow.value.toFixed(1)),
         sunrise: Number(periods.sunrise.toFixed(1)),
         midday: Number(periods.midday.toFixed(1)),
         sunset: Number(periods.sunset.toFixed(1)),
@@ -270,6 +270,17 @@ function buildWaterTempViewModel({ waterTemp, waterType, weather, coords, date =
         dailySurfaceTemp: waterTemp,
         viewModel
     });
+
+    if (isWaterTempTraceEnabled() && Number.isFinite(surfaceNow.periodTemp)) {
+        const delta = Math.abs(viewModel.surface - surfaceNow.periodTemp);
+        if (delta > 0.1) {
+            console.error('[ASSERT water temp surface-period mismatch]', {
+                surface: viewModel.surface,
+                periodTemp: surfaceNow.periodTemp,
+                period: surfaceNow.period
+            });
+        }
+    }
 
     return viewModel;
 }
@@ -328,7 +339,7 @@ function getSurfaceWaterNowTemp({ waterTemp, waterType, weather, coords = null }
         source: Number.isFinite(periodTemp) ? 'estimateWaterTempByPeriod' : 'dailySurfaceTemp_fallback'
     });
 
-    return resolvedTemp;
+    return { value: resolvedTemp, period, periodTemp };
 }
 
 function getWaterTempsByPeriod({ dailySurfaceTemp, waterType, weather, date, coords = null }) {

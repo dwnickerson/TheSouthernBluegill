@@ -1,21 +1,25 @@
+import { getLocalDayKey, normalizeWeatherPayload, parseHourlyTimestamp } from '../utils/weatherPayload.js';
+
 export function safeGet(obj, path, fallback = undefined) {
-  try {
-    return path.split('.').reduce((acc, key) => (acc == null ? acc : acc[key]), obj) ?? fallback;
-  } catch {
-    return fallback;
-  }
+  return path.split('.').reduce((acc, key) => (acc == null ? acc : acc[key]), obj) ?? fallback;
 }
 
 export function buildAnchorDate(payload) {
   const nowIdx = payload?.meta?.nowHourIndex ?? 0;
   const nowIsoLocal = safeGet(payload, `forecast.hourly.time.${nowIdx}`, null);
-  if (!nowIsoLocal) return new Date();
-  return new Date(`${nowIsoLocal}:00Z`);
+  const timezone = payload?.meta?.timezone || payload?.forecast?.timezone || 'UTC';
+  if (!nowIsoLocal) {
+    return new Date(payload?.meta?.nowIso || Date.now());
+  }
+  const ts = parseHourlyTimestamp(nowIsoLocal, timezone);
+  return Number.isFinite(ts) ? new Date(ts) : new Date(payload?.meta?.nowIso || Date.now());
 }
 
 export function payloadFingerprint(payload) {
   const nowHourIndex = safeGet(payload, 'meta.nowHourIndex', null);
   return {
+    source: safeGet(payload, 'meta.source', 'UNKNOWN'),
+    timezone: safeGet(payload, 'meta.timezone', safeGet(payload, 'forecast.timezone', null)),
     units: safeGet(payload, 'meta.units', {}),
     nowHourIndex,
     hourlyNowTime: safeGet(payload, `forecast.hourly.time.${nowHourIndex}`, null),
@@ -41,24 +45,30 @@ export function payloadFingerprint(payload) {
   };
 }
 
-export function buildModelPayload(payload) {
-  const anchorDate = buildAnchorDate(payload);
-  const units = payload?.meta?.units || {};
+export function buildModelPayload(payload, options = {}) {
+  const normalized = normalizeWeatherPayload(payload, {
+    now: options.now || new Date(payload?.meta?.nowIso || Date.now()),
+    source: options.source || payload?.meta?.source || 'FIXTURE'
+  });
+  const anchorDate = buildAnchorDate(normalized);
+  const units = normalized?.meta?.units || {};
   return {
+    normalized,
     anchorDate,
+    localDayKey: getLocalDayKey(anchorDate, normalized?.meta?.timezone || 'UTC'),
     estimateArgs: {
       currentDate: anchorDate,
-      historicalWeather: payload
+      historicalWeather: normalized
     },
     explainArgs: {
       date: anchorDate,
-      weatherPayload: payload
+      weatherPayload: normalized
     },
     projectionOptions: {
       tempUnit: units.temp || 'F',
       windUnit: units.wind || 'mph',
       precipUnit: units.precip || 'inch',
-      historicalDaily: payload?.historical?.daily,
+      historicalDaily: normalized?.historical?.daily,
       anchorDate
     }
   };

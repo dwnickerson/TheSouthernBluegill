@@ -1,6 +1,7 @@
 // Weather data service using Open-Meteo API
 import { API_CONFIG, APP_CONSTANTS } from '../config/constants.js';
 import { storage } from './storage.js';
+import { normalizeWeatherPayload, getClosestNowHourIndex } from '../utils/weatherPayload.js';
 
 const WEATHER_TTL_MS = 60 * 60 * 1000;
 const MAX_ATTEMPTS = 2;
@@ -58,26 +59,6 @@ function getArchiveDateRange(referenceDate = new Date()) {
     };
 }
 
-function getClosestNowHourIndex(hourlyTimes, now = new Date()) {
-    if (!Array.isArray(hourlyTimes) || hourlyTimes.length === 0) return null;
-
-    const nowMs = now.getTime();
-    let closestIndex = 0;
-    let closestDelta = Infinity;
-
-    hourlyTimes.forEach((timeValue, index) => {
-        const timestamp = Date.parse(timeValue);
-        if (!Number.isFinite(timestamp)) return;
-        const delta = Math.abs(timestamp - nowMs);
-        if (delta < closestDelta) {
-            closestDelta = delta;
-            closestIndex = index;
-        }
-    });
-
-    return Number.isFinite(closestDelta) ? closestIndex : null;
-}
-
 function validateAndNormalizeForecast(forecastData, nowIso) {
     const warnings = [];
     const forecast = forecastData && typeof forecastData === 'object' ? forecastData : {};
@@ -123,7 +104,7 @@ function validateAndNormalizeForecast(forecastData, nowIso) {
     }
 
     const timezone = forecast.timezone || null;
-    const nowHourIndex = getClosestNowHourIndex(hourly.time, new Date(nowIso));
+    const nowHourIndex = getClosestNowHourIndex(hourly.time, new Date(nowIso), timezone || 'UTC');
 
     return {
         forecast,
@@ -202,11 +183,11 @@ export async function getWeather(lat, lon, days = APP_CONSTANTS.DEFAULT_FORECAST
         ]);
 
         const normalized = validateAndNormalizeForecast(rawForecastData, nowIso);
-        const payload = {
+        const payload = normalizeWeatherPayload({
             historical: historicalData,
             forecast: normalized.forecast,
-            meta: normalized.meta
-        };
+            meta: { ...normalized.meta, source: 'LIVE' }
+        }, { now: new Date(nowIso), source: 'LIVE' });
 
         const isDev = typeof process !== 'undefined' && process?.env?.NODE_ENV !== 'production';
         if (isDev && payload.meta?.validationWarnings?.length) {

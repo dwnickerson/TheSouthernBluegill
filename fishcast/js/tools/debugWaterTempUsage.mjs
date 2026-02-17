@@ -3,65 +3,46 @@ import {
   estimateWaterTemp,
   explainWaterTempTerms,
   explainWaterTempProjectionDay,
+  estimateWaterTempByPeriod,
   projectWaterTemps
 } from '../models/waterTemp.js';
-import { buildModelPayload, payloadFingerprint, safeGet } from './waterTempDebugShared.mjs';
+import { buildModelPayload, payloadFingerprint } from './waterTempDebugShared.mjs';
 
 const coords = { lat: 34.257607, lon: -88.703386 };
 const waterType = 'pond';
-const USE_LIVE = process.env.LIVE === '1';
 const FIXTURE_URL = new URL('./fixtures/weatherPayload.sample.json', import.meta.url);
 
-function dumpKeyFields(payload) {
-  const nowHourIndex = safeGet(payload, 'meta.nowHourIndex', null);
-  console.log('\n=== PAYLOAD KEY FIELDS ===');
-  console.log('units:', safeGet(payload, 'meta.units', {}));
-  console.log('meta.nowHourIndex:', nowHourIndex);
-  console.log('forecast.hourly.time[nowHourIndex]:', safeGet(payload, `forecast.hourly.time.${nowHourIndex}`, null));
-  console.log('forecast.hourly.temperature_2m[nowHourIndex]:', safeGet(payload, `forecast.hourly.temperature_2m.${nowHourIndex}`, null));
-  console.log('forecast.current.temperature_2m:', safeGet(payload, 'forecast.current.temperature_2m', null));
-  console.log('forecast.current.wind_speed_10m:', safeGet(payload, 'forecast.current.wind_speed_10m', null));
-  console.log('forecast.current.relative_humidity_2m:', safeGet(payload, 'forecast.current.relative_humidity_2m', null));
-  console.log('historical.daily.temperature_2m_mean[last]:', safeGet(payload, 'historical.daily.temperature_2m_mean', []).slice(-1)[0] ?? null);
-  console.log('historical.daily.wind_speed_10m_mean[last]:', safeGet(payload, 'historical.daily.wind_speed_10m_mean', []).slice(-1)[0] ?? null);
-  console.log('historical.daily.cloud_cover_mean[last]:', safeGet(payload, 'historical.daily.cloud_cover_mean', []).slice(-1)[0] ?? null);
-}
-
-async function loadPayload() {
-  if (!USE_LIVE) return JSON.parse(readFileSync(FIXTURE_URL, 'utf8'));
-  throw new Error('LIVE=1 set, but getWeather() is not wired.');
-}
-
-const payload = await loadPayload();
-const modelPayload = buildModelPayload(payload);
+const rawPayload = JSON.parse(readFileSync(FIXTURE_URL, 'utf8'));
+const modelPayload = buildModelPayload(rawPayload, { source: 'FIXTURE' });
+const payload = modelPayload.normalized;
 const fp = payloadFingerprint(payload);
 
-console.log('\n=== PAYLOAD FINGERPRINT ===');
-console.log(JSON.stringify({
-  coords,
-  waterType,
-  anchorDateISO: modelPayload.anchorDate.toISOString(),
-  source: USE_LIVE ? 'LIVE' : 'FIXTURE',
-  fp
-}, null, 2));
-
-writeFileSync(new URL('./debug_water_payload_fingerprint.json', import.meta.url), JSON.stringify({
-  coords,
-  waterType,
-  anchorDateISO: modelPayload.anchorDate.toISOString(),
-  source: USE_LIVE ? 'LIVE' : 'FIXTURE',
-  fp
-}, null, 2));
-
-dumpKeyFields(payload);
-
-const explainToday = await explainWaterTempTerms({ coords, waterType, ...modelPayload.explainArgs });
+const todayExplain = await explainWaterTempTerms({ coords, waterType, ...modelPayload.explainArgs });
 const estimatedToday = await estimateWaterTemp(coords, waterType, modelPayload.estimateArgs.currentDate, modelPayload.estimateArgs.historicalWeather);
 const projected = projectWaterTemps(estimatedToday, { ...payload.forecast, meta: payload.meta }, waterType, coords.lat, modelPayload.projectionOptions);
 
+const timezone = payload.meta.timezone || 'UTC';
+const sunrise = estimateWaterTempByPeriod({ dailySurfaceTemp: estimatedToday, waterType, hourly: payload.forecast.hourly, timezone, date: modelPayload.anchorDate, period: 'morning', sunriseTime: payload.forecast.daily?.sunrise?.[0], sunsetTime: payload.forecast.daily?.sunset?.[0] });
+const midday = estimateWaterTempByPeriod({ dailySurfaceTemp: estimatedToday, waterType, hourly: payload.forecast.hourly, timezone, date: modelPayload.anchorDate, period: 'midday', sunriseTime: payload.forecast.daily?.sunrise?.[0], sunsetTime: payload.forecast.daily?.sunset?.[0] });
+const sunset = estimateWaterTempByPeriod({ dailySurfaceTemp: estimatedToday, waterType, hourly: payload.forecast.hourly, timezone, date: modelPayload.anchorDate, period: 'afternoon', sunriseTime: payload.forecast.daily?.sunrise?.[0], sunsetTime: payload.forecast.daily?.sunset?.[0] });
+
+console.log('\n=== PAYLOAD FINGERPRINT ===');
+console.log(JSON.stringify({ coords, waterType, source: payload.meta.source, anchorDateISO: modelPayload.anchorDate.toISOString(), localDayKey: modelPayload.localDayKey, fp }, null, 2));
+
+writeFileSync(new URL('./debug_water_payload_fingerprint.json', import.meta.url), JSON.stringify({ coords, waterType, source: payload.meta.source, anchorDateISO: modelPayload.anchorDate.toISOString(), localDayKey: modelPayload.localDayKey, fp }, null, 2));
+
 console.log('\n=== explainWaterTempTerms(today) ===');
-console.log(JSON.stringify(explainToday, null, 2));
+console.log(JSON.stringify(todayExplain, null, 2));
+console.log('terms:', {
+  seasonalBase: todayExplain.seasonalBase,
+  solarEffect: todayExplain.solarEffect,
+  airEffect: todayExplain.airEffect,
+  windEffect: todayExplain.windEffect,
+  coldSeasonPondCorrection: todayExplain.coldSeasonPondCorrection,
+  final: todayExplain.final
+});
 console.log('final estimateWaterTemp:', estimatedToday);
+console.log('periods:', { sunrise, midday, sunset });
 
 const projectionExplainers = [];
 for (let dayIndex = 1; dayIndex <= 3; dayIndex += 1) {

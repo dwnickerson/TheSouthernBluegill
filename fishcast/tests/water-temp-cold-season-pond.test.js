@@ -265,3 +265,55 @@ test('recent observed temp applies bounded decay calibration only for matching c
   const wrongType = await estimateWaterTemp(coords, 'pond', currentDate, weather);
   assert.equal(wrongType, base, 'mismatched water type should not apply observed calibration');
 });
+
+
+test('LIVE-only pond guardrail softens extreme cloudy cold-season under-shoot by at most +1°F', async () => {
+  setupStorage();
+  const coords = { lat: 34.2576, lon: -88.7034 };
+  const currentDate = new Date('2026-02-17T18:00:00Z');
+
+  const weather = {
+    historical: {
+      daily: {
+        temperature_2m_mean: [47, 48, 49, 49, 50, 50, 51],
+        cloud_cover_mean: [96, 97, 98, 96, 97, 98, 96],
+        wind_speed_10m_mean: [11, 12, 12, 11, 12, 11, 12]
+      }
+    },
+    forecast: {
+      current: {
+        temperature_2m: 54,
+        wind_speed_10m: 11,
+        relative_humidity_2m: 86,
+        weather_code: 3,
+        precipitation: 0
+      },
+      hourly: {
+        time: Array.from({ length: 48 }, (_, i) => `2026-02-${String(17 + Math.floor(i / 24)).padStart(2, '0')}T${String(i % 24).padStart(2, '0')}:00`),
+        cloud_cover: Array(48).fill(96),
+        weather_code: Array(48).fill(3),
+        precipitation_probability: Array(48).fill(45),
+        wind_speed_10m: Array(48).fill(11),
+        surface_pressure: Array(48).fill(1010),
+        temperature_2m: Array(48).fill(54)
+      }
+    },
+    meta: {
+      timezone: 'America/Chicago',
+      nowHourIndex: 24,
+      units: { temp: 'F', wind: 'mph', precip: 'in' }
+    }
+  };
+
+  const fixtureEstimate = await estimateWaterTemp(coords, 'pond', currentDate, {
+    ...weather,
+    meta: { ...weather.meta, source: 'FIXTURE' }
+  });
+  const liveEstimate = await estimateWaterTemp(coords, 'pond', currentDate, {
+    ...weather,
+    meta: { ...weather.meta, source: 'LIVE' }
+  });
+
+  assert.ok(liveEstimate >= fixtureEstimate, `LIVE guardrail should not cool below fixture (${liveEstimate} vs ${fixtureEstimate})`);
+  assert.ok(liveEstimate - fixtureEstimate <= 1.01, `LIVE guardrail must be capped to +1°F, got ${liveEstimate - fixtureEstimate}`);
+});
