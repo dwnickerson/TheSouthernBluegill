@@ -18,6 +18,36 @@ const FORECAST_MAX_WIND_GUST_WEIGHT = 0.2;
 const EXTERNAL_REPORTS_ENABLED = false;
 export const WATER_TEMP_MODEL_VERSION = '2.3.1';
 
+
+function warnIfUnitMismatch(message) {
+    const isDev = typeof process !== 'undefined' && process?.env?.NODE_ENV !== 'production';
+    if (isDev) {
+        console.warn(`[FishCast][waterTemp][units] ${message}`);
+    }
+}
+
+export function getField(container, path, trace = null) {
+    if (!container || typeof path !== 'string') return undefined;
+    const normalizedPath = path.replace(/\[(\d+)\]/g, '.$1');
+    const parts = normalizedPath.split('.').filter(Boolean);
+
+    let current = container;
+    let resolvedPath = '';
+    for (const part of parts) {
+        resolvedPath = resolvedPath ? `${resolvedPath}.${part}` : part;
+        if (trace && current && Object.prototype.hasOwnProperty.call(current, part)) {
+            const asIndex = Number.parseInt(part, 10);
+            const pathWithIndex = Number.isInteger(asIndex)
+                ? `${resolvedPath.replace(/\.(\d+)$/, '')}[${asIndex}]`
+                : resolvedPath;
+            trace.add(pathWithIndex);
+        }
+        if (current == null) return undefined;
+        current = current[part];
+    }
+    return current;
+}
+
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
 }
@@ -104,12 +134,22 @@ function normalizeAirTempToF(value, tempUnit = 'F') {
         return (value * 9) / 5 + 32;
     }
 
+
     return value;
 }
 
-function normalizeLikelyWindMph(value) {
+function normalizeLikelyWindMph(value, unitHint = '') {
     if (!Number.isFinite(value)) return null;
     if (value > 130 || value < 0) return null;
+
+    const normalizedUnit = String(unitHint || '').toLowerCase();
+    if (normalizedUnit.includes('mph')) {
+        if (value > 45) {
+            warnIfUnitMismatch(`wind unit hint is mph but value ${value} triggered legacy km/h fallback conversion.`);
+        }
+        return value;
+    }
+
     // Legacy km/h cache may still appear; convert only when values look implausible for mph.
     if (value > 45) {
         return value * 0.621371;
@@ -135,6 +175,9 @@ function normalizePrecipToInches(value, unitHint = '') {
     const normalizedUnit = String(unitHint || '').toLowerCase();
 
     if (!normalizedUnit || normalizedUnit.includes('inch') || normalizedUnit === 'in') {
+        if (value > 3) {
+            warnIfUnitMismatch(`precipitation unit hint is inch but value ${value} is unusually large for daily inches; verify no hidden mm→in conversion upstream.`);
+        }
         return value;
     }
     if (normalizedUnit.includes('mm')) return value / 25.4;
@@ -541,7 +584,7 @@ function getWindEstimateMph(historicalWeather) {
     const forecast = historicalWeather?.forecast || {};
     const warnings = [];
 
-    const dailyMean = average((daily.wind_speed_10m_mean || []).map(normalizeLikelyWindMph));
+    const dailyMean = average((daily.wind_speed_10m_mean || []).map((value) => normalizeLikelyWindMph(value, 'mph')));
     if (Number.isFinite(dailyMean)) {
         return { windMph: dailyMean, source: 'daily.wind_speed_10m_mean', warnings };
     }
@@ -553,14 +596,14 @@ function getWindEstimateMph(historicalWeather) {
             : Math.max(0, hourlyWind.length - 24);
         const from = clamp(nowIndex - 24, 0, hourlyWind.length - 1);
         const to = clamp(nowIndex + 24, from, hourlyWind.length - 1);
-        const windowValues = hourlyWind.slice(from, to + 1).map(normalizeLikelyWindMph).filter(Number.isFinite);
+        const windowValues = hourlyWind.slice(from, to + 1).map((value) => normalizeLikelyWindMph(value, 'mph')).filter(Number.isFinite);
         const hourlyAvg = average(windowValues);
         if (Number.isFinite(hourlyAvg)) {
             return { windMph: hourlyAvg, source: 'forecast.hourly.wind_speed_10m', warnings };
         }
     }
 
-    const maxWind = average((daily.wind_speed_10m_max || []).map(normalizeLikelyWindMph));
+    const maxWind = average((daily.wind_speed_10m_max || []).map((value) => normalizeLikelyWindMph(value, 'mph')));
     if (Number.isFinite(maxWind)) {
         warnings.push('Fallback to daily max wind with reduced weight');
         return {
@@ -662,6 +705,9 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     const cloudCover = daily.cloud_cover_mean || [];
 
     const tempUnit = historicalWeather?.meta?.units?.temp || 'F';
+    if (String(tempUnit).toLowerCase().startsWith('c') && String(historicalWeather?.meta?.units?.temp || '').toLowerCase().startsWith('f')) {
+        warnIfUnitMismatch('meta temp_unit is fahrenheit but downstream temp unit hint is Celsius; potential double conversion risk.');
+    }
     const airInfluence = calculateAirTempInfluence(airTemps, waterType, tempUnit);
     const hourly = historicalWeather?.forecast?.hourly || {};
     const pressureMixingBoost = getPressureMixingBoost(hourly);
@@ -788,6 +834,15 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
     const tempUnit = options.tempUnit || 'F';
     const windUnit = options.windUnit || getForecastWindUnit(forecastData);
     const precipUnit = options.precipUnit || getForecastPrecipUnit(forecastData);
+    if (String(options?.tempUnit || '').toLowerCase().startsWith('f') && String(tempUnit).toLowerCase().startsWith('c')) {
+        warnIfUnitMismatch('temp_unit says fahrenheit while projection temp unit hint resolved to Celsius; check for C→F double conversion.');
+    }
+    if (String(options?.windUnit || '').toLowerCase().includes('mph') && !String(windUnit).toLowerCase().includes('mph')) {
+        warnIfUnitMismatch('wind_unit says mph but projection wind hint resolved to non-mph units; conversion may be unintended.');
+    }
+    if (String(options?.precipUnit || '').toLowerCase().includes('inch') && !String(precipUnit).toLowerCase().includes('inch') && String(precipUnit).toLowerCase() !== 'in') {
+        warnIfUnitMismatch('precip_unit says inch but projection precip hint resolved to non-inch units; mm→in conversion may be unintended.');
+    }
     const pressureMixingBoost = getPressureMixingBoost(forecastData?.hourly || {});
     const hourly = forecastData?.hourly || {};
     const anchorDate = options.anchorDate instanceof Date ? options.anchorDate : new Date();
@@ -1010,6 +1065,226 @@ export function estimateWaterTempByPeriod({
     const totalAdjustment = clamp(solarTerm + airAnomalyTerm, -adjustmentLimit, adjustmentLimit);
 
     return Math.round(clamp(dailySurfaceTemp + totalAdjustment, 32, 95) * 10) / 10;
+}
+
+
+function collectUsedFieldPrefixes(trace) {
+    const prefixes = new Set();
+    [...trace].forEach((path) => {
+        const parts = path.split('.');
+        const root = parts.slice(0, 3).join('.');
+        if (root.startsWith('forecast.') || root.startsWith('historical.')) {
+            prefixes.add(root.replace(/\[\d+\]/g, ''));
+        }
+    });
+    return [...prefixes].sort();
+}
+
+export async function explainWaterTempTerms({ coords, waterType, date, weatherPayload }) {
+    const trace = new Set();
+    const latitude = coords.lat;
+    const dayOfYear = getDayOfYear(date);
+
+    const seasonalBase = getSeasonalBaseTemp(latitude, dayOfYear, waterType);
+    const userCalibrationApplied = false;
+
+    const daily = getField(weatherPayload, 'historical.daily', trace) || {};
+    const airTemps = getField(weatherPayload, 'historical.daily.temperature_2m_mean', trace) || [];
+    const cloudCover = getField(weatherPayload, 'historical.daily.cloud_cover_mean', trace) || [];
+    getField(weatherPayload, 'historical.daily.wind_speed_10m_mean', trace);
+    getField(weatherPayload, 'historical.daily.wind_speed_10m_max', trace);
+    getField(weatherPayload, 'forecast.current.temperature_2m', trace);
+    getField(weatherPayload, 'forecast.current.relative_humidity_2m', trace);
+    getField(weatherPayload, 'forecast.current.wind_speed_10m', trace);
+    getField(weatherPayload, 'forecast.current.weather_code', trace);
+    getField(weatherPayload, 'forecast.current.precipitation', trace);
+    getField(weatherPayload, 'forecast.hourly.surface_pressure', trace);
+    getField(weatherPayload, 'forecast.hourly.time', trace);
+    getField(weatherPayload, 'forecast.hourly.weather_code', trace);
+    getField(weatherPayload, 'forecast.hourly.precipitation_probability', trace);
+    getField(weatherPayload, 'forecast.hourly.cloud_cover', trace);
+
+    const tempUnit = getField(weatherPayload, 'meta.units.temp', trace) || 'F';
+    const airInfluence = calculateAirTempInfluence(airTemps, waterType, tempUnit);
+    const hourly = getField(weatherPayload, 'forecast.hourly', trace) || {};
+    const pressureMixingBoost = getPressureMixingBoost(hourly);
+    const weatherSignals = getWeatherMixingSignals({
+        current: getField(weatherPayload, 'forecast.current', trace) || {},
+        hourly,
+        nowHourIndex: getField(weatherPayload, 'meta.nowHourIndex', trace)
+    });
+
+    const cloudContext = [...cloudCover];
+    if (Number.isFinite(weatherSignals.nearTermCloudMean)) cloudContext.push(weatherSignals.nearTermCloudMean);
+    const solarEffect = calculateSolarDeviation(latitude, dayOfYear, cloudContext, waterType) * (1 - weatherSignals.stormSolarDamping);
+    const thermalResponse = getThermalInertiaCoefficient(waterType, seasonalBase, airInfluence.average);
+    const airEffect = (airInfluence.average - seasonalBase) * thermalResponse;
+
+    const windEstimate = getWindEstimateMph({
+        daily,
+        forecast: {
+            hourly,
+            current: getField(weatherPayload, 'forecast.current', trace) || {}
+        },
+        meta: {
+            nowHourIndex: getField(weatherPayload, 'meta.nowHourIndex', trace)
+        }
+    });
+
+    const windEffect = calculateWindMixingEffect(
+        windEstimate.windMph + (pressureMixingBoost * 6) + (weatherSignals.stormMixingBoost * 4),
+        waterType,
+        seasonalBase + solarEffect + airEffect,
+        airInfluence.average
+    );
+
+    const evaporationCooling = weatherSignals.evaporationCooling;
+    const trendKicker = getSmoothTrendKicker(airInfluence.trend);
+    const preCorrection = seasonalBase + solarEffect + airEffect + windEffect + evaporationCooling + trendKicker;
+    const corrected = applyColdSeasonPondCorrection({
+        estimatedTemp: preCorrection,
+        waterType,
+        dayOfYear,
+        airInfluence,
+        cloudCover
+    });
+    const final = Math.round(clamp(corrected, 32, 95) * 10) / 10;
+
+    return {
+        seasonalBase,
+        userCalibrationApplied,
+        solarEffect,
+        airEffect,
+        windEffect,
+        evaporationCooling,
+        synopticEventStrength: null,
+        trendKicker,
+        coldSeasonPondCorrection: corrected - preCorrection,
+        clampsApplied: {
+            memoClamp: false,
+            dailyDeltaEnvelope: null,
+            physDeltaRange: null
+        },
+        final,
+        usedFields: {
+            exact: [...trace].sort(),
+            prefixes: collectUsedFieldPrefixes(trace)
+        }
+    };
+}
+
+export function explainWaterTempProjectionDay({ initialWaterTemp, forecastData, waterType, latitude, dayIndex, options = {} }) {
+    const trace = new Set();
+    const traced = { forecast: forecastData, historical: { daily: options.historicalDaily || {} } };
+    const daily = getField(traced, 'forecast.daily', trace) || {};
+    const timeline = getField(traced, 'forecast.daily.time', trace) || [];
+    if (!Number.isFinite(initialWaterTemp) || !timeline.length || dayIndex < 1 || dayIndex >= timeline.length) {
+        return null;
+    }
+
+    const tempUnit = options.tempUnit || 'F';
+    const windUnit = options.windUnit || getForecastWindUnit(forecastData);
+    const precipUnit = options.precipUnit || getForecastPrecipUnit(forecastData);
+    if (String(options?.tempUnit || '').toLowerCase().startsWith('f') && String(tempUnit).toLowerCase().startsWith('c')) {
+        warnIfUnitMismatch('temp_unit says fahrenheit while projection temp unit hint resolved to Celsius; check for C→F double conversion.');
+    }
+    if (String(options?.windUnit || '').toLowerCase().includes('mph') && !String(windUnit).toLowerCase().includes('mph')) {
+        warnIfUnitMismatch('wind_unit says mph but projection wind hint resolved to non-mph units; conversion may be unintended.');
+    }
+    if (String(options?.precipUnit || '').toLowerCase().includes('inch') && !String(precipUnit).toLowerCase().includes('inch') && String(precipUnit).toLowerCase() !== 'in') {
+        warnIfUnitMismatch('precip_unit says inch but projection precip hint resolved to non-inch units; mm→in conversion may be unintended.');
+    }
+    const hourly = getField(traced, 'forecast.hourly', trace) || {};
+    const historicalDaily = options.historicalDaily || {};
+
+    const projected = projectWaterTemps(initialWaterTemp, forecastData, waterType, latitude, options);
+    const prevTemp = projected[dayIndex - 1];
+    const final = projected[dayIndex];
+
+    const tempMeans = getField(traced, 'forecast.daily.temperature_2m_mean', trace) || [];
+    const tempMins = getField(traced, 'forecast.daily.temperature_2m_min', trace) || [];
+    const tempMaxes = getField(traced, 'forecast.daily.temperature_2m_max', trace) || [];
+    const cloudCover = getField(traced, 'forecast.daily.cloud_cover_mean', trace) || [];
+    getField(traced, 'forecast.daily.precipitation_sum', trace);
+    getField(traced, 'forecast.daily.precipitation_probability_max', trace);
+    getField(traced, 'forecast.daily.wind_speed_10m_mean', trace);
+    getField(traced, 'forecast.daily.wind_speed_10m_max', trace);
+    getField(traced, 'forecast.current.precipitation', trace);
+    getField(traced, 'forecast.current.relative_humidity_2m', trace);
+    getField(traced, 'forecast.current.wind_speed_10m', trace);
+    getField(traced, 'forecast.current.weather_code', trace);
+    const meanTempRaw = Number.isFinite(tempMeans[dayIndex]) ? tempMeans[dayIndex] : average([tempMins[dayIndex], tempMaxes[dayIndex]]);
+    const airTemp = normalizeAirTempToF(meanTempRaw, tempUnit);
+
+    const anchorDate = options.anchorDate instanceof Date ? options.anchorDate : new Date();
+    const dayDate = new Date(anchorDate.getTime());
+    dayDate.setUTCDate(dayDate.getUTCDate() + dayIndex);
+    const dayOfYear = getDayOfYear(dayDate);
+    const historicalCloudCover = Array.isArray(historicalDaily.cloud_cover_mean) ? historicalDaily.cloud_cover_mean.filter(Number.isFinite) : [];
+    const cloudContext = historicalCloudCover.slice(-6).concat(cloudCover.slice(0, dayIndex + 1).filter(Number.isFinite));
+
+    const weatherSignals = getWeatherMixingSignals({
+        current: getField(traced, 'forecast.current', trace) || {},
+        hourly,
+        dayIndex,
+        nowHourIndex: getField(traced, 'forecast.meta.nowHourIndex', trace)
+    });
+    const dayAverages = getDayHourlyAverages(hourly, timeline[dayIndex]);
+    const evaporationCooling = weatherSignals.evaporationCooling + calculateEvaporativeCoolingProxy({
+        relativeHumidity: dayAverages.humidity,
+        windMph: dayAverages.wind
+    });
+    if (Number.isFinite(weatherSignals.nearTermCloudMean)) cloudContext.push(weatherSignals.nearTermCloudMean);
+
+    const solarEffect = calculateSolarDeviation(latitude, dayOfYear, cloudContext, waterType) * (1 - weatherSignals.stormSolarDamping);
+    const thermalResponse = getThermalInertiaCoefficient(waterType, prevTemp, airTemp);
+    const airEffect = (airTemp - prevTemp) * thermalResponse;
+
+    const historicalAirMeans = Array.isArray(historicalDaily.temperature_2m_mean)
+        ? historicalDaily.temperature_2m_mean.map((v) => normalizeAirTempToF(v, tempUnit)).filter(Number.isFinite)
+        : [];
+    const normalizedAirMeans = tempMeans.map((v) => normalizeAirTempToF(v, tempUnit));
+    const trendSeries = historicalAirMeans.slice(-2).concat(normalizedAirMeans.slice(0, dayIndex + 1));
+    const trendWindow = trendSeries.slice(-4).filter(Number.isFinite);
+    const trendFPerDay = trendWindow.length >= 2 ? (trendWindow[trendWindow.length - 1] - trendWindow[0]) / (trendWindow.length - 1) : 0;
+    const prevAirTemp = trendWindow.length > 1 ? trendWindow[trendWindow.length - 2] : null;
+
+    const pressureMixingBoost = getPressureMixingBoost(hourly);
+    const windEstimate = getProjectionWindForMixing(daily, dayIndex, windUnit);
+    const windForcing = windEstimate.windMph + (pressureMixingBoost * 6) + (weatherSignals.stormMixingBoost * 4);
+    const synopticEventStrength = getSynopticEventStrength(daily, dayIndex, prevAirTemp, airTemp, windForcing, precipUnit);
+
+    const trendGain = getWaterTypeTrendGain(waterType, synopticEventStrength);
+    const trendRaw = getSmoothTrendKicker(trendFPerDay) * trendGain;
+    const trendKicker = clamp(trendRaw, -getTrendKickerLimit(waterType, synopticEventStrength), getTrendKickerLimit(waterType, synopticEventStrength));
+    const windEffect = calculateWindMixingEffect(windForcing, waterType, prevTemp + airEffect + solarEffect, airTemp);
+
+    const unconstrained = prevTemp + airEffect + solarEffect + windEffect + trendKicker + evaporationCooling;
+    const unconstrainedDelta = unconstrained - prevTemp;
+    const dailyDeltaEnvelope = getDailyDeltaEnvelope(waterType, synopticEventStrength);
+    const physDeltaRange = getPhysicallyBoundedDeltaRange({ waterType, prevTemp, airTemp, prevAirTemp, synopticEventStrength });
+
+    return {
+        seasonalBase: getSeasonalBaseTemp(latitude, dayOfYear, waterType),
+        userCalibrationApplied: false,
+        solarEffect,
+        airEffect,
+        windEffect,
+        evaporationCooling,
+        synopticEventStrength,
+        trendKicker,
+        coldSeasonPondCorrection: 0,
+        clampsApplied: {
+            memoClamp: false,
+            dailyDeltaEnvelope,
+            physDeltaRange
+        },
+        final,
+        usedFields: {
+            exact: [...trace].sort(),
+            prefixes: collectUsedFieldPrefixes(trace)
+        }
+    };
 }
 
 // Get complete temperature profile
