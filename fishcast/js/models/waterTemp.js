@@ -10,7 +10,7 @@ import { storage } from '../services/storage.js';
 
 const WIND_FALLBACK_MAX_REDUCTION = 0.6;
 const FORECAST_MAX_WIND_GUST_WEIGHT = 0.2;
-export const WATER_TEMP_MODEL_VERSION = '2.1.0';
+export const WATER_TEMP_MODEL_VERSION = '2.2.0';
 
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -225,6 +225,41 @@ function getSynopticEventStrength(daily, dayIndex, prevAirTemp, airTemp, windMph
     const precipSignal = clamp(executedPrecipIn / 1.2, 0, 1);
 
     return clamp((airJumpSignal * 0.55) + (windSignal * 0.25) + (precipSignal * 0.2), 0, 1);
+}
+
+function applyColdSeasonPondCorrection({ estimatedTemp, waterType, dayOfYear, airInfluence, cloudCover }) {
+    if (waterType !== 'pond' || !Number.isFinite(estimatedTemp)) {
+        return estimatedTemp;
+    }
+
+    const winterDistance = Math.min(
+        Math.abs(dayOfYear - 15),
+        Math.abs(dayOfYear + 365 - 15),
+        Math.abs(dayOfYear - 365 - 15)
+    );
+    const shoulderDistance = Math.min(
+        Math.abs(dayOfYear - 75),
+        Math.abs(dayOfYear + 365 - 75),
+        Math.abs(dayOfYear - 365 - 75)
+    );
+
+    const winterFactor = clamp(1 - (winterDistance / 90), 0, 1);
+    const shoulderFactor = clamp(1 - (shoulderDistance / 110), 0, 1);
+    const seasonFactor = clamp((winterFactor * 0.85) + (shoulderFactor * 0.35), 0, 1);
+    if (seasonFactor <= 0) {
+        return estimatedTemp;
+    }
+
+    const recentCloud = average(cloudCover || []);
+    const overcastSignal = Number.isFinite(recentCloud)
+        ? clamp((recentCloud - 62) / 35, 0, 1)
+        : 0;
+    const coolAirSignal = Number.isFinite(airInfluence?.average)
+        ? clamp((62 - airInfluence.average) / 12, 0, 1)
+        : 0;
+
+    const correction = seasonFactor * ((1.8 * coolAirSignal) + (2.6 * overcastSignal * (0.35 + (0.65 * coolAirSignal))));
+    return estimatedTemp - correction;
 }
 
 function getRelaxedDailyChangeLimit(baseLimit, userReports, coords) {
@@ -523,6 +558,13 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
 
     let estimatedTemp = calibratedBase + solarEffect + airEffect + windEffect;
     estimatedTemp += getSmoothTrendKicker(airInfluence.trend);
+    estimatedTemp = applyColdSeasonPondCorrection({
+        estimatedTemp,
+        waterType,
+        dayOfYear,
+        airInfluence,
+        cloudCover
+    });
 
     const body = WATER_BODIES_V2[waterType];
     estimatedTemp = clamp(estimatedTemp, 32, 95);

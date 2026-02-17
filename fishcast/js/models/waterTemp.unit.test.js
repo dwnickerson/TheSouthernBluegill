@@ -87,7 +87,7 @@ async function runScenario({ name, weather, reports, seedMemo, memoDayKey = null
         reports: [],
         seedMemo: 60,
         memoDayKey: '2026-05-15',
-        memoModelVersion: '2.1.0'
+        memoModelVersion: '2.2.0'
     });
     const lakeMaxDaily = WATER_BODIES_V2.lake.max_daily_change;
     assert(Math.abs(clamped - 60) <= lakeMaxDaily + 0.05, 'daily clamp should hold without trusted reports');
@@ -101,7 +101,7 @@ async function runScenario({ name, weather, reports, seedMemo, memoDayKey = null
         ],
         seedMemo: 60,
         memoDayKey: '2026-05-15',
-        memoModelVersion: '2.1.0'
+        memoModelVersion: '2.2.0'
     });
     assert(relaxed >= clamped, 'trusted reports should slightly relax the clamp');
     assert(Math.abs(relaxed - 60) <= (lakeMaxDaily * 2) + 0.05, 'relaxed clamp must still be bounded');
