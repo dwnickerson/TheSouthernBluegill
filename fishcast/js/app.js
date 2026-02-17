@@ -10,6 +10,7 @@ import { getLocation } from './services/geocoding.js';
 import { getWeather } from './services/weatherAPI.js';
 import { estimateWaterTemp } from './models/waterTemp.js';
 import { renderForecast, showLoading, showError } from './ui/forecast.js';
+import { normalizeWeatherPayload } from './utils/weatherPayload.js';
 import { applySavedTheme } from './utils/theme.js';
 import { renderFavorites } from './ui/favorites.js';
 import {
@@ -130,11 +131,11 @@ async function generateForecast(event) {
         }
        
         // weatherAPI now requests explicit imperial units from Open-Meteo.
-        const weatherForWaterModel = {
-            daily: weather.historical?.daily || {},
-            forecast: weather.forecast || {},
-            meta: weather.meta || {}
-        };
+        const weatherForWaterModel = normalizeWeatherPayload({
+            historical: weather.historical,
+            forecast: weather.forecast,
+            meta: { ...weather.meta, source: 'LIVE' }
+        }, { now: new Date(), source: 'LIVE' });
 
         // Estimate water temperature
         const waterTemp = await estimateWaterTemp(
