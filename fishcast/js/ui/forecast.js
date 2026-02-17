@@ -168,6 +168,24 @@ function getSurfaceWaterNowTemp({ waterTemp, waterType, weather }) {
     return Number.isFinite(periodTemp) ? periodTemp : waterTemp;
 }
 
+function getWaterTempsByPeriod({ dailySurfaceTemp, waterType, weather, date }) {
+    const timezone = weather?.forecast?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago';
+    const buildPeriodTemp = (period) => estimateWaterTempByPeriod({
+        dailySurfaceTemp,
+        waterType,
+        hourly: weather?.forecast?.hourly,
+        timezone,
+        date,
+        period
+    });
+
+    return {
+        morning: buildPeriodTemp('morning'),
+        midday: buildPeriodTemp('midday'),
+        afternoon: buildPeriodTemp('afternoon')
+    };
+}
+
 function renderDayDetailTrendCharts(hourlyDetails, dayIndex) {
     if (!hourlyDetails || hourlyDetails.length < 2) return '';
 
@@ -451,7 +469,14 @@ export function renderForecast(data) {
     const feelsLikeTemp = toTempF(weather.forecast.current.apparent_temperature, weather);
     const humidity = Number(weather.forecast.current.relative_humidity_2m) || 0;
     const dewPointF = calculateDewPointF(toTempF(weather.forecast.current.temperature_2m, weather), humidity);
-    const surfaceTemp = getSurfaceWaterNowTemp({ waterTemp, waterType, weather }).toFixed(1);
+    const currentSurfaceTemp = getSurfaceWaterNowTemp({ waterTemp, waterType, weather });
+    const surfaceTemp = currentSurfaceTemp.toFixed(1);
+    const todaysWaterPeriods = getWaterTempsByPeriod({
+        dailySurfaceTemp: currentSurfaceTemp,
+        waterType,
+        weather,
+        date: new Date()
+    });
     const temp2ft = estimateTempByDepth(waterTemp, waterType, 2, new Date()).toFixed(1);
     const temp4ft = estimateTempByDepth(waterTemp, waterType, 4, new Date()).toFixed(1);
     const temp10ft = estimateTempByDepth(waterTemp, waterType, 10, new Date()).toFixed(1);
@@ -509,7 +534,10 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Water Temperature</span>
                     <span class="detail-value">
-                        Surface: ${waterTemp.toFixed(1)}°F<br>
+                        Surface: ${surfaceTemp}°F<br>
+                        <small style="color: var(--text-secondary); display: block; margin-top: 4px;">
+                            Morning: ${todaysWaterPeriods.morning.toFixed(1)}°F | Midday: ${todaysWaterPeriods.midday.toFixed(1)}°F | Afternoon: ${todaysWaterPeriods.afternoon.toFixed(1)}°F
+                        </small>
                         <small style="color: var(--text-secondary);">
                             Depth: 2ft ${temp2ft}°F | 4ft: ${temp4ft}°F | 10ft: ${temp10ft}°F | 20ft: ${temp20ft}°F
                         </small>
@@ -715,6 +743,12 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
         const weatherCode = dailyData.weather_code[i];
         const weatherIcon = getWeatherIcon(weatherCode);
         const precipAmountInches = toPrecipInches(dailyData.precipitation_sum?.[i], weather);
+        const dayWaterPeriods = getWaterTempsByPeriod({
+            dailySurfaceTemp: waterTemps[i],
+            waterType,
+            weather,
+            date: new Date(`${date}T12:00:00`)
+        });
         
         // Get wind data for the day
         const windSpeed = dailyData.wind_speed_10m_max ? toWindMph(dailyData.wind_speed_10m_max[i], weather) : 0;
@@ -739,7 +773,7 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
                 <div class="day-score ${scoreClass}"title="Estimated fishing score">${Math.round(estimatedScore)}</div>
                 <div class="day-temp">${minTemp.toFixed(0)}° → ${maxTemp.toFixed(0)}°</div>
                 <div class="day-precip">${precipProb}% rain</div>
-                <div style="font-size: 0.85em; color: #888; margin-top: 4px;">${waterTemps[i].toFixed(1)}°F</div>
+                <div style="font-size: 0.85em; color: #888; margin-top: 4px;">Water: ${dayWaterPeriods.morning.toFixed(0)}° / ${dayWaterPeriods.midday.toFixed(0)}° / ${dayWaterPeriods.afternoon.toFixed(0)}°F</div>
                 <div style="font-size: 0.85em; color: #888;">${windSpeed.toFixed(0)} mph ${windDir}</div>
                 <div class="day-hourly-trend">${precipAmountInches.toFixed(2)} in</div>
             </div>
