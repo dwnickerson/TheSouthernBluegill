@@ -98,6 +98,13 @@ function getNextFullMoon(date = new Date()) {
     return new Date(date.getTime() + (daysAhead * 24 * 60 * 60 * 1000));
 }
 
+function getDaysUntilDate(targetDate, referenceDate = new Date()) {
+    const utcTarget = Date.UTC(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+    const utcReference = Date.UTC(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+    const dayDiff = Math.round((utcTarget - utcReference) / 86400000);
+    return Math.max(dayDiff, 0);
+}
+
 function toPrecipInches(value, weather) {
     if (!Number.isFinite(value)) return 0;
     const units = String(weather?.forecast?.daily_units?.precipitation_sum || weather?.meta?.units?.precip || 'mm').toLowerCase();
@@ -516,11 +523,13 @@ export function renderForecast(data) {
     const weatherIcon = getWeatherIcon(weather.forecast.current.weather_code);
     const moonIcon = getMoonIcon(solunar.moon_phase);
     const nextFullMoon = getNextFullMoon(new Date());
-    const nextFullMoonLabel = nextFullMoon.toLocaleDateString('en-US', {
+    const nextFullMoonDateLabel = nextFullMoon.toLocaleDateString('en-US', {
         weekday: 'short',
         month: 'short',
         day: 'numeric'
     });
+    const daysUntilFullMoon = getDaysUntilDate(nextFullMoon);
+    const nextFullMoonLabel = `${nextFullMoonDateLabel}. (${daysUntilFullMoon} ${daysUntilFullMoon === 1 ? 'day' : 'days'})`;
     const officialSunrise = weather.forecast.daily?.sunrise?.[0]
         ? formatTime(weather.forecast.daily.sunrise[0])
         : 'N/A';
