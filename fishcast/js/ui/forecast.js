@@ -2,7 +2,7 @@
 // Physics-based water temp evolution + Wind display on forecast cards
 import { SPECIES_DATA } from '../config/species.js';
 import { getWindDirection } from '../utils/math.js';
-import { formatDate, formatDateShort } from '../utils/date.js';
+import { formatDate, formatDateShort, formatTime } from '../utils/date.js';
 import { getPressureTrend } from '../models/fishingScore.js';
 import { calculateSpeciesAwareDayScore } from '../models/forecastEngine.js';
 import { calculateSolunar } from '../models/solunar.js';
@@ -521,6 +521,12 @@ export function renderForecast(data) {
         month: 'short',
         day: 'numeric'
     });
+    const officialSunrise = weather.forecast.daily?.sunrise?.[0]
+        ? formatTime(weather.forecast.daily.sunrise[0])
+        : 'N/A';
+    const officialSunset = weather.forecast.daily?.sunset?.[0]
+        ? formatTime(weather.forecast.daily.sunset[0])
+        : 'N/A';
     const precipNowMm = weather.forecast.current.precipitation || 0;
     const precipProb = getCurrentPrecipProbability(weather.forecast);
     const precipIcon = precipNowMm > 0 ? 'Likely' : getPrecipIcon(precipProb);
@@ -661,6 +667,14 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Moon Phase</span>
                     <span class="detail-value">${moonIcon} ${solunar.moon_phase} (${solunar.moon_phase_percent}%)</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Official Sunrise</span>
+                    <span class="detail-value">${officialSunrise}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Official Sunset</span>
+                    <span class="detail-value">${officialSunset}</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">Major Periods</span>
