@@ -132,3 +132,37 @@ test('overcast pond setup tempers warm-air anomaly impact', () => {
   assert.ok(spread <= 2.2, `fully overcast spread should stay muted, got ${spread.toFixed(1)}°F`);
   assert.ok(spread >= 0.4, `some daytime warming should remain, got ${spread.toFixed(1)}°F`);
 });
+
+test('sunrise and sunset timestamps anchor morning and afternoon period estimates', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-06-20',
+    temps: [61, 60, 59, 58, 58, 59, 62, 66, 71, 76, 80, 83, 85, 86, 87, 86, 83, 79, 75, 71, 68, 65, 63, 62],
+    clouds: Array(24).fill(20),
+    winds: Array(24).fill(5)
+  });
+
+  const sunriseTemp = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 74,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-06-20T12:00:00Z'),
+    period: 'morning',
+    sunriseTime: '2026-06-20T05:45',
+    sunsetTime: '2026-06-20T20:30'
+  });
+
+  const legacyMorningTemp = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 74,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-06-20T12:00:00Z'),
+    period: 'morning'
+  });
+
+  assert.ok(
+    sunriseTemp < legacyMorningTemp,
+    `sunrise-anchored morning (${sunriseTemp}°F) should be cooler than legacy 9 AM morning (${legacyMorningTemp}°F)`
+  );
+});
