@@ -186,6 +186,36 @@ function getWaterTempsByPeriod({ dailySurfaceTemp, waterType, weather, date }) {
     };
 }
 
+function formatDepthTempsForSurface(surfaceTemp, waterType, date) {
+    return {
+        temp2ft: estimateTempByDepth(surfaceTemp, waterType, 2, date).toFixed(1),
+        temp4ft: estimateTempByDepth(surfaceTemp, waterType, 4, date).toFixed(1),
+        temp10ft: estimateTempByDepth(surfaceTemp, waterType, 10, date).toFixed(1),
+        temp20ft: estimateTempByDepth(surfaceTemp, waterType, 20, date).toFixed(1)
+    };
+}
+
+function renderWaterPeriodBreakdown({ periods, waterType, date }) {
+    const morningDepths = formatDepthTempsForSurface(periods.morning, waterType, date);
+    const middayDepths = formatDepthTempsForSurface(periods.midday, waterType, date);
+    const afternoonDepths = formatDepthTempsForSurface(periods.afternoon, waterType, date);
+
+    return `
+        <small style="color: var(--text-secondary); display: block; margin-top: 6px; line-height: 1.5;">
+            <strong>Morning temp:</strong> ${periods.morning.toFixed(1)}°F<br>
+            <strong>Depths:</strong> 2ft: ${morningDepths.temp2ft}°F | 4ft: ${morningDepths.temp4ft}°F | 10ft: ${morningDepths.temp10ft}°F | 20ft: ${morningDepths.temp20ft}°F
+        </small>
+        <small style="color: var(--text-secondary); display: block; margin-top: 8px; line-height: 1.5;">
+            <strong>Midday temp:</strong> ${periods.midday.toFixed(1)}°F<br>
+            <strong>Depths:</strong> 2ft: ${middayDepths.temp2ft}°F | 4ft: ${middayDepths.temp4ft}°F | 10ft: ${middayDepths.temp10ft}°F | 20ft: ${middayDepths.temp20ft}°F
+        </small>
+        <small style="color: var(--text-secondary); display: block; margin-top: 8px; line-height: 1.5;">
+            <strong>Afternoon temp:</strong> ${periods.afternoon.toFixed(1)}°F<br>
+            <strong>Depths:</strong> 2ft: ${afternoonDepths.temp2ft}°F | 4ft: ${afternoonDepths.temp4ft}°F | 10ft: ${afternoonDepths.temp10ft}°F | 20ft: ${afternoonDepths.temp20ft}°F
+        </small>
+    `;
+}
+
 function renderDayDetailTrendCharts(hourlyDetails, dayIndex) {
     if (!hourlyDetails || hourlyDetails.length < 2) return '';
 
@@ -477,10 +507,6 @@ export function renderForecast(data) {
         weather,
         date: new Date()
     });
-    const temp2ft = estimateTempByDepth(waterTemp, waterType, 2, new Date()).toFixed(1);
-    const temp4ft = estimateTempByDepth(waterTemp, waterType, 4, new Date()).toFixed(1);
-    const temp10ft = estimateTempByDepth(waterTemp, waterType, 10, new Date()).toFixed(1);
-    const temp20ft = estimateTempByDepth(waterTemp, waterType, 20, new Date()).toFixed(1);
     
     // NEW: Water clarity badge
     const clarityIcons = {
@@ -535,12 +561,7 @@ export function renderForecast(data) {
                     <span class="detail-label">Water Temperature</span>
                     <span class="detail-value">
                         Surface: ${surfaceTemp}°F<br>
-                        <small style="color: var(--text-secondary); display: block; margin-top: 4px;">
-                            Morning: ${todaysWaterPeriods.morning.toFixed(1)}°F | Midday: ${todaysWaterPeriods.midday.toFixed(1)}°F | Afternoon: ${todaysWaterPeriods.afternoon.toFixed(1)}°F
-                        </small>
-                        <small style="color: var(--text-secondary);">
-                            Depth: 2ft ${temp2ft}°F | 4ft: ${temp4ft}°F | 10ft: ${temp10ft}°F | 20ft: ${temp20ft}°F
-                        </small>
+                        ${renderWaterPeriodBreakdown({ periods: todaysWaterPeriods, waterType, date: new Date() })}
                     </span>
                 </div>
                 <div class="detail-row">
@@ -818,11 +839,12 @@ window.showDayDetails = function(dayIndex, date) {
     const speciesData = SPECIES_DATA[data.speciesKey];
     const fishPhase = getFishPhaseLabel(speciesData, waterTempEstimate);
     
-    // Estimate depth temps
-    const temp2ft = estimateTempByDepth(waterTempEstimate, data.waterType, 2, new Date(date));
-    const temp4ft = estimateTempByDepth(waterTempEstimate, data.waterType, 4, new Date(date));
-    const temp10ft = estimateTempByDepth(waterTempEstimate, data.waterType, 10, new Date(date));
-    const temp20ft = estimateTempByDepth(waterTempEstimate, data.waterType, 20, new Date(date));
+    const dayWaterPeriods = getWaterTempsByPeriod({
+        dailySurfaceTemp: waterTempEstimate,
+        waterType: data.waterType,
+        weather: data.weather,
+        date: new Date(`${date}T12:00:00`)
+    });
     
     // Highlight selected day
     document.querySelectorAll('.forecast-day-card').forEach(card => {
@@ -852,9 +874,7 @@ window.showDayDetails = function(dayIndex, date) {
                         <span class="detail-label">Water Temperature</span>
                         <span class="detail-value">
                             Surface: ${waterTempEstimate.toFixed(1)}°F<br>
-                            <small style="color: var(--text-secondary);">
-                                2ft: ${temp2ft.toFixed(1)}°F | 4ft: ${temp4ft.toFixed(1)}°F | 10ft: ${temp10ft.toFixed(1)}°F | 20ft: ${temp20ft.toFixed(1)}°F
-                            </small>
+                            ${renderWaterPeriodBreakdown({ periods: dayWaterPeriods, waterType: data.waterType, date: new Date(`${date}T12:00:00`) })}
                         </span>
                     </div>
                     <div class="detail-row">
