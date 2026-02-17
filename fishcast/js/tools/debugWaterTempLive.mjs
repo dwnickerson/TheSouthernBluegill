@@ -36,12 +36,18 @@ const sharedDate = modelPayload.anchorDate;
 const todayEstimate = await estimateWaterTemp(coords, waterType, sharedDate, modelPayload.estimateArgs.historicalWeather);
 const todayExplain = await explainWaterTempTerms({ coords, waterType, date: sharedDate, weatherPayload: modelPayload.explainArgs.weatherPayload });
 const timezone = payload?.meta?.timezone || 'America/Chicago';
+
+const estimateDate = modelPayload.estimateArgs.currentDate;
+const explainDate = modelPayload.explainArgs.date;
+const nowHourIndex = payload?.meta?.nowHourIndex;
+const hourlyNowTime = Number.isInteger(nowHourIndex) ? payload?.forecast?.hourly?.time?.[nowHourIndex] : null;
+const localTimeUsed = estimateDate.toLocaleString('en-US', { timeZone: timezone, hour12: false });
 const sunriseTime = payload?.forecast?.daily?.sunrise?.[0] || null;
 const sunsetTime = payload?.forecast?.daily?.sunset?.[0] || null;
 
-const sunrise = estimateWaterTempByPeriod({ dailySurfaceTemp: todayEstimate, waterType, hourly: payload.forecast.hourly, timezone, date: sharedDate, period: 'morning', sunriseTime, sunsetTime });
-const midday = estimateWaterTempByPeriod({ dailySurfaceTemp: todayEstimate, waterType, hourly: payload.forecast.hourly, timezone, date: sharedDate, period: 'midday', sunriseTime, sunsetTime });
-const sunset = estimateWaterTempByPeriod({ dailySurfaceTemp: todayEstimate, waterType, hourly: payload.forecast.hourly, timezone, date: sharedDate, period: 'afternoon', sunriseTime, sunsetTime });
+const sunrise = estimateWaterTempByPeriod({ dailySurfaceTemp: todayEstimate, waterType, hourly: payload.forecast.hourly, timezone, date: estimateDate, period: 'morning', sunriseTime, sunsetTime });
+const midday = estimateWaterTempByPeriod({ dailySurfaceTemp: todayEstimate, waterType, hourly: payload.forecast.hourly, timezone, date: estimateDate, period: 'midday', sunriseTime, sunsetTime });
+const sunset = estimateWaterTempByPeriod({ dailySurfaceTemp: todayEstimate, waterType, hourly: payload.forecast.hourly, timezone, date: estimateDate, period: 'afternoon', sunriseTime, sunsetTime });
 
 const depth17 = estimateShallowDepthTemp(sunrise, 1.7, sharedDate);
 
@@ -52,7 +58,13 @@ console.log(JSON.stringify({
   source: payload.meta.source,
   anchorDateISO: sharedDate.toISOString(),
   localDayKey: modelPayload.localDayKey,
-  fp: payloadFingerprint(payload)
+  fp: payloadFingerprint(payload),
+  localTimeUsed,
+  estimateDateISO: estimateDate.toISOString(),
+  explainDateISO: explainDate.toISOString(),
+  metaNowHourIndex: nowHourIndex,
+  forecastNowHourTime: hourlyNowTime,
+  forecastCurrentTemp: payload?.forecast?.current?.temperature_2m ?? null
 }, null, 2));
 console.log('terms:', {
   seasonalBase: todayExplain.seasonalBase,
@@ -64,3 +76,5 @@ console.log('terms:', {
 });
 console.log('period temps:', { sunrise, midday, sunset });
 console.log('depth temp at ~1.7ft (sunrise):', Math.round(depth17 * 10) / 10);
+
+console.log('parity delta (estimate - explain.final):', Math.round((todayEstimate - todayExplain.final) * 10) / 10);
