@@ -7,11 +7,9 @@ import { getPressureTrend } from '../models/fishingScore.js';
 import { calculateSpeciesAwareDayScore } from '../models/forecastEngine.js';
 import { calculateSolunar } from '../models/solunar.js';
 import { estimateTempByDepth, estimateWaterTempByPeriod, projectWaterTemps } from '../models/waterTemp.js';
+import { createLogger } from '../utils/logger.js';
 
-const DEBUG = false;
-const debugLog = (...args) => {
-    if (DEBUG) console.log(...args);
-};
+const debugLog = createLogger('forecast');
 
 // ============================================
 // HELPER: Get species data

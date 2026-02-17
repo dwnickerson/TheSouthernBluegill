@@ -1,10 +1,8 @@
 // FishCast Main Application
 // Entry point and coordinator for all modules
-const DEBUG = false;
-const debugLog = (...args) => {
-    if (DEBUG) console.log(...args);
-};
+import { createLogger } from './utils/logger.js';
 
+const debugLog = createLogger('app');
 debugLog('FishCast starting', window.location.href);
 
 import { storage } from './services/storage.js';

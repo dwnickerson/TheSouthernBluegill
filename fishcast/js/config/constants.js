@@ -7,14 +7,6 @@ export const API_CONFIG = {
     GEOCODING: {
         NOMINATIM_URL: 'https://nominatim.openstreetmap.org/search',
         USER_AGENT: 'FishCast/2.0'
-    },
-    WEBHOOK: {
-        // Keep both report endpoints because Apps Script deployments are versioned and
-        // we have historically submitted to a different deployment than we queried.
-        WATER_TEMP_REPORT_ENDPOINTS: [
-            'https://script.google.com/macros/s/AKfycbxmuReDxhNFGjFC_LaEcCiTB8R7uI9lJxMbMsEWSoIp_VRegLarMnnILlvk-2K7ghDYeg/exec',
-            'https://script.google.com/macros/s/AKfycbySp_91L4EPOFXFx2528Q7TPfRtQi9dBiR4l2CSWpnrJ_x2UdZGamdiqsS7bYOQ38R8bg/exec'
-        ]
     }
 };
 

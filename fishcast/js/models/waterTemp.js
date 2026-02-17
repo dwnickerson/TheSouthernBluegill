@@ -3,10 +3,13 @@
 // Unit contract: all model temperatures are expected in °F from weatherAPI (temperature_unit=fahrenheit).
 
 import { WATER_BODIES_V2 } from '../config/waterBodies.js';
-import { API_CONFIG, APP_CONSTANTS } from '../config/constants.js';
+import { APP_CONSTANTS } from '../config/constants.js';
 import { getDayOfYear } from '../utils/date.js';
 import { calculateDistance } from '../utils/math.js';
 import { storage } from '../services/storage.js';
+import { createLogger } from '../utils/logger.js';
+
+const debugLog = createLogger('water-temp');
 
 const WIND_FALLBACK_MAX_REDUCTION = 0.6;
 const FORECAST_MAX_WIND_GUST_WEIGHT = 0.2;
@@ -490,33 +493,23 @@ function getWindEstimateMph(historicalWeather) {
 }
 
 async function getNearbyWaterTempReports(coords, waterType, daysBack = APP_CONSTANTS.WATER_TEMP_REPORT_DAYS_BACK) {
-    const endpoints = Array.isArray(API_CONFIG.WEBHOOK.WATER_TEMP_REPORT_ENDPOINTS)
-        ? API_CONFIG.WEBHOOK.WATER_TEMP_REPORT_ENDPOINTS
-        : [];
-
-    for (const endpoint of endpoints) {
-        try {
-            const url = `${endpoint}?` +
-                `lat=${coords.lat}&` +
-                `lon=${coords.lon}&` +
-                `radius=${APP_CONSTANTS.WATER_TEMP_REPORT_RADIUS_MILES}&` +
-                `waterType=${waterType}&` +
-                `daysBack=${daysBack}`;
-
-            const response = await fetch(url);
-            if (!response.ok) continue;
-
-            const payload = await response.json();
-            if (Array.isArray(payload)) {
-                return payload;
-            }
-        } catch (error) {
-            // Try next deployment endpoint.
-        }
+    const allReports = storage.get('waterTempReports') || [];
+    if (!Array.isArray(allReports) || allReports.length === 0) {
+        debugLog('No local water temp reports available, using physics model');
+        return null;
     }
 
-    console.log('No user water temp data available, using physics model');
-    return null;
+    const normalizedWaterType = normalizeWaterBodyType(waterType);
+    const cutoff = new Date(Date.now() - (daysBack * 24 * 60 * 60 * 1000));
+    const reports = allReports.filter((report) => {
+        if (!report || !Number.isFinite(report.latitude) || !Number.isFinite(report.longitude)) return false;
+        if (new Date(report.timestamp) < cutoff) return false;
+        const distance = calculateDistance(coords.lat, coords.lon, report.latitude, report.longitude);
+        if (distance > APP_CONSTANTS.WATER_TEMP_REPORT_RADIUS_MILES) return false;
+        return normalizeWaterBodyType(report.waterBody) === normalizedWaterType;
+    });
+
+    return reports.length > 0 ? reports : null;
 }
 
 function calibrateWithUserData(seasonalBase, userReports, coords, waterType) {
@@ -551,7 +544,7 @@ function calibrateWithUserData(seasonalBase, userReports, coords, waterType) {
     const blendFactor = clamp(Math.min(0.86, reportCount * 0.15), blendFloor, 0.86);
     const calibratedTemp = (userAverage * blendFactor) + (seasonalBase * (1 - blendFactor));
 
-    console.log(`📊 Using ${reportCount} user reports. Blend: ${(blendFactor * 100).toFixed(0)}% user data, ${((1 - blendFactor) * 100).toFixed(0)}% model`);
+    debugLog(`📊 Using ${reportCount} user reports. Blend: ${(blendFactor * 100).toFixed(0)}% user data, ${((1 - blendFactor) * 100).toFixed(0)}% model`);
 
     return calibratedTemp;
 }
@@ -565,17 +558,17 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     // - air temperature: °F
     // - wind speed: mph
     // - precipitation: inches
-    console.log(`🌡️ Estimating water temp for ${waterType} at ${latitude.toFixed(2)}°N on day ${dayOfYear}`);
+    debugLog(`🌡️ Estimating water temp for ${waterType} at ${latitude.toFixed(2)}°N on day ${dayOfYear}`);
 
     const seasonalBase = getSeasonalBaseTemp(latitude, dayOfYear, waterType);
-    console.log(`📅 Seasonal baseline: ${seasonalBase.toFixed(1)}°F`);
+    debugLog(`📅 Seasonal baseline: ${seasonalBase.toFixed(1)}°F`);
 
     const userReports = await getNearbyWaterTempReports(coords, waterType);
     let calibratedBase = seasonalBase;
 
     if (userReports && userReports.length > 0) {
         calibratedBase = calibrateWithUserData(seasonalBase, userReports, coords, waterType);
-        console.log(`👥 Calibrated with user data: ${calibratedBase.toFixed(1)}°F`);
+        debugLog(`👥 Calibrated with user data: ${calibratedBase.toFixed(1)}°F`);
     }
 
     const daily = historicalWeather?.daily || {};
@@ -639,9 +632,9 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
 
     const finalTemp = Math.round(estimatedTemp * 10) / 10;
     if (windEstimate.warnings.length) {
-        console.log('⚠️ Wind estimation notes:', windEstimate.warnings.join('; '));
+        debugLog('⚠️ Wind estimation notes:', windEstimate.warnings.join('; '));
     }
-    console.log(`✅ Final water temp estimate: ${finalTemp}°F`);
+    debugLog(`✅ Final water temp estimate: ${finalTemp}°F`);
 
     return finalTemp;
 }
@@ -779,7 +772,7 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
         projectedTemp = clamp(prevTemp + dailyDelta, 32, 95);
 
         if (options.debug === true) {
-            console.log(
+            debugLog(
                 `[FishCast][waterTempProjection] day=${dayIndex} air=${airTemp.toFixed(1)} ` +
                 `thermal=${thermalEffect.toFixed(2)} solar=${solarEffect.toFixed(2)} ` +
                 `wind=${windEffect.toFixed(2)} trend=${trendKicker.toFixed(2)} ` +
