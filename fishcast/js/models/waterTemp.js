@@ -490,21 +490,33 @@ function getWindEstimateMph(historicalWeather) {
 }
 
 async function getNearbyWaterTempReports(coords, waterType, daysBack = APP_CONSTANTS.WATER_TEMP_REPORT_DAYS_BACK) {
-    try {
-        const url = `${API_CONFIG.WEBHOOK.WATER_TEMP_SUBMIT}?` +
-            `lat=${coords.lat}&` +
-            `lon=${coords.lon}&` +
-            `radius=${APP_CONSTANTS.WATER_TEMP_REPORT_RADIUS_MILES}&` +
-            `waterType=${waterType}&` +
-            `daysBack=${daysBack}`;
+    const endpoints = Array.isArray(API_CONFIG.WEBHOOK.WATER_TEMP_REPORT_ENDPOINTS)
+        ? API_CONFIG.WEBHOOK.WATER_TEMP_REPORT_ENDPOINTS
+        : [];
 
-        const response = await fetch(url);
-        if (!response.ok) return null;
-        return await response.json();
-    } catch (error) {
-        console.log('No user water temp data available, using physics model');
-        return null;
+    for (const endpoint of endpoints) {
+        try {
+            const url = `${endpoint}?` +
+                `lat=${coords.lat}&` +
+                `lon=${coords.lon}&` +
+                `radius=${APP_CONSTANTS.WATER_TEMP_REPORT_RADIUS_MILES}&` +
+                `waterType=${waterType}&` +
+                `daysBack=${daysBack}`;
+
+            const response = await fetch(url);
+            if (!response.ok) continue;
+
+            const payload = await response.json();
+            if (Array.isArray(payload)) {
+                return payload;
+            }
+        } catch (error) {
+            // Try next deployment endpoint.
+        }
     }
+
+    console.log('No user water temp data available, using physics model');
+    return null;
 }
 
 function calibrateWithUserData(seasonalBase, userReports, coords, waterType) {
