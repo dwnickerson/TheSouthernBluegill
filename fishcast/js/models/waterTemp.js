@@ -30,6 +30,11 @@ function average(values) {
     return finite.reduce((sum, value) => sum + value, 0) / finite.length;
 }
 
+function normalizeWaterBodyType(value) {
+    if (typeof value !== 'string') return '';
+    return value.trim().toLowerCase();
+}
+
 function getDiurnalResponseByWaterType(waterType) {
     if (waterType === 'pond') {
         return {
@@ -287,6 +292,8 @@ function hasTrustedRecentLocalReports(userReports, coords, waterType) {
     if (!Array.isArray(userReports) || userReports.length === 0) return false;
 
     const now = Date.now();
+    const normalizedWaterType = normalizeWaterBodyType(waterType);
+
     return userReports.some((report) => {
         const distance = calculateDistance(coords.lat, coords.lon, report.latitude, report.longitude);
         if (!Number.isFinite(distance) || distance > 6) return false;
@@ -295,7 +302,8 @@ function hasTrustedRecentLocalReports(userReports, coords, waterType) {
         const ageHours = (now - reportDate.getTime()) / (1000 * 60 * 60);
         if (!Number.isFinite(ageHours) || ageHours > 30) return false;
 
-        return !report.waterBody || report.waterBody === waterType;
+        const reportWaterBody = normalizeWaterBodyType(report.waterBody);
+        return !reportWaterBody || reportWaterBody === normalizedWaterType;
     });
 }
 
@@ -506,13 +514,16 @@ function calibrateWithUserData(seasonalBase, userReports, coords, waterType) {
     let totalWeight = 0;
     const now = new Date();
 
+    const normalizedWaterType = normalizeWaterBodyType(waterType);
+
     userReports.forEach(report => {
         const distance = calculateDistance(coords.lat, coords.lon, report.latitude, report.longitude);
         const distanceWeight = 1 / Math.pow(distance + 1, 2);
         const reportDate = new Date(report.timestamp);
         const daysAgo = (now - reportDate) / (1000 * 60 * 60 * 24);
         const recencyWeight = Math.exp(-daysAgo / 3);
-        const typeWeight = report.waterBody === waterType ? 1.5 : 1.0;
+        const reportWaterBody = normalizeWaterBodyType(report.waterBody);
+        const typeWeight = reportWaterBody === normalizedWaterType ? 1.5 : 1.0;
         const totalReportWeight = distanceWeight * recencyWeight * typeWeight;
 
         weightedSum += report.temperature * totalReportWeight;
