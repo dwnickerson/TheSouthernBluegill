@@ -1,187 +1,155 @@
-# FishCast App Audit Report (Pre-Production)
+# FishCast Full Application Audit (Current State)
 
-## Scope and context
-This audit reviewed the current `fishcast` app implementation (UI, UX, code structure, reliability, and accessibility). Per your note, **water temperature report submission + Google Sheets sync are treated as temporary validation tooling** and should not be considered part of the production user flow.
+Date: 2026-02-17
+Scope: Entire `fishcast` web app (product flow, data pipeline, architecture, testing, UX/accessibility, and deployment posture).
 
 ---
 
 ## Executive summary
 
-### Overall health
-- The app has a strong foundation: clear core flow (location → species → water body → forecast), practical domain-specific outputs, caching for resilience, and a PWA shell.
-- However, there are several **pre-production readiness gaps** around UX consistency, accessibility, maintainability, and trust cues.
+FishCast has a solid forecast core and a strong automated test baseline, but it still carries legacy "community report / sheet sync" product behavior in active runtime code. The app is stable enough for iterative release, but **not yet aligned with your stated direction that Google Sheets is no longer part of the product**.
 
-### Highest-priority issues to address before production
-1. **Temporary validation features are deeply integrated in UI and messaging** (quick actions, badges, copy, and submission logic), which can confuse production users if not gated or removed.
-2. **Inconsistent modal architecture** (static modal markup in `index.html` + dynamically injected modal markup in JS) creates maintainability and regression risk.
-3. **Visual hierarchy is noisy** due to high emoji density and decorative iconography; this weakens perceived professionalism and clarity.
-4. **Accessibility debt** (icon-only controls, limited semantic labels for some controls, reliance on emoji for meaning, no explicit reduced-motion handling).
-5. **Configuration drift** (hardcoded Google Script endpoint in runtime flow while another webhook endpoint exists in config constants).
+### Overall status
+- **Core model/testing:** Good and improving.
+- **Product consistency:** Needs correction.
+- **Architecture maintainability:** Moderate risk due to oversized UI modal module and mixed concerns.
+- **Accessibility:** Partial; key improvements still needed.
 
----
-
-## Detailed findings
-
-## 1) Product/flow issues
-
-### 1.1 Temporary validation flow is currently first-class in product UI
-- The top-right quick action button opens the water temp reporting flow.
-- The reporting system includes contributor stats, badge gamification, favorites, and quick report pathways.
-- This creates mixed product intent for end users who came for forecasting, not contribution.
-
-**Why this matters**
-- Production users can interpret this as a core feature commitment.
-- It adds cognitive load and introduces expectations around account-like progress mechanics.
-
-**Recommendation**
-- Hide behind a feature flag (`ENABLE_TEMP_REPORTING=false`) or remove from production build.
-- Keep logic modular, but do not surface buttons, badges, or related messaging unless explicitly enabled.
-
-### 1.2 Forecast primary action is good, but confidence communication can improve
-- The app shows fallback notices when cached/stale data is used (good).
-- However, confidence indicators are text-heavy and mixed with emoji and long summary blocks.
-
-**Recommendation**
-- Add a concise “Forecast Confidence” chip (High / Medium / Low) with tooltip explaining data freshness.
-- Collapse long summary text by default behind “Show details”.
+### Top priorities (in order)
+1. Remove stale Google-Script-specific submission and "Sheet sync pending" messaging from runtime code paths.
+2. Feature-gate or remove reporting gamification UI if it is no longer a product goal.
+3. Split `modals.js` into smaller modules (reporting, settings, educational/help) to reduce regression risk.
+4. Reduce console noise in production and formalize debug logging gates.
+5. Close accessibility gaps on icon-heavy controls and dynamic modal semantics.
 
 ---
 
-## 2) UX and visual design findings
+## 1) Product reality vs stated direction
 
-### 2.1 Do you need a more modern minimalist appearance with fewer emojis?
-**Short answer: Yes — recommended.**
+You stated that Google Sheets/reporting was removed previously. Current codebase still contains active indicators of that legacy flow:
 
-The current interface uses heavy emoji signaling in:
-- labels and section titles,
-- buttons,
-- status notices,
-- cards and badges,
-- debug/info messaging language.
+- Water-temp report endpoints are still configured as Google Apps Script URLs.
+- Runtime submission still posts directly to a Google Apps Script endpoint.
+- Fallback user copy still references "Sheet sync pending".
+- UI copy and help text still describe community report mechanics as first-class behavior.
 
-This style can feel playful but may reduce:
-- scientific credibility,
-- clarity under dense information,
-- consistency with premium/modern product expectations.
+### Impact
+- Product messaging mismatch (what users and operators believe vs what app does).
+- Ongoing operational coupling to third-party script deployments.
+- Increased support burden when users hit report failures.
 
-**Recommendation (balanced approach)**
-- Keep a few semantic icons where they help scanability (e.g., weather or species context).
-- Replace most emoji with a small, consistent icon set (SVG/Feather/Material Symbols).
-- Reserve expressive visuals for success toasts only.
-
-### 2.2 Hierarchy and density
-- The app includes many dense cards and icon-rich rows, creating visual “busyness”.
-- Strong gradients, shadows, uppercase labels, and emoji together produce style competition.
-
-**Recommendation**
-- Move toward a calmer, minimalist system:
-  - reduce gradient usage (one accent gradient max),
-  - reduce uppercase + letter spacing on utility labels,
-  - increase whitespace between major sections,
-  - use neutral iconography and fewer decorative accents.
-
-### 2.3 Mobile ergonomics
-- Icon-only quick buttons are compact and visually clear to returning users, but not self-explanatory for new users and assistive tech users.
-
-**Recommendation**
-- Add accessible text labels or tooltips and optional “expanded controls” on first use.
+### Recommendation
+- Decide explicitly between:
+  - **A) Keep reporting** (then rename it and remove all Sheets terminology), or
+  - **B) Remove reporting** (strip UI/actions, retention keys, and endpoint code entirely).
 
 ---
 
-## 3) Architecture and maintainability issues
+## 2) Forecast/model pipeline health
 
-### 3.1 Mixed static and dynamic modals (duplicate concerns)
-- `index.html` contains prebuilt modal containers.
-- `modals.js` also generates and injects modal HTML at runtime (including settings).
+The forecast stack itself is structured and defensible:
 
-**Risk**
-- Duplicate IDs/state, inconsistent behavior, harder QA, and future regression risk.
+- Unit normalization and safeguards are present (temp/wind/precip normalization).
+- Seasonal baseline + water-body parameters + lag/inertia logic are implemented.
+- Wind-mixing and cold-season pond correction logic exist and are tested.
+- User reports are blended with weighting and trust checks (distance/recency/type).
+- Same-day memo clamping provides anti-jitter stability unless trusted local reports exist.
 
-**Recommendation**
-- Standardize to one modal strategy:
-  - either all declarative in HTML and hydrated by JS,
-  - or all generated from component templates in JS.
+### Residual model risks
+- Heavy reliance on heuristic constants means calibration can drift by region/season.
+- Console-level observability exists, but there is no formal telemetry/event model.
+- Some branch behavior is complex enough to warrant scenario regression snapshots per region.
 
-### 3.2 Configuration drift on webhook URL
-- A webhook URL exists in config constants, but submission logic uses a separate hardcoded Google Apps Script URL.
-
-**Risk**
-- Environment misconfiguration, harder rollout, accidental production data routing.
-
-**Recommendation**
-- Route all endpoints through configuration only (`API_CONFIG.WEBHOOK.WATER_TEMP_SUBMIT`) and environment-specific build config.
-
-### 3.3 Debug-heavy production console output
-- Startup and feature code logs many emoji-rich debug statements.
-
-**Recommendation**
-- Gate logs by environment (`if (DEBUG)`), strip verbose logs in production build.
+### Recommendation
+- Keep current model architecture, but add a formal calibration harness per representative climate zone.
 
 ---
 
-## 4) Accessibility and trust
+## 3) Testing and quality posture
 
-### 4.1 Accessibility gaps
-- Multiple controls are icon-only.
-- Meaning often relies on emoji/color combinations.
-- Motion/transitions are broad; no explicit reduced-motion adaptation was observed.
+### What is strong
+- Node test suite is extensive and currently passing.
+- Smoke suite validates key invariants (unit sanity, wind realism, trend smoothness, score stability, UI view-model assumptions).
+- Water-temp projection and scoring logic are covered with targeted tests.
 
-**Recommendation**
-- Add explicit accessible names (`aria-label`) for icon-only controls.
-- Avoid emoji-only meaning; pair with text.
-- Respect `prefers-reduced-motion` in CSS transitions/animations.
+### Gaps to close
+- No browser-level E2E checks for modal accessibility/focus traps.
+- No explicit CI contract documented for required checks before deploy.
+- No contract tests for endpoint migration/deprecation behavior.
 
-### 4.2 Data trust and privacy clarity
-- A privacy note exists in reporting flow (good), but if this flow is removed in production, privacy messaging should shift toward forecast data sources and limitations.
-
-**Recommendation**
-- Add a simple “How forecasts are generated” + “Data freshness” section near results.
+### Recommendation
+- Add minimal Playwright E2E for critical user path and modal keyboard navigation.
 
 ---
 
-## 5) What to remove or hide for production (given your note)
+## 4) Architecture and maintainability
 
-If water temp reporting + Google Sheet are validation-only, production should:
-1. Remove/hide quick action report button.
-2. Remove report modals, contributor stats, badges, favorites tied to reporting.
-3. Remove Google Apps Script submission path.
-4. Remove copy that promises community reporting effects.
-5. Keep only forecasting, saved user preferences, and optionally favorite forecast locations.
+### Findings
+- `modals.js` is large and multi-purpose (reporting, quick report, badges, educational content, settings-like interactions), which raises change risk.
+- Reporting/business logic is partially interwoven with UI flow.
+- Multiple sources of product copy are embedded in JS strings, making policy updates error-prone.
 
----
-
-## 6) Recommended phased plan
-
-### Phase 1 (1–2 days): Production hardening
-- Feature-flag or remove validation/reporting UI.
-- Resolve modal architecture duplication.
-- Centralize endpoint configuration.
-- Reduce debug logs.
-
-### Phase 2 (2–4 days): UX modernization
-- Replace most emojis with a consistent icon set.
-- Simplify typography and spacing.
-- Improve scanability of forecast summary and cards.
-- Add confidence/freshness chips.
-
-### Phase 3 (2–3 days): Accessibility + polish
-- Add ARIA labels for icon-only controls.
-- Add keyboard/focus-state pass and reduced-motion CSS.
-- Tighten copy for professionalism and clarity.
+### Recommendation
+- Extract:
+  1) `reportingModal.js`
+  2) `settingsModal.js`
+  3) `about/helpModal.js`
+  4) `reportingService.js`
+- Centralize all external endpoints in config only, and route via one service interface.
 
 ---
 
-## 7) Design direction recommendation
+## 5) UX and accessibility
 
-**Recommended direction:** “Modern minimalist + scientific confidence.”
+### Strengths
+- Clear primary use case (get location → generate forecast).
+- Forecast cards and species framing are understandable for target users.
 
-- Tone: expert, clear, calm, practical.
-- Visual language: restrained color palette, limited iconography, lower decorative noise.
-- Interaction: fast first action, transparent confidence indicators, less novelty and more clarity.
+### Issues
+- Icon/emoji density remains high in some interactions, reducing professional trust for decision-support context.
+- Some dynamic modal content can be difficult for assistive-tech users without stronger semantic annotations.
+- Reporting affordances still visually compete with forecast-first behavior.
 
-This will better align with trust-sensitive decision support use cases (planning a trip, deciding when/where to fish) while retaining approachability.
+### Recommendation
+- Simplify top-level actions to forecast-first.
+- Add explicit ARIA labels, heading structure checks, and keyboard focus audits for all modal flows.
 
 ---
 
-## Conclusion
-The app is close to strong production value, but it currently carries prototype/validation artifacts that create UX noise and implementation risk. Removing temporary reporting pathways from the production surface, simplifying the visual language (fewer emojis), and tightening architecture/accessibility will materially improve user trust, perceived quality, and maintainability.
+## 6) Security and operational concerns
+
+### Observations
+- Client-side direct calls to public script endpoints expose operational fragility (versioned script URLs, CORS/runtime failures, quota behaviors).
+- No visible server-side abstraction layer for report ingestion.
+
+### Recommendation
+- If reporting is retained, place ingestion behind a controlled API boundary and deprecate direct client → Apps Script writes.
+
+---
+
+## 7) Concrete action plan (7-day hardening)
+
+### Day 1-2: Product alignment
+- Remove or gate all legacy Sheets/reporting UX and copy.
+- Delete dead/local fallback strings referencing "Sheet sync pending".
+
+### Day 3-4: Refactor for safety
+- Split `modals.js` and isolate report transport/service code.
+- Introduce typed payload validation for report fetch/submit responses.
+
+### Day 5: Accessibility pass
+- Modal semantics + keyboard traversal + icon-button labels.
+
+### Day 6: Release guardrails
+- Define pre-release quality gate: unit + smoke + E2E happy-path.
+
+### Day 7: Documentation
+- Update operator guide and architecture notes to reflect final product decision on reporting.
+
+---
+
+## Final judgment
+
+FishCast’s core forecasting engine is in good condition and supported by meaningful tests. The primary issue is not model collapse; it is **product/architecture inconsistency around legacy reporting infrastructure that should have been fully retired (or formally retained and modernized).**
+
+If you want, next step can be a surgical cleanup PR that removes all Google Script/Sheet-specific behavior and leaves a strict forecast-only product surface.
