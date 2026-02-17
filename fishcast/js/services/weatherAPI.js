@@ -83,7 +83,7 @@ function validateAndNormalizeForecast(forecastData, nowIso) {
     const forecast = forecastData && typeof forecastData === 'object' ? forecastData : {};
     const hourly = forecast.hourly && typeof forecast.hourly === 'object' ? forecast.hourly : {};
     const hourlyTimes = Array.isArray(hourly.time) ? [...hourly.time] : null;
-    const seriesKeys = ['wind_speed_10m', 'surface_pressure', 'temperature_2m', 'precipitation_probability', 'cloud_cover'];
+    const seriesKeys = ['wind_speed_10m', 'wind_direction_10m', 'surface_pressure', 'temperature_2m', 'apparent_temperature', 'relative_humidity_2m', 'dew_point_2m', 'cloud_cover', 'weather_code', 'precipitation', 'precipitation_probability', 'shortwave_radiation', 'vapour_pressure_deficit', 'et0_fao_evapotranspiration'];
 
     if (!hourlyTimes) {
         warnings.push('forecast.hourly.time missing or invalid');
@@ -186,8 +186,8 @@ export async function getWeather(lat, lon, days = APP_CONSTANTS.DEFAULT_FORECAST
     const forecastUrl = `${API_CONFIG.WEATHER.FORECAST_URL}?` +
         `latitude=${lat}&` +
         `longitude=${lon}&` +
-        `current=temperature_2m,apparent_temperature,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code,precipitation&` +
-        `hourly=temperature_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code,precipitation_probability&` +
+        `current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code,precipitation,vapour_pressure_deficit,et0_fao_evapotranspiration&` +
+        `hourly=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code,precipitation,precipitation_probability,shortwave_radiation,vapour_pressure_deficit,et0_fao_evapotranspiration&` +
         `daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_probability_max,precipitation_sum,wind_speed_10m_mean,wind_speed_10m_max,wind_direction_10m_dominant,cloud_cover_mean,sunrise,sunset,weather_code&` +
         `temperature_unit=${WEATHER_UNITS.temp}&` +
         `windspeed_unit=${WEATHER_UNITS.wind}&` +
@@ -241,7 +241,7 @@ export async function getCurrentWeather(lat, lon) {
     const url = `${API_CONFIG.WEATHER.FORECAST_URL}?` +
         `latitude=${lat}&` +
         `longitude=${lon}&` +
-        `current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code&` +
+        `current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,surface_pressure,wind_speed_10m,wind_direction_10m,cloud_cover,weather_code,precipitation,vapour_pressure_deficit,et0_fao_evapotranspiration&` +
         `temperature_unit=${WEATHER_UNITS.temp}&` +
         `windspeed_unit=${WEATHER_UNITS.wind}&` +
         `precipitation_unit=${WEATHER_UNITS.precip}&` +

@@ -3,11 +3,12 @@
 import { SPECIES_DATA } from '../config/species.js';
 import { getWindDirection } from '../utils/math.js';
 import { formatDate, formatDateShort, formatTime } from '../utils/date.js';
-import { getPressureTrend } from '../models/fishingScore.js';
+import { getPressureRate } from '../models/fishingScore.js';
 import { calculateSpeciesAwareDayScore } from '../models/forecastEngine.js';
 import { calculateSolunar } from '../models/solunar.js';
 import { estimateTempByDepth, estimateWaterTempByPeriod, projectWaterTemps } from '../models/waterTemp.js';
 import { createLogger } from '../utils/logger.js';
+import { toWindMph } from '../utils/units.js';
 
 const debugLog = createLogger('forecast');
 
@@ -23,15 +24,6 @@ function toTempF(value, weather) {
     if (!Number.isFinite(value)) return 0;
     // Value is already °F from weatherAPI (temperature_unit=fahrenheit).
     return value;
-}
-
-function toWindMph(value, weather) {
-    if (!Number.isFinite(value)) return 0;
-    const units = String(weather?.forecast?.hourly_units?.wind_speed_10m || weather?.forecast?.current_units?.wind_speed_10m || 'kmh').toLowerCase();
-    if (units.includes('mph') || units.includes('mp/h') || units.includes('mi/h') || units.includes('mile')) return value;
-    if (units.includes('m/s') || units.includes('ms')) return value * 2.23694;
-    if (units.includes('kn')) return value * 1.15078;
-    return value * 0.621371;
 }
 
 function calculateDewPointF(tempF, humidityPercent) {
@@ -107,12 +99,13 @@ function getDaysUntilDate(targetDate, referenceDate = new Date()) {
 
 function toPrecipInches(value, weather) {
     if (!Number.isFinite(value)) return 0;
-    const units = String(weather?.forecast?.daily_units?.precipitation_sum || weather?.meta?.units?.precip || 'mm').toLowerCase();
+    const units = String(weather?.forecast?.daily_units?.precipitation_sum || weather?.meta?.units?.precip || 'in').toLowerCase();
     if (units.includes('in')) return value;
-    return value / 25.4;
+    if (units.includes('mm')) return value / 25.4;
+    return value;
 }
 
-function getHourlyDetailRowsForDate(hourlyForecast, targetDate) {
+function getHourlyDetailRowsForDate(hourlyForecast, targetDate, windUnitHint = '') {
     const hourlyTimes = hourlyForecast.time || [];
     const hourlyTemps = hourlyForecast.temperature_2m || [];
     const hourlyPrecip = hourlyForecast.precipitation_probability || [];
@@ -131,7 +124,8 @@ function getHourlyDetailRowsForDate(hourlyForecast, targetDate) {
 
         const tempF = toTempF(hourlyTemps[index], { forecast: { hourly_units: hourlyForecast?.hourly_units || {} } });
         const precipChance = Number.isFinite(hourlyPrecip[index]) ? hourlyPrecip[index] : 0;
-        const windMph = Number.isFinite(hourlyWindSpeed[index]) ? toWindMph(hourlyWindSpeed[index], { forecast: { hourly_units: hourlyForecast?.hourly_units || {} } }) : 0;
+        const windUnit = windUnitHint || hourlyForecast?.units?.wind_speed_10m || hourlyForecast?.wind_speed_10m_unit || '';
+        const windMph = Number.isFinite(hourlyWindSpeed[index]) ? (toWindMph(hourlyWindSpeed[index], windUnit) ?? 0) : 0;
 
         detailRows.push({
             index: detailRows.length,
@@ -414,7 +408,8 @@ function renderTrendCharts(weather) {
     const hourly = weather.forecast.hourly || {};
     const hourlyTemps = (hourly.temperature_2m || []).slice(0, 24);
     const hourlyPrecip = (hourly.precipitation_probability || []).slice(0, 24);
-    const hourlyWind = (hourly.wind_speed_10m || []).slice(0, 24).map((value) => toWindMph(value, weather));
+    const windUnit = weather?.forecast?.hourly_units?.wind_speed_10m || weather?.forecast?.current_units?.wind_speed_10m || '';
+    const hourlyWind = (hourly.wind_speed_10m || []).slice(0, 24).map((value) => toWindMph(value, windUnit) ?? 0);
     const hourlyTime = (hourly.time || []).slice(0, 24);
 
     if (hourlyTemps.length < 2 || hourlyPrecip.length < 2 || hourlyWind.length < 2 || hourlyTime.length < 2) {
@@ -515,9 +510,12 @@ export function renderForecast(data) {
     const currentScore = { ...toRating(currentDayScore.score), score: currentDayScore.score, clarity: 'clear' };
     const currentPhaseLabel = getFishPhaseLabel(speciesData, waterTemp);
     
-    const windSpeed = toWindMph(weather.forecast.current.wind_speed_10m, weather);
+    const windUnit = weather?.forecast?.current_units?.wind_speed_10m || weather?.forecast?.hourly_units?.wind_speed_10m || '';
+    const windSpeed = toWindMph(weather.forecast.current.wind_speed_10m, windUnit) ?? 0;
     const windDir = getWindDirection(weather.forecast.current.wind_direction_10m);
-    const pTrend = getPressureTrend(weather.forecast.hourly.surface_pressure.slice(0, 6));
+    const pressureSeries = weather?.forecast?.hourly?.surface_pressure || [];
+    const pressureTimes = weather?.forecast?.hourly?.time || [];
+    const pTrend = getPressureRate(pressureSeries, pressureTimes).trend;
     
     // Weather icon
     const weatherIcon = getWeatherIcon(weather.forecast.current.weather_code);
@@ -536,11 +534,10 @@ export function renderForecast(data) {
     const officialSunset = weather.forecast.daily?.sunset?.[0]
         ? formatTime(weather.forecast.daily.sunset[0])
         : 'N/A';
-    const precipNowMm = weather.forecast.current.precipitation || 0;
+    const precipNowIn = weather.forecast.current.precipitation || 0;
     const precipProb = getCurrentPrecipProbability(weather.forecast);
-    const precipIcon = precipNowMm > 0 ? 'Likely' : getPrecipIcon(precipProb);
-    const todayPrecipMm = weather.forecast.daily?.precipitation_sum?.[0] || 0;
-    const todayPrecipIn = todayPrecipMm / 25.4;
+    const precipIcon = precipNowIn > 0 ? 'Likely' : getPrecipIcon(precipProb);
+    const todayPrecipIn = weather.forecast.daily?.precipitation_sum?.[0] || 0;
     const todayHighTemp = toTempF(weather.forecast.daily.temperature_2m_max[0], weather);
     const todayLowTemp = toTempF(weather.forecast.daily.temperature_2m_min[0], weather);
     const feelsLikeTemp = toTempF(weather.forecast.current.apparent_temperature, weather);
@@ -758,7 +755,7 @@ function getCurrentPrecipProbability(forecast) {
     const hourlyProbabilities = forecast.hourly?.precipitation_probability || [];
     const currentTime = forecast.current?.time;
     const currentCode = forecast.current?.weather_code;
-    const currentPrecipMm = forecast.current?.precipitation || 0;
+    const currentPrecipIn = forecast.current?.precipitation || 0;
 
     const currentIndex = currentTime ? hourlyTimes.indexOf(currentTime) : -1;
     const indexedProb = currentIndex >= 0 ? (hourlyProbabilities[currentIndex] || 0) : null;
@@ -779,7 +776,7 @@ function getCurrentPrecipProbability(forecast) {
     };
 
     const codeFloor = wetCodeMinimums[currentCode] || 0;
-    const activePrecipFloor = currentPrecipMm > 0 ? 95 : 0;
+    const activePrecipFloor = currentPrecipIn > 0 ? 95 : 0;
 
     return Math.max(baseProb, codeFloor, activePrecipFloor);
 }
@@ -826,7 +823,7 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
         });
         
         // Get wind data for the day
-        const windSpeed = dailyData.wind_speed_10m_max ? toWindMph(dailyData.wind_speed_10m_max[i], weather) : 0;
+        const windSpeed = dailyData.wind_speed_10m_max ? toWindMph(dailyData.wind_speed_10m_max[i], weather?.forecast?.daily_units?.wind_speed_10m_max || weather?.forecast?.hourly_units?.wind_speed_10m || '') ?? 0 : 0;
         const windDir = dailyData.wind_direction_10m_dominant ? getWindDirection(dailyData.wind_direction_10m_dominant[i]) : '';
         
         const dayScore = calculateSpeciesAwareDayScore({
@@ -872,7 +869,7 @@ window.showDayDetails = function(dayIndex, date) {
     const precipProb = dailyData.precipitation_probability_max[dayIndex];
     const precipSum = dailyData.precipitation_sum ? dailyData.precipitation_sum[dayIndex] : 0;
     const precipAmountInches = toPrecipInches(precipSum, data.weather);
-    const windSpeed = dailyData.wind_speed_10m_max ? toWindMph(dailyData.wind_speed_10m_max[dayIndex], data.weather) : 0;
+    const windSpeed = dailyData.wind_speed_10m_max ? toWindMph(dailyData.wind_speed_10m_max[dayIndex], data.weather?.forecast?.daily_units?.wind_speed_10m_max || data.weather?.forecast?.hourly_units?.wind_speed_10m || '') ?? 0 : 0;
     const windDir = dailyData.wind_direction_10m_dominant ? getWindDirection(dailyData.wind_direction_10m_dominant[dayIndex]) : 'N';
     const sunrise = dailyData.sunrise ? new Date(dailyData.sunrise[dayIndex]).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'N/A';
     const sunset = dailyData.sunset ? new Date(dailyData.sunset[dayIndex]).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'N/A';
@@ -881,7 +878,11 @@ window.showDayDetails = function(dayIndex, date) {
     const daySolunar = calculateSolunar(data.coords.lat, data.coords.lon, new Date(date));
     const moonIcon = getMoonIcon(daySolunar.moon_phase);
     const daySummary = `${weatherDesc} with ${precipProb}% rain chance. Air ${minTemp.toFixed(0)}°F to ${maxTemp.toFixed(0)}°F and winds near ${windSpeed.toFixed(0)} mph ${windDir}.`;
-    const hourlyDetails = getHourlyDetailRowsForDate(data.weather.forecast.hourly || {}, date);
+    const hourlyDetails = getHourlyDetailRowsForDate(
+        data.weather.forecast.hourly || {},
+        date,
+        data.weather?.forecast?.hourly_units?.wind_speed_10m || data.weather?.forecast?.current_units?.wind_speed_10m || ''
+    );
     const hourlyTrendMarkup = renderDayDetailTrendCharts(hourlyDetails, dayIndex);
     
     // 🔬 PHYSICS: Use pre-calculated water temp from thermal evolution model
