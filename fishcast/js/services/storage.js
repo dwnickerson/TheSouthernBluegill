@@ -2,6 +2,20 @@
 import { CACHE_KEYS } from '../config/constants.js';
 
 const STORAGE_VERSION = 1;
+const isBrowser = typeof window !== 'undefined' && !!window.localStorage;
+const memoryStorage = new Map();
+
+function getStorageKeys() {
+    if (isBrowser) {
+        try {
+            return Object.keys(window.localStorage);
+        } catch (error) {
+            console.error('Error reading localStorage keys:', error);
+            return [];
+        }
+    }
+    return [...memoryStorage.keys()];
+}
 
 const LEGACY_KEYS = {
     LAST_SELECTED_SPECIES: 'lastSelectedSpecies',
@@ -14,7 +28,10 @@ const LEGACY_KEYS = {
 
 function safeGetRaw(key) {
     try {
-        return localStorage.getItem(key);
+        if (isBrowser) {
+            return window.localStorage.getItem(key);
+        }
+        return memoryStorage.has(key) ? memoryStorage.get(key) : null;
     } catch (error) {
         console.error(`Error reading localStorage key (${key}):`, error);
         return null;
@@ -23,7 +40,11 @@ function safeGetRaw(key) {
 
 function safeSetRaw(key, value) {
     try {
-        localStorage.setItem(key, value);
+        if (isBrowser) {
+            window.localStorage.setItem(key, value);
+        } else {
+            memoryStorage.set(key, value);
+        }
         return true;
     } catch (error) {
         console.error(`Error writing localStorage key (${key}):`, error);
@@ -41,7 +62,7 @@ function migrateLegacyKey(legacyKey, newKey) {
 
 function migratePrefixedKeys(legacyPrefix, newPrefix) {
     try {
-        const keys = Object.keys(localStorage);
+        const keys = getStorageKeys();
         keys.forEach((key) => {
             if (!key.startsWith(legacyPrefix)) return;
             const suffix = key.slice(legacyPrefix.length);
@@ -62,7 +83,7 @@ export const storage = {
     // Get item from localStorage
     get(key, defaultValue = null) {
         try {
-            const item = localStorage.getItem(key);
+            const item = safeGetRaw(key);
             return item ? JSON.parse(item) : defaultValue;
         } catch (error) {
             console.error(`Error reading from localStorage (${key}):`, error);
@@ -73,7 +94,7 @@ export const storage = {
     // Set item in localStorage
     set(key, value) {
         try {
-            localStorage.setItem(key, JSON.stringify(value));
+            safeSetRaw(key, JSON.stringify(value));
             return true;
         } catch (error) {
             console.error(`Error writing to localStorage (${key}):`, error);
@@ -84,7 +105,11 @@ export const storage = {
     // Remove item from localStorage
     remove(key) {
         try {
-            localStorage.removeItem(key);
+            if (isBrowser) {
+                window.localStorage.removeItem(key);
+            } else {
+                memoryStorage.delete(key);
+            }
             return true;
         } catch (error) {
             console.error(`Error removing from localStorage (${key}):`, error);
@@ -132,9 +157,13 @@ export const storage = {
         ];
 
         try {
-            Object.keys(localStorage).forEach((key) => {
+            getStorageKeys().forEach((key) => {
                 if (legacyDiscreteKeys.includes(key) || prefixList.some(prefix => key.startsWith(prefix))) {
-                    localStorage.removeItem(key);
+                    if (isBrowser) {
+                        window.localStorage.removeItem(key);
+                    } else {
+                        memoryStorage.delete(key);
+                    }
                 }
             });
         } catch (error) {
