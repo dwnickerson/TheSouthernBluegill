@@ -218,24 +218,47 @@ function normalizeWindToKmh(windValue, windUnits = OPEN_METEO_DEFAULT_WIND_UNITS
     return windValue;
 }
 
-function calculatePressureTrend(pressures) {
-    if (!pressures.length) return { trend: 'stable', rate: 0 };
+function selectPressureWindowByTime(readings = [], referenceMs = Date.now(), targetHours = PRESSURE_TREND_WINDOW_HOURS) {
+    if (!Array.isArray(readings) || !readings.length) return [];
 
-    const finite = pressures.filter(Number.isFinite);
-    if (finite.length < 4) return { trend: 'stable', rate: 0 };
+    const finite = readings.filter((row) => Number.isFinite(row.pressure));
+    if (finite.length < 2) return finite;
 
-    const windowed = finite.slice(-PRESSURE_TREND_WINDOW_HOURS);
-    const series = windowed.length >= PRESSURE_TREND_MIN_POINTS ? windowed : finite.slice(-Math.max(4, windowed.length));
+    const withTime = finite.filter((row) => Number.isFinite(row.ms));
+    if (withTime.length < 2) return finite.slice(-Math.max(PRESSURE_TREND_MIN_POINTS, 4));
 
+    const historical = withTime.filter((row) => row.ms <= referenceMs);
+    const source = historical.length >= 2 ? historical : withTime;
+    const earliestAllowed = referenceMs - (targetHours * 60 * 60 * 1000);
+    const clipped = source.filter((row) => row.ms >= earliestAllowed);
+    if (clipped.length >= PRESSURE_TREND_MIN_POINTS) return clipped;
+
+    return source.slice(-Math.max(PRESSURE_TREND_MIN_POINTS, 4));
+}
+
+function calculatePressureTrend(readings, referenceMs = Date.now()) {
+    if (!readings.length) return { trend: 'stable', rate: 0 };
+
+    const series = selectPressureWindowByTime(readings, referenceMs, PRESSURE_TREND_WINDOW_HOURS);
+    if (series.length < 4) return { trend: 'stable', rate: 0 };
+
+    const firstMs = Number.isFinite(series[0].ms) ? series[0].ms : 0;
+    const xs = series.map((entry, index) => {
+        if (Number.isFinite(entry.ms)) {
+            return (entry.ms - firstMs) / (60 * 60 * 1000);
+        }
+        return index;
+    });
+    const ys = series.map((entry) => entry.pressure);
     const n = series.length;
-    const xMean = (n - 1) / 2;
-    const yMean = average(series) ?? 0;
+    const xMean = average(xs) ?? 0;
+    const yMean = average(ys) ?? 0;
 
     let numerator = 0;
     let denominator = 0;
     for (let i = 0; i < n; i++) {
-        const xDelta = i - xMean;
-        const yDelta = series[i] - yMean;
+        const xDelta = xs[i] - xMean;
+        const yDelta = ys[i] - yMean;
         numerator += xDelta * yDelta;
         denominator += xDelta * xDelta;
     }
@@ -324,8 +347,24 @@ export function buildDayWindows(weather, dayKey) {
         .filter(Number.isFinite);
 
     const firstIdx = dayIndexes[0] ?? 0;
-    const pastStart = Math.max(0, firstIdx - PRESSURE_TREND_WINDOW_HOURS);
-    const pastPressures = hourly.surface_pressure.slice(pastStart, firstIdx).filter(Number.isFinite);
+    const referenceMs = Number.isFinite(Date.parse(hourly.time[firstIdx]))
+        ? Date.parse(hourly.time[firstIdx])
+        : Date.now();
+    const pressureReadings = hourly.time
+        .map((timeValue, index) => ({
+            ms: Date.parse(timeValue),
+            pressure: Number(hourly.surface_pressure[index]),
+            index
+        }))
+        .filter((row) => row.index < firstIdx && Number.isFinite(row.pressure));
+    const leadInReadings = dayIndexes
+        .slice(0, 3)
+        .map((i) => ({
+            ms: Date.parse(hourly.time[i]),
+            pressure: Number(hourly.surface_pressure[i]),
+            index: i
+        }))
+        .filter((row) => Number.isFinite(row.pressure));
 
     const airHistoryF = (weather.historical?.daily?.temperature_2m_mean || []).filter(Number.isFinite);
     const airForecastF = (weather.forecast?.daily?.temperature_2m_mean || []).filter(Number.isFinite);
@@ -341,7 +380,7 @@ export function buildDayWindows(weather, dayKey) {
             precipProbAvg: average(dayPrecipProb),
             tempAvgF: average(dayTempsF),
             airTempTrendFPerDay: tempTrendFPerDay,
-            pressureTrend: calculatePressureTrend(pastPressures.concat(dayPressures.slice(0, 3))),
+            pressureTrend: calculatePressureTrend(pressureReadings.concat(leadInReadings), referenceMs),
             precip3DayIn: (weather.historical?.daily?.precipitation_sum || [])
                 .slice(-2)
                 .concat((weather.forecast?.daily?.precipitation_sum || []).slice(0, 1))

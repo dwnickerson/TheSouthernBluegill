@@ -151,7 +151,7 @@ test('golden snapshot for bluegill day score', () => {
     now: new Date('2026-05-01T10:00:00-05:00')
   });
 
-  assert.equal(output.score, 92);
+  assert.equal(output.score, 87);
 });
 
 test('stability cache key includes location, species, and date', () => {

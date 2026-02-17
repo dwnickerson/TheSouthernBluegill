@@ -1,0 +1,13 @@
+Model change proof using fixed payload (coords: 34.2,-88.7; date: 2026-05-01T12:00:00-05:00)
+
+Previous commit (2a3c74f):
+estimateWaterTemp = 70.9
+projectWaterTemps = [70.9,70.52,69.87,68.87,68.26,67.94,68.3]
+
+Current commit (HEAD):
+estimateWaterTemp = 70.6
+projectWaterTemps = [70.6,69.52,69.73,68.01,67.2,66.78,67.16]
+
+Difference (HEAD - previous):
+estimateWaterTemp = -0.3
+project day1 = -1.00, day2 = -0.14, day3 = -0.86, day4 = -1.06, day5 = -1.16, day6 = -1.14

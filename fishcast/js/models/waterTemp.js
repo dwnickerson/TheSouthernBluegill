@@ -16,7 +16,7 @@ const debugLog = createLogger('water-temp');
 const WIND_FALLBACK_MAX_REDUCTION = 0.6;
 const FORECAST_MAX_WIND_GUST_WEIGHT = 0.2;
 const EXTERNAL_REPORTS_ENABLED = false;
-export const WATER_TEMP_MODEL_VERSION = '2.3.0';
+export const WATER_TEMP_MODEL_VERSION = '2.3.1';
 
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -149,6 +149,16 @@ function getForecastPrecipUnit(forecastData) {
     return dailyUnits.precipitation_sum || currentUnits.precipitation || '';
 }
 
+function calculateEvaporativeCoolingProxy({ relativeHumidity, windMph }) {
+    const humidity = Number(relativeHumidity);
+    const wind = Number(windMph);
+    const humidityDeficit = Number.isFinite(humidity) ? clamp((78 - humidity) / 48, 0, 1) : 0;
+    const breezeSignal = Number.isFinite(wind) ? clamp(wind / 18, 0, 1) : 0;
+
+    // Clamp to <= 1.0°F/day cooling contribution.
+    return -clamp(humidityDeficit * breezeSignal, 0, 1);
+}
+
 function getSolarSensitivity(waterType, body) {
     if (waterType === 'river') return 0.65;
     if (waterType === 'reservoir') return 0.85;
@@ -253,11 +263,12 @@ function getWeatherMixingSignals({ current = {}, hourly = {}, dayIndex = 0, nowH
     const weatherCode = Number(current.weather_code);
     const precipNowIn = Number(current.precipitation);
 
-    // Evaporative cooling proxy: driest air + breezy conditions accelerate latent heat loss.
-    const drySignal = Number.isFinite(humidity) ? clamp((70 - humidity) / 55, 0, 1) : 0;
-    const warmSignal = Number.isFinite(airTempF) ? clamp((airTempF - 52) / 35, 0, 1) : 0;
-    const windSignal = Number.isFinite(windMph) ? clamp(windMph / 20, 0, 1) : 0;
-    const evaporationCooling = clamp(drySignal * warmSignal * windSignal, 0, 1) * -1.0;
+    const humidityTerm = Number.isFinite(humidity) ? clamp((70 - humidity) / 55, 0, 1) : 0;
+    const windTerm = Number.isFinite(windMph) ? clamp(windMph / 20, 0, 1) : 0;
+    const evaporationCooling = calculateEvaporativeCoolingProxy({
+        relativeHumidity: humidity,
+        windMph
+    });
 
     const hourlyCodes = Array.isArray(hourly.weather_code) ? hourly.weather_code : [];
     const codeWindowStart = Number.isFinite(nowHourIndex) ? Math.max(0, nowHourIndex - 2) : 0;
@@ -274,12 +285,37 @@ function getWeatherMixingSignals({ current = {}, hourly = {}, dayIndex = 0, nowH
     const cloudWindow = cloudCover.slice(codeWindowStart, codeWindowEnd).filter(Number.isFinite);
     const nearTermCloudMean = Number.isFinite(average(cloudWindow)) ? average(cloudWindow) : null;
 
+    const precipRegimeTerm = stormyCode
+        ? 1
+        : clamp((wetSignal * 0.6) + (precipProbSignal * 0.4), 0, 1);
+
     return {
+        humidityTerm,
+        windTerm,
+        precipRegimeTerm,
         evaporationCooling,
         stormMixingBoost: stormyCode ? 0.12 : clamp((wetSignal * 0.08) + (precipProbSignal * 0.05), 0, 0.12),
         stormSolarDamping: stormyCode ? 0.35 : clamp((wetSignal * 0.2) + (precipProbSignal * 0.1), 0, 0.35),
         nearTermCloudMean
     };
+}
+
+function getDayHourlyAverages(hourly = {}, dayKey = '') {
+    const times = Array.isArray(hourly.time) ? hourly.time : [];
+    const humiditySeries = Array.isArray(hourly.relative_humidity_2m) ? hourly.relative_humidity_2m : [];
+    const windSeries = Array.isArray(hourly.wind_speed_10m) ? hourly.wind_speed_10m : [];
+    if (!times.length || !dayKey) return { humidity: null, wind: null };
+
+    const idxs = [];
+    times.forEach((time, index) => {
+        if (String(time).startsWith(dayKey)) idxs.push(index);
+    });
+
+    if (!idxs.length) return { humidity: null, wind: null };
+
+    const humidity = average(idxs.map((i) => humiditySeries[i]).filter(Number.isFinite));
+    const wind = average(idxs.map((i) => windSeries[i]).filter(Number.isFinite));
+    return { humidity, wind };
 }
 function applyColdSeasonPondCorrection({ estimatedTemp, waterType, dayOfYear, airInfluence, cloudCover }) {
     if (waterType !== 'pond' || !Number.isFinite(estimatedTemp)) {
@@ -695,6 +731,11 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     if (windEstimate.warnings.length) {
         debugLog('⚠️ Wind estimation notes:', windEstimate.warnings.join('; '));
     }
+    debugLog(
+        `[water-temp terms] humidity term=${weatherSignals.humidityTerm.toFixed(2)} ` +
+        `pressure-slope term=${pressureMixingBoost.toFixed(2)} precip regime term=${weatherSignals.precipRegimeTerm.toFixed(2)} ` +
+        `solar term=${solarEffect.toFixed(2)} wind term=${windEffect.toFixed(2)}`
+    );
     debugLog(`✅ Final water temp estimate: ${finalTemp}°F`);
 
     return finalTemp;
@@ -748,6 +789,7 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
     const windUnit = options.windUnit || getForecastWindUnit(forecastData);
     const precipUnit = options.precipUnit || getForecastPrecipUnit(forecastData);
     const pressureMixingBoost = getPressureMixingBoost(forecastData?.hourly || {});
+    const hourly = forecastData?.hourly || {};
     const anchorDate = options.anchorDate instanceof Date ? options.anchorDate : new Date();
     const historicalDaily = options.historicalDaily || {};
     const historicalAirMeans = Array.isArray(historicalDaily.temperature_2m_mean)
@@ -778,9 +820,14 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
             .concat(cloudCover.slice(0, dayIndex + 1).filter(Number.isFinite));
         const weatherSignals = getWeatherMixingSignals({
             current: forecastData?.current || {},
-            hourly: forecastData?.hourly || {},
+            hourly,
             dayIndex,
             nowHourIndex: forecastData?.meta?.nowHourIndex
+        });
+        const dayAverages = getDayHourlyAverages(hourly, timeline[dayIndex]);
+        const dailyEvapCooling = calculateEvaporativeCoolingProxy({
+            relativeHumidity: dayAverages.humidity,
+            windMph: dayAverages.wind
         });
         if (Number.isFinite(weatherSignals.nearTermCloudMean)) cloudContext.push(weatherSignals.nearTermCloudMean);
         const solarEffect = calculateSolarDeviation(latitude, dayOfYear, cloudContext, waterType) * (1 - weatherSignals.stormSolarDamping);
@@ -817,7 +864,7 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
             airTemp
         );
 
-        let projectedTemp = prevTemp + thermalEffect + solarEffect + windEffect + trendKicker + weatherSignals.evaporationCooling;
+        let projectedTemp = prevTemp + thermalEffect + solarEffect + windEffect + trendKicker + weatherSignals.evaporationCooling + dailyEvapCooling;
 
         const physicalDeltaRange = getPhysicallyBoundedDeltaRange({
             waterType,
@@ -845,8 +892,10 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
                 `[FishCast][waterTempProjection] day=${dayIndex} air=${airTemp.toFixed(1)} ` +
                 `thermal=${thermalEffect.toFixed(2)} solar=${solarEffect.toFixed(2)} ` +
                 `wind=${windEffect.toFixed(2)} trend=${trendKicker.toFixed(2)} ` +
+                `humidity term=${weatherSignals.humidityTerm.toFixed(2)} pressure-slope term=${pressureMixingBoost.toFixed(2)} ` +
+                `precip regime term=${weatherSignals.precipRegimeTerm.toFixed(2)} ` +
                 `event=${synopticEventStrength.toFixed(2)} windSource=${windEstimate.source} ` +
-                `delta=${dailyDelta.toFixed(2)} rawDelta=${unconstrainedDelta.toFixed(2)} final=${projectedTemp.toFixed(1)}`
+                `delta=${dailyDelta.toFixed(2)} rawDelta=${unconstrainedDelta.toFixed(2)} evap=${dailyEvapCooling.toFixed(2)} final=${projectedTemp.toFixed(1)}`
             );
         }
 
