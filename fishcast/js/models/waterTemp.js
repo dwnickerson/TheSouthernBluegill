@@ -10,7 +10,8 @@ import { storage } from '../services/storage.js';
 import { createLogger } from '../utils/logger.js';
 import { getPressureRate } from './fishingScore.js';
 import { toWindMph } from '../utils/units.js';
-import { getLocalDayKey, normalizeWeatherPayload } from '../utils/weatherPayload.js';
+import { getLocalDayKey } from '../utils/weatherPayload.js';
+import { normalizeWaterTempContext } from './waterPayloadNormalize.js';
 
 const debugLog = createLogger('water-temp');
 
@@ -750,8 +751,27 @@ function directGet(source, path) {
     return path.split('.').reduce((acc, key) => (acc == null ? acc : acc[key]), source);
 }
 
-function normalizeEstimatorWeatherPayload(weatherPayload, currentDate = new Date()) {
-    return normalizeWeatherPayload(weatherPayload, { now: currentDate, source: weatherPayload?.meta?.source || 'FIXTURE' });
+function normalizeEstimatorWeatherPayload(weatherPayload, currentDate = new Date(), { coords = null, waterType = null, context = null } = {}) {
+    if (context?.payload) return context.payload;
+    const normalizedContext = normalizeWaterTempContext({
+        coords,
+        waterType,
+        timezone: weatherPayload?.meta?.timezone || weatherPayload?.forecast?.timezone || 'UTC',
+        weatherPayload,
+        nowOverride: currentDate
+    });
+    return normalizedContext.payload;
+}
+
+function resolveWaterTempContext({ coords, waterType, currentDate, weatherPayload, context = null }) {
+    if (context?.payload) return context;
+    return normalizeWaterTempContext({
+        coords,
+        waterType,
+        timezone: weatherPayload?.meta?.timezone || weatherPayload?.forecast?.timezone || 'UTC',
+        weatherPayload,
+        nowOverride: currentDate
+    });
 }
 
 async function computeWaterTempEstimateTerms({ coords, waterType, currentDate, weatherPayload, trace = null, persistMemo = false }) {
@@ -899,7 +919,7 @@ async function computeWaterTempEstimateTerms({ coords, waterType, currentDate, w
 }
 
 // Main water temperature estimation function
-export async function estimateWaterTemp(coords, waterType, currentDate, historicalWeather) {
+export async function estimateWaterTemp(coords, waterType, currentDate, historicalWeather, options = {}) {
     const latitude = coords.lat;
     const dayOfYear = getDayOfYear(currentDate);
 
@@ -909,7 +929,8 @@ export async function estimateWaterTemp(coords, waterType, currentDate, historic
     // - precipitation: inches
     debugLog(`🌡️ Estimating water temp for ${waterType} at ${latitude.toFixed(2)}°N on day ${dayOfYear}`);
 
-    const normalizedPayload = normalizeEstimatorWeatherPayload(historicalWeather, currentDate);
+    const normalizedContext = resolveWaterTempContext({ coords, waterType, currentDate, weatherPayload: historicalWeather, context: options.context });
+    const normalizedPayload = normalizedContext.payload;
     const computed = await computeWaterTempEstimateTerms({
         coords,
         waterType,
@@ -959,6 +980,88 @@ export function estimateTempByDepth(surfaceTemp, waterType, depth_ft, currentDat
     return Math.max(32, surfaceTemp - (depth_ft * 0.2));
 }
 
+
+export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
+    const fallback = Number(Math.round((dailySurfaceTemp || 0) * 10) / 10);
+    if (!context?.payload) {
+        return {
+            surfaceNow: fallback,
+            sunrise: fallback,
+            midday: fallback,
+            sunset: fallback,
+            depthTemps: {
+                sunrise: {
+                    temp2ft: estimateTempByDepth(fallback, waterType, 2, new Date()).toFixed(1),
+                    temp4ft: estimateTempByDepth(fallback, waterType, 4, new Date()).toFixed(1),
+                    temp10ft: estimateTempByDepth(fallback, waterType, 10, new Date()).toFixed(1),
+                    temp20ft: estimateTempByDepth(fallback, waterType, 20, new Date()).toFixed(1)
+                }
+            }
+        };
+    }
+
+    const daily = context.payload.forecast?.daily || {};
+    const dailyTimes = Array.isArray(daily.time) ? daily.time : [];
+    const anchorDayKey = String(context.anchorDateISOZ || '').slice(0, 10);
+    const dayIndex = Math.max(0, dailyTimes.findIndex((value) => value === anchorDayKey));
+    const sunriseTime = Array.isArray(daily.sunrise) ? (daily.sunrise[dayIndex] || null) : null;
+    const sunsetTime = Array.isArray(daily.sunset) ? (daily.sunset[dayIndex] || null) : null;
+
+    const sunrise = estimateWaterTempByPeriod({
+        dailySurfaceTemp,
+        waterType,
+        context,
+        period: 'morning',
+        sunriseTime,
+        sunsetTime,
+        dayKey: anchorDayKey
+    });
+    const midday = estimateWaterTempByPeriod({
+        dailySurfaceTemp,
+        waterType,
+        context,
+        period: 'midday',
+        sunriseTime,
+        sunsetTime,
+        dayKey: anchorDayKey
+    });
+    const sunset = estimateWaterTempByPeriod({
+        dailySurfaceTemp,
+        waterType,
+        context,
+        period: 'afternoon',
+        sunriseTime,
+        sunsetTime,
+        dayKey: anchorDayKey
+    });
+
+    const hourIso = context.hourlyNowTimeISOZ || context.anchorDateISOZ;
+    const hour = Number.parseInt(String(hourIso).slice(11, 13), 10);
+    const nowPeriod = !Number.isFinite(hour) ? 'midday' : (hour < 11 ? 'morning' : (hour < 14 ? 'midday' : 'afternoon'));
+    const periodMap = { morning: sunrise, midday, afternoon: sunset };
+    const surfaceNow = Number.isFinite(periodMap[nowPeriod]) ? periodMap[nowPeriod] : fallback;
+
+    const depthFor = (temp, whenDate) => ({
+        temp2ft: estimateTempByDepth(temp, waterType, 2, whenDate).toFixed(1),
+        temp4ft: estimateTempByDepth(temp, waterType, 4, whenDate).toFixed(1),
+        temp10ft: estimateTempByDepth(temp, waterType, 10, whenDate).toFixed(1),
+        temp20ft: estimateTempByDepth(temp, waterType, 20, whenDate).toFixed(1)
+    });
+    const anchorDate = new Date(context.anchorDateISOZ);
+
+    return {
+        surfaceNow: Number(surfaceNow.toFixed(1)),
+        sunrise: Number(sunrise.toFixed(1)),
+        midday: Number(midday.toFixed(1)),
+        sunset: Number(sunset.toFixed(1)),
+        depthTemps: {
+            sunrise: depthFor(sunrise, anchorDate),
+            midday: depthFor(midday, anchorDate),
+            sunset: depthFor(sunset, anchorDate)
+        }
+    };
+}
+
 // Project daily water temperatures using the same primitives as estimateWaterTemp.
 // Returns temperatures aligned to forecast.daily arrays:
 // temps[0] = anchored current/"today" temp, temps[1] = tomorrow using daily[1] forcing, etc.
@@ -991,7 +1094,9 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
     }
     const pressureMixingBoost = getPressureMixingBoost(forecastData?.hourly || {});
     const hourly = forecastData?.hourly || {};
-    const anchorDate = options.anchorDate instanceof Date ? options.anchorDate : new Date();
+    const anchorDate = options.context?.anchorDateISOZ
+        ? new Date(options.context.anchorDateISOZ)
+        : (options.anchorDate instanceof Date ? options.anchorDate : new Date());
     const historicalDaily = options.historicalDaily || {};
     const historicalAirMeans = Array.isArray(historicalDaily.temperature_2m_mean)
         ? historicalDaily.temperature_2m_mean.map((value) => normalizeAirTempToF(value, tempUnit)).filter(Number.isFinite)
@@ -1112,48 +1217,39 @@ export function estimateWaterTempByPeriod({
     dailySurfaceTemp,
     waterType,
     hourly,
-    timezone = 'America/Chicago',
+    timezone = 'UTC',
     date = new Date(),
     period = 'midday',
     sunriseTime = null,
-    sunsetTime = null
+    sunsetTime = null,
+    context = null,
+    dayKey = null
 }) {
     if (!Number.isFinite(dailySurfaceTemp)) return null;
 
-    const hourlyTimes = Array.isArray(hourly?.time) ? hourly.time : [];
-    const hourlyAir = Array.isArray(hourly?.temperature_2m) ? hourly.temperature_2m : [];
-    const hourlyCloud = Array.isArray(hourly?.cloud_cover) ? hourly.cloud_cover : [];
-    const hourlyWind = Array.isArray(hourly?.wind_speed_10m) ? hourly.wind_speed_10m : [];
+    const hourlySource = context?.payload?.forecast?.hourly || hourly || {};
+    const hourlyTimes = Array.isArray(hourlySource?.time) ? hourlySource.time : [];
+    const hourlyAir = Array.isArray(hourlySource?.temperature_2m) ? hourlySource.temperature_2m : [];
+    const hourlyCloud = Array.isArray(hourlySource?.cloud_cover) ? hourlySource.cloud_cover : [];
+    const hourlyWind = Array.isArray(hourlySource?.wind_speed_10m) ? hourlySource.wind_speed_10m : [];
 
     if (!hourlyTimes.length || !hourlyAir.length) {
         return Math.round(dailySurfaceTemp * 10) / 10;
     }
 
     const periodHour = getPeriodTargetHour(period, { sunriseTime, sunsetTime });
-    const dateKey = new Intl.DateTimeFormat('en-CA', {
-        timeZone: timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-    }).format(date);
+    const fallbackDateKey = typeof dayKey === 'string' && dayKey
+        ? dayKey
+        : (context?.anchorDateISOZ || (date instanceof Date ? date.toISOString() : new Date(date).toISOString())).slice(0, 10);
 
     const dayIndices = hourlyTimes
         .map((timeValue, index) => {
-            const hourDate = new Date(timeValue);
-            const localDate = new Intl.DateTimeFormat('en-CA', {
-                timeZone: timezone,
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit'
-            }).format(hourDate);
-            const localHour = Number(new Intl.DateTimeFormat('en-US', {
-                timeZone: timezone,
-                hour: '2-digit',
-                hour12: false
-            }).format(hourDate));
-            return { index, localDate, localHour };
+            const hourIso = String(timeValue || '');
+            const hourKey = hourIso.slice(0, 10);
+            const hour = Number.parseInt(hourIso.slice(11, 13), 10);
+            return { index, hourKey, hour };
         })
-        .filter((entry) => entry.localDate === dateKey);
+        .filter((entry) => entry.hourKey === fallbackDateKey);
 
     if (!dayIndices.length) {
         return Math.round(dailySurfaceTemp * 10) / 10;
@@ -1163,7 +1259,7 @@ export function estimateWaterTempByPeriod({
         .map(({ index }) => normalizeAirTempToF(hourlyAir[index], 'F'))
         .filter(Number.isFinite);
     const windSeries = dayIndices
-        .map(({ index }) => normalizeLikelyWindMph(hourlyWind[index]))
+        .map(({ index }) => normalizeLikelyWindMph(hourlyWind[index], 'mph'))
         .filter(Number.isFinite);
     const cloudSeries = dayIndices
         .map(({ index }) => hourlyCloud[index])
@@ -1175,8 +1271,8 @@ export function estimateWaterTempByPeriod({
 
     const targetEntry = dayIndices.reduce((best, entry) => {
         if (!best) return entry;
-        const currentDelta = Math.abs(entry.localHour - periodHour);
-        const bestDelta = Math.abs(best.localHour - periodHour);
+        const currentDelta = Math.abs(entry.hour - periodHour);
+        const bestDelta = Math.abs(best.hour - periodHour);
         return currentDelta < bestDelta ? entry : best;
     }, null);
     const targetIndex = targetEntry?.index ?? -1;
@@ -1196,8 +1292,6 @@ export function estimateWaterTempByPeriod({
         ? clamp((periodHour - sunriseHour) / daylightHours, 0, 1)
         : clamp((periodHour - 6) / 12, 0, 1);
     const solarPhase = Math.sin(Math.PI * normalizedHour);
-    // Use both daily cloud context and target-hour cloud state. Heavy overcast can
-    // suppress shortwave forcing much more than daily means imply.
     const targetCloud = Number.isFinite(hourlyCloud[targetIndex]) ? hourlyCloud[targetIndex] : cloudMean;
     const cloudBlend = (cloudMean * 0.45) + (targetCloud * 0.55);
     const cloudDamping = clamp(1 - ((cloudBlend / 100) * 0.82), 0.12, 1);
@@ -1233,9 +1327,9 @@ function collectUsedFieldPrefixes(trace) {
     return [...prefixes].sort();
 }
 
-export async function explainWaterTempTerms({ coords, waterType, date, weatherPayload }) {
+export async function explainWaterTempTerms({ coords, waterType, date, weatherPayload, context = null }) {
     const trace = new Set();
-    const normalizedPayload = normalizeEstimatorWeatherPayload(weatherPayload, date);
+    const normalizedPayload = normalizeEstimatorWeatherPayload(weatherPayload, date, { coords, waterType, context });
     const computed = await computeWaterTempEstimateTerms({
         coords,
         waterType,
@@ -1296,7 +1390,9 @@ export function explainWaterTempProjectionDay({ initialWaterTemp, forecastData, 
     const meanTempRaw = Number.isFinite(tempMeans[dayIndex]) ? tempMeans[dayIndex] : average([tempMins[dayIndex], tempMaxes[dayIndex]]);
     const airTemp = normalizeAirTempToF(meanTempRaw, tempUnit);
 
-    const anchorDate = options.anchorDate instanceof Date ? options.anchorDate : new Date();
+    const anchorDate = options.context?.anchorDateISOZ
+        ? new Date(options.context.anchorDateISOZ)
+        : (options.anchorDate instanceof Date ? options.anchorDate : new Date());
     const dayDate = new Date(anchorDate.getTime());
     dayDate.setUTCDate(dayDate.getUTCDate() + dayIndex);
     const dayOfYear = getDayOfYear(dayDate);

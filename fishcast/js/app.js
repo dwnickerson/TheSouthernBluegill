@@ -8,9 +8,9 @@ debugLog('FishCast starting', window.location.href);
 import { storage } from './services/storage.js';
 import { getLocation } from './services/geocoding.js';
 import { getWeather } from './services/weatherAPI.js';
-import { estimateWaterTemp } from './models/waterTemp.js';
+import { estimateWaterTemp, buildWaterTempView } from './models/waterTemp.js';
 import { renderForecast, showLoading, showError } from './ui/forecast.js';
-import { normalizeWeatherPayload } from './utils/weatherPayload.js';
+import { normalizeWaterTempContext } from './models/waterPayloadNormalize.js';
 import { applySavedTheme } from './utils/theme.js';
 import { renderFavorites } from './ui/favorites.js';
 import {
@@ -130,25 +130,39 @@ async function generateForecast(event) {
             showNotification(`Using cached weather data. ${weather.staleReason || ''}`.trim(), 'warning');
         }
        
-        // weatherAPI now requests explicit imperial units from Open-Meteo.
-        const weatherForWaterModel = normalizeWeatherPayload({
-            historical: weather.historical,
-            forecast: weather.forecast,
-            meta: { ...weather.meta, source: 'LIVE' }
-        }, { now: new Date(), source: 'LIVE' });
+        const waterContext = normalizeWaterTempContext({
+            coords,
+            waterType,
+            timezone: weather?.forecast?.timezone || weather?.meta?.timezone || 'UTC',
+            weatherPayload: {
+                historical: weather.historical,
+                forecast: weather.forecast,
+                meta: { ...weather.meta, source: 'LIVE' }
+            },
+            nowOverride: new Date()
+        });
 
         // Estimate water temperature
         const waterTemp = await estimateWaterTemp(
             coords,
             waterType,
-            new Date(),
-            weatherForWaterModel
+            new Date(waterContext.anchorDateISOZ),
+            waterContext.payload,
+            { context: waterContext }
         );
-       
+
+        const waterTempView = buildWaterTempView({
+            dailySurfaceTemp: waterTemp,
+            waterType,
+            context: waterContext
+        });
+
         // Render the forecast
         renderForecast({
             coords,
             waterTemp,
+            waterTempView,
+            waterContext,
             weather,
             speciesKey,
             waterType,

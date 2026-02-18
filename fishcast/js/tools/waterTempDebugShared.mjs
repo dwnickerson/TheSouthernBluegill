@@ -1,4 +1,5 @@
-import { getLocalDayKey, normalizeWeatherPayload, parseHourlyTimestamp } from '../utils/weatherPayload.js';
+import { getLocalDayKey } from '../utils/weatherPayload.js';
+import { normalizeWaterTempContext } from '../models/waterPayloadNormalize.js';
 
 export function safeGet(obj, path, fallback = undefined) {
   return path.split('.').reduce((acc, key) => (acc == null ? acc : acc[key]), obj) ?? fallback;
@@ -6,13 +7,8 @@ export function safeGet(obj, path, fallback = undefined) {
 
 export function buildAnchorDate(payload) {
   const nowIdx = payload?.meta?.nowHourIndex ?? 0;
-  const nowIsoLocal = safeGet(payload, `forecast.hourly.time.${nowIdx}`, null);
-  const timezone = payload?.meta?.timezone || payload?.forecast?.timezone || 'UTC';
-  if (!nowIsoLocal) {
-    return new Date(payload?.meta?.nowIso || Date.now());
-  }
-  const ts = parseHourlyTimestamp(nowIsoLocal, timezone);
-  return Number.isFinite(ts) ? new Date(ts) : new Date(payload?.meta?.nowIso || Date.now());
+  const nowIso = safeGet(payload, `forecast.hourly.time.${nowIdx}`, null) || payload?.meta?.anchorDateISOZ || payload?.meta?.nowIso;
+  return new Date(nowIso || Date.now());
 }
 
 export function payloadFingerprint(payload) {
@@ -46,12 +42,16 @@ export function payloadFingerprint(payload) {
 }
 
 export function buildModelPayload(payload, options = {}) {
-  const normalized = normalizeWeatherPayload(payload, {
-    now: options.now || new Date(payload?.meta?.nowIso || Date.now()),
-    source: options.source || payload?.meta?.source || 'FIXTURE'
+  const context = normalizeWaterTempContext({
+    coords: options.coords || null,
+    waterType: options.waterType || null,
+    timezone: payload?.forecast?.timezone || payload?.meta?.timezone || 'UTC',
+    weatherPayload: payload,
+    nowOverride: options.now || payload?.meta?.nowIso || new Date().toISOString()
   });
-  const anchorDate = buildAnchorDate(normalized);
-  const units = normalized?.meta?.units || {};
+  const normalized = context.payload;
+  const anchorDate = new Date(context.anchorDateISOZ);
+  const units = context.units || {};
   return {
     normalized,
     anchorDate,
@@ -69,7 +69,8 @@ export function buildModelPayload(payload, options = {}) {
       windUnit: units.wind || 'mph',
       precipUnit: units.precip || 'inch',
       historicalDaily: normalized?.historical?.daily,
-      anchorDate
+      anchorDate,
+      context
     }
   };
 }
