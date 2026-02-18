@@ -163,104 +163,17 @@ function logWaterTempTrace(message, data) {
     console.log(`[UI water temp trace] ${message}`, data);
 }
 
-function getWaterTempDebugState() {
-    if (typeof window === 'undefined') {
-        return { enabled: false, lastWrites: {} };
-    }
-    if (!window.__fishcastWaterTempDebug) {
-        window.__fishcastWaterTempDebug = {
-            enabled: isWaterTempDebugEnabled(),
-            lastWrites: {}
-        };
-    }
-    window.__fishcastWaterTempDebug.enabled = isWaterTempDebugEnabled();
-    return window.__fishcastWaterTempDebug;
-}
-
-function describeElementIdentity(element) {
-    if (!element) return 'element:not-found';
-    const idPart = element.id ? `#${element.id}` : '';
-    const classPart = element.classList?.length ? `.${Array.from(element.classList).join('.')}` : '';
-    const dataField = element.dataset?.waterField ? `[data-water-field="${element.dataset.waterField}"]` : '';
-    return `${element.tagName?.toLowerCase() || 'unknown'}${idPart}${classPart}${dataField}`;
-}
-
-function writeWaterTempField({ selector, nextText, sourceVar, fieldKey }) {
-    const element = document.querySelector(selector);
-    const previousText = element?.textContent || '';
-    const assignedText = String(nextText);
-
-    if (element) {
-        element.textContent = assignedText;
-    }
-
-    const debugState = getWaterTempDebugState();
-    const stack = new Error().stack;
-    const payload = {
-        selector,
-        element: describeElementIdentity(element),
-        previousText,
-        newText: assignedText,
-        sourceVar,
-        fieldKey,
-        stack
-    };
-    debugState.lastWrites[fieldKey] = payload;
-
-    if (debugState.enabled) {
-        console.log('[WRITE water temp]', payload);
-    }
-
-    return payload;
-}
-
-function extractRenderedTempF(text) {
-    if (typeof text !== 'string') return null;
-    const match = text.match(/-?\d+(?:\.\d+)?/);
-    if (!match) return null;
-    return Number.parseFloat(match[0]);
-}
-
-function assertRenderedWaterTemps({ computed }) {
-    const isDev = typeof process === 'undefined' || process?.env?.NODE_ENV !== 'production';
-    if (!isDev) return;
-
-    const displayed = {
-        surface: extractRenderedTempF(document.querySelector('[data-water-field="surface"]')?.textContent || ''),
-        sunrise: extractRenderedTempF(document.querySelector('[data-water-field="sunrise"]')?.textContent || ''),
-        midday: extractRenderedTempF(document.querySelector('[data-water-field="midday"]')?.textContent || ''),
-        sunset: extractRenderedTempF(document.querySelector('[data-water-field="sunset"]')?.textContent || '')
-    };
-
-    const mismatches = Object.entries(computed).filter(([key, value]) => {
-        const shown = displayed[key];
-        if (!Number.isFinite(value) || !Number.isFinite(shown)) return true;
-        return Math.abs(value - shown) > 0.2;
-    });
-
-    if (mismatches.length > 0) {
-        const debugState = getWaterTempDebugState();
-        const details = {
-            computed,
-            displayed,
-            mismatches,
-            lastWrites: debugState.lastWrites
-        };
-        console.error('[ASSERT water temp mismatch]', details);
-        throw new Error(`Rendered water temperatures diverged from computed values by >0.2°F: ${JSON.stringify(mismatches)}`);
-    }
-}
-
-function buildWaterTempViewModel({ waterTemp, anchorDate, waterTempView }) {
+function buildWaterTempViewModel({ anchorDate, waterTempView }) {
     const viewModel = waterTempView;
     if (!viewModel) {
         throw new Error('Missing canonical data.waterTempView; renderForecast must not recompute water temperature context in UI.');
     }
 
+    // Single source of truth: renderForecast uses this physics-resolved view as-is.
     return {
         ...viewModel,
         surface: viewModel.surfaceNow,
-        surfaceDaily: Number((Number.isFinite(waterTemp) ? waterTemp : viewModel.surfaceNow).toFixed(1)),
+        surfaceDaily: Number(viewModel.surfaceNow.toFixed(1)),
         surfaceLabel: 'Surface (now)',
         mode: 'live',
         periods: {
@@ -590,7 +503,7 @@ async function hydrateRadarTiles(coords) {
 }
 
 export function renderForecast(data) {
-    const { coords, waterTemp, weather, speciesKey, waterType, days } = data;
+    const { coords, weather, speciesKey, waterType, days } = data;
     
     const resultsDiv = document.getElementById('results');
     const speciesData = SPECIES_DATA[speciesKey];
@@ -617,18 +530,25 @@ export function renderForecast(data) {
         });
     }
 
+    assertCanonicalWaterTempView(data);
+    const waterTempView = buildWaterTempViewModel({
+        waterTempView: data.waterTempView,
+        anchorDate: data?.waterContext?.anchorDateISOZ
+    });
+    const canonicalWaterTemp = waterTempView.surfaceNow;
+
     const todayKey = weather.forecast.daily.time?.[0];
     const currentDayScore = calculateSpeciesAwareDayScore({
         data,
         dayKey: todayKey,
         speciesKey,
-        waterTempF: waterTemp,
+        waterTempF: canonicalWaterTemp,
         locationKey,
         now: runNow,
         debug: debugScoring
     });
     const currentScore = { ...toRating(currentDayScore.score), score: currentDayScore.score, clarity: 'clear' };
-    const currentPhaseLabel = getFishPhaseLabel(speciesData, waterTemp);
+    const currentPhaseLabel = getFishPhaseLabel(speciesData, canonicalWaterTemp);
     
     const windUnit = weather?.forecast?.current_units?.wind_speed_10m || weather?.forecast?.hourly_units?.wind_speed_10m || '';
     const windSpeed = toWindMph(weather.forecast.current.wind_speed_10m, windUnit) ?? 0;
@@ -663,12 +583,6 @@ export function renderForecast(data) {
     const feelsLikeTemp = toTempF(weather.forecast.current.apparent_temperature, weather);
     const humidity = Number(weather.forecast.current.relative_humidity_2m) || 0;
     const dewPointF = calculateDewPointF(toTempF(weather.forecast.current.temperature_2m, weather), humidity);
-    assertCanonicalWaterTempView(data);
-    const waterTempView = buildWaterTempViewModel({
-        waterTemp,
-        waterTempView: data.waterTempView,
-        anchorDate: data?.waterContext?.anchorDateISOZ
-    });
     
     // NEW: Water clarity badge
     const clarityIcons = {
@@ -825,7 +739,7 @@ export function renderForecast(data) {
 
     // Multi-day forecast if requested
     if (days > 1) {
-        html += renderMultiDayForecast(data, weather, speciesKey, waterType, coords, waterTemp, runNow, debugScoring, locationKey);
+        html += renderMultiDayForecast(data, weather, speciesKey, waterType, coords, canonicalWaterTemp, runNow, debugScoring, locationKey);
     }
 
     html += `
@@ -836,23 +750,9 @@ export function renderForecast(data) {
     `;
     
     resultsDiv.innerHTML = html;
-    writeWaterTempField({ selector: '[data-water-field="surface"]', nextText: `${waterTempView.surfaceNow.toFixed(1)}°F`, sourceVar: 'waterTempView.surfaceNow', fieldKey: 'surface' });
-    writeWaterTempField({ selector: '[data-water-field="sunrise"]', nextText: `${waterTempView.sunrise.toFixed(1)}°F`, sourceVar: 'waterTempView.sunrise', fieldKey: 'sunrise' });
-    writeWaterTempField({ selector: '[data-water-field="midday"]', nextText: `${waterTempView.midday.toFixed(1)}°F`, sourceVar: 'waterTempView.midday', fieldKey: 'midday' });
-    writeWaterTempField({ selector: '[data-water-field="sunset"]', nextText: `${waterTempView.sunset.toFixed(1)}°F`, sourceVar: 'waterTempView.sunset', fieldKey: 'sunset' });
     if (isWaterTempDebugEnabled()) {
         console.log('[FISHCAST BUILD]', { buildId: window.__FISHCAST_BUILD__ });
     }
-    const computedWaterTemps = {
-        surface: waterTempView.surfaceNow,
-        sunrise: waterTempView.sunrise,
-        midday: waterTempView.midday,
-        sunset: waterTempView.sunset
-    };
-    assertRenderedWaterTemps({ computed: computedWaterTemps });
-    setTimeout(() => {
-        assertRenderedWaterTemps({ computed: computedWaterTemps });
-    }, 0);
     hydrateRadarTiles(coords);
     resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
     
