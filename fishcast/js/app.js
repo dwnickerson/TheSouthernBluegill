@@ -118,6 +118,8 @@ async function generateForecast(event) {
     showLoading();
    
     try {
+        const runNow = new Date();
+
         // Get location coordinates
         const coords = await getLocation(location);
         if (coords.stale) {
@@ -139,7 +141,7 @@ async function generateForecast(event) {
                 forecast: weather.forecast,
                 meta: { ...weather.meta, source: 'LIVE' }
             },
-            nowOverride: new Date()
+            nowOverride: runNow
         });
 
         // Estimate water temperature
@@ -166,7 +168,8 @@ async function generateForecast(event) {
             weather,
             speciesKey,
             waterType,
-            days
+            days,
+            runNow
         });
        
     } catch (error) {
