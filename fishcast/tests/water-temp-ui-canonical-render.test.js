@@ -22,25 +22,10 @@ test('renderForecast requires canonical precomputed waterTempView', () => {
 test('water temp render path does not recompute context or depth temps in UI', () => {
   assert.doesNotMatch(source, /normalizeWaterTempContext\s*\(/, 'UI render path must not normalize context during render');
   assert.doesNotMatch(source, /estimateTempByDepth\s*\(/, 'UI render path must not estimate depth temps during render');
-
-  assert.match(
-    source,
-    /writeWaterTempField\(\{ selector: '\[data-water-field="surface"\]', nextText: `\$\{waterTempView\.surfaceNow\.toFixed\(1\)\}°F`, sourceVar: 'waterTempView\.surfaceNow'/,
-    'surface field should be written from canonical waterTempView.surfaceNow'
-  );
-  assert.match(
-    source,
-    /writeWaterTempField\(\{ selector: '\[data-water-field="sunrise"\]', nextText: `\$\{waterTempView\.sunrise\.toFixed\(1\)\}°F`, sourceVar: 'waterTempView\.sunrise'/,
-    'sunrise field should be written from canonical waterTempView.sunrise'
-  );
-  assert.match(
-    source,
-    /writeWaterTempField\(\{ selector: '\[data-water-field="midday"\]', nextText: `\$\{waterTempView\.midday\.toFixed\(1\)\}°F`, sourceVar: 'waterTempView\.midday'/,
-    'midday field should be written from canonical waterTempView.midday'
-  );
-  assert.match(
-    source,
-    /writeWaterTempField\(\{ selector: '\[data-water-field="sunset"\]', nextText: `\$\{waterTempView\.sunset\.toFixed\(1\)\}°F`, sourceVar: 'waterTempView\.sunset'/,
-    'sunset field should be written from canonical waterTempView.sunset'
-  );
+  assert.doesNotMatch(source, /writeWaterTempField\s*\(/, 'water temp fields should render directly in HTML with no post-render mutation');
+  assert.doesNotMatch(source, /assertRenderedWaterTemps\s*\(/, 'UI render path should not run post-render water temp assertions');
+  assert.match(source, /data-water-field="surface">\$\{waterTempView\.surfaceNow\.toFixed\(1\)\}°F</, 'surface field should render directly from canonical waterTempView.surfaceNow');
+  assert.match(source, /data-water-field="sunrise">\$\{periods\.sunrise\.toFixed\(1\)\}°F</, 'sunrise field should render directly from canonical waterTempView.periods.sunrise');
+  assert.match(source, /data-water-field="midday">\$\{periods\.midday\.toFixed\(1\)\}°F</, 'midday field should render directly from canonical waterTempView.periods.midday');
+  assert.match(source, /data-water-field="sunset">\$\{periods\.sunset\.toFixed\(1\)\}°F</, 'sunset field should render directly from canonical waterTempView.periods.sunset');
 });
