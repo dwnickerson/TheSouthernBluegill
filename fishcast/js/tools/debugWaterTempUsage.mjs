@@ -27,9 +27,31 @@ const midday = estimateWaterTempByPeriod({ dailySurfaceTemp: estimatedToday, wat
 const sunset = estimateWaterTempByPeriod({ dailySurfaceTemp: estimatedToday, waterType, hourly: payload.forecast.hourly, timezone, date: modelPayload.anchorDate, period: 'afternoon', sunriseTime: payload.forecast.daily?.sunrise?.[0], sunsetTime: payload.forecast.daily?.sunset?.[0] });
 
 console.log('\n=== PAYLOAD FINGERPRINT ===');
-console.log(JSON.stringify({ coords, waterType, source: payload.meta.source, anchorDateISO: modelPayload.anchorDate.toISOString(), localDayKey: modelPayload.localDayKey, fp }, null, 2));
+console.log(JSON.stringify({
+  coords,
+  waterType,
+  source: payload.meta.source,
+  anchorDateISO: modelPayload.anchorDate.toISOString(),
+  timezone: payload.meta.timezone || 'UTC',
+  metaNowHourIndex: payload.meta.nowHourIndex ?? null,
+  forecastNowHourTime: Number.isInteger(payload.meta.nowHourIndex) ? payload?.forecast?.hourly?.time?.[payload.meta.nowHourIndex] ?? null : null,
+  forecastCurrentTemp: payload?.forecast?.current?.temperature_2m ?? null,
+  localDayKey: modelPayload.localDayKey,
+  fp
+}, null, 2));
 
-writeFileSync(new URL('./debug_water_payload_fingerprint.json', import.meta.url), JSON.stringify({ coords, waterType, source: payload.meta.source, anchorDateISO: modelPayload.anchorDate.toISOString(), localDayKey: modelPayload.localDayKey, fp }, null, 2));
+writeFileSync(new URL('./debug_water_payload_fingerprint.json', import.meta.url), JSON.stringify({
+  coords,
+  waterType,
+  source: payload.meta.source,
+  anchorDateISO: modelPayload.anchorDate.toISOString(),
+  timezone: payload.meta.timezone || 'UTC',
+  metaNowHourIndex: payload.meta.nowHourIndex ?? null,
+  forecastNowHourTime: Number.isInteger(payload.meta.nowHourIndex) ? payload?.forecast?.hourly?.time?.[payload.meta.nowHourIndex] ?? null : null,
+  forecastCurrentTemp: payload?.forecast?.current?.temperature_2m ?? null,
+  localDayKey: modelPayload.localDayKey,
+  fp
+}, null, 2));
 
 console.log('\n=== explainWaterTempTerms(today) ===');
 console.log(JSON.stringify(todayExplain, null, 2));

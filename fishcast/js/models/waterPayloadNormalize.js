@@ -74,6 +74,8 @@ function isDevEnvironment() {
 
 function logPayloadFingerprintDev(context) {
     if (!isDevEnvironment()) return;
+    if (globalThis.__fishcastWaterTempFingerprintLogged) return;
+    globalThis.__fishcastWaterTempFingerprintLogged = true;
     const nowHourIndex = context.nowHourIndex;
     const hourlyTempNow = Number.isInteger(nowHourIndex)
         ? context.payload?.forecast?.hourly?.temperature_2m?.[nowHourIndex]
