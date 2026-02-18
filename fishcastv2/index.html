@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FishCast v2</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; background: #f5f8fb; }
+    .summary-card, .day-card { background: #fff; border: 1px solid #d4deeb; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+    .extended-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    button { margin-right: 8px; }
+    pre { background: #1f2937; color: #f9fafb; padding: 12px; border-radius: 6px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>FishCast v2 (state-first rebuild)</h1>
+  <div id="app">Loading…</div>
+  <script type="module" src="./js/app/controller.js"></script>
+</body>
+</html>
