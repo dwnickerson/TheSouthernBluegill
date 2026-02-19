@@ -29,3 +29,12 @@ test('water temp render path does not recompute context or depth temps in UI', (
   assert.match(source, /data-water-field="midday">\$\{periods\.midday\.toFixed\(1\)\}°F</, 'midday field should render directly from canonical waterTempView.periods.midday');
   assert.match(source, /data-water-field="sunset">\$\{periods\.sunset\.toFixed\(1\)\}°F</, 'sunset field should render directly from canonical waterTempView.periods.sunset');
 });
+
+
+test('extended forecast includes today card', () => {
+  assert.match(
+    source,
+    /for \(let i = 0; i < dailyData\.time\.length; i\+\+\)/,
+    'extended forecast loop should start at day 0 so today is included'
+  );
+});
