@@ -43,3 +43,15 @@ export function getRainViewerTileUrl({ lat, lon, framePath, zoom = 6, tileSize =
 
     return `https://tilecache.rainviewer.com${normalizedFramePath}/${tileSize}/${zoom}/${x}/${y}/${colorScheme}/${smooth}_${snow}.png`;
 }
+
+export function getOpenStreetMapTileUrl({ lat, lon, zoom = 6 }) {
+    const normalizedCoords = getNormalizedCoords(lat, lon);
+    if (!normalizedCoords) {
+        return '';
+    }
+
+    const { latClamped, lonClamped } = normalizedCoords;
+    const x = toTileX(lonClamped, zoom);
+    const y = toTileY(latClamped, zoom);
+    return `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
+}
