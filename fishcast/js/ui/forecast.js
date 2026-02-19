@@ -111,6 +111,48 @@ function toPrecipInches(value, weather) {
     return value;
 }
 
+function toPressureInHg(pressureHpa) {
+    if (!Number.isFinite(pressureHpa)) return null;
+    return pressureHpa * 0.02953;
+}
+
+function getDailyPressureSummary(hourlyForecast, targetDate) {
+    const hourlyTimes = hourlyForecast?.time || [];
+    const hourlyPressure = hourlyForecast?.surface_pressure || [];
+    const rows = [];
+
+    hourlyTimes.forEach((timestamp, index) => {
+        const [dayKey] = String(timestamp).split('T');
+        if (dayKey !== targetDate) return;
+
+        const pressureHpa = Number(hourlyPressure[index]);
+        if (!Number.isFinite(pressureHpa)) return;
+
+        rows.push({
+            time: timestamp,
+            pressure: pressureHpa
+        });
+    });
+
+    if (!rows.length) {
+        return {
+            pressureInHg: null,
+            pressureStatus: 'unknown'
+        };
+    }
+
+    const avgPressure = rows.reduce((sum, row) => sum + row.pressure, 0) / rows.length;
+    const trend = getPressureRate(
+        rows.map((row) => row.pressure),
+        rows.map((row) => row.time)
+    ).trend;
+
+    return {
+        pressureInHg: toPressureInHg(avgPressure),
+        pressureStatus: trend
+    };
+}
+
 function getHourlyDetailRowsForDate(hourlyForecast, targetDate, windUnitHint = '') {
     const hourlyTimes = hourlyForecast.time || [];
     const hourlyTemps = hourlyForecast.temperature_2m || [];
@@ -864,6 +906,7 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
         const weatherIcon = getWeatherIcon(weatherCode);
         const precipAmountInches = toPrecipInches(dailyData.precipitation_sum?.[i], weather);
         const dayWaterView = getDayWaterTempView({ waterTemp: waterTemps[i], waterType, waterContext: data.waterContext, dateIso: date });
+        const pressureSummary = getDailyPressureSummary(weather.forecast.hourly, date);
         
         // Get wind data for the day
         const windSpeed = dailyData.wind_speed_10m_max ? toWindMph(dailyData.wind_speed_10m_max[i], weather?.forecast?.daily_units?.wind_speed_10m_max || weather?.forecast?.hourly_units?.wind_speed_10m || '') ?? 0 : 0;
@@ -890,6 +933,7 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
                 <div class="day-precip">${precipProb}% rain</div>
                 <div style="font-size: 0.85em; color: #888; margin-top: 4px;">Water: ${dayWaterView.sunrise.toFixed(0)}° / ${dayWaterView.midday.toFixed(0)}° / ${dayWaterView.sunset.toFixed(0)}°F</div>
                 <div style="font-size: 0.85em; color: #888;">${windSpeed.toFixed(0)} mph ${windDir}</div>
+                <div style="font-size: 0.85em; color: #888;">Pressure: ${pressureSummary.pressureInHg ? `${pressureSummary.pressureInHg.toFixed(2)} inHg` : 'N/A'} · ${getPressureIndicator(pressureSummary.pressureStatus)}</div>
                 <div class="day-hourly-trend">${precipAmountInches.toFixed(2)} in</div>
             </div>
         `;
