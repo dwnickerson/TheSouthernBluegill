@@ -9,7 +9,6 @@ import { calculateSolunar } from '../models/solunar.js';
 import { buildWaterTempView, projectWaterTemps } from '../models/waterTemp.js';
 import { createLogger } from '../utils/logger.js';
 import { toWindMph } from '../utils/units.js';
-import { getNoaaRadarImageUrl, getOpenStreetMapTileUrl } from '../utils/radar.js';
 
 const debugLog = createLogger('forecast');
 const FISHCAST_BUILD_ID = `${Date.now()}`;
@@ -496,10 +495,15 @@ function renderWeatherRadar(coords) {
     return `
         <div class="weather-radar-card">
             <h3>Weather radar</h3>
-            <p>Latest NOAA radar reflectivity near ${coords.name}. Crosshair marks the selected coordinates.</p>
+            <p>Live radar map centered on ${coords.name}.</p>
             <div class="weather-radar-shell">
-                <img class="weather-radar-frame" data-radar-image="true" alt="Weather radar for ${coords.name}" loading="lazy" />
-                <span class="weather-radar-crosshair" aria-hidden="true"></span>
+                <iframe
+                    class="weather-radar-frame"
+                    title="Weather radar for ${coords.name}"
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"
+                    src="https://embed.windy.com/embed2.html?lat=${encodeURIComponent(coords.lat)}&lon=${encodeURIComponent(coords.lon)}&detailLat=${encodeURIComponent(coords.lat)}&detailLon=${encodeURIComponent(coords.lon)}&width=900&height=500&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=true&metricWind=mph&metricTemp=%C2%B0F">
+                </iframe>
             </div>
             <small data-radar-status="true" style="color: var(--text-secondary);"></small>
         </div>
@@ -507,44 +511,19 @@ function renderWeatherRadar(coords) {
 }
 
 async function hydrateRadarTiles(coords) {
-    const radarImage = document.querySelector('[data-radar-image="true"]');
     const radarStatus = document.querySelector('[data-radar-status="true"]');
-    if (!radarImage || !coords) return;
+    if (!coords || !radarStatus) return;
+    radarStatus.textContent = `Centered at ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)} · live radar`;
+}
 
-    const fallback = () => {
-        if (radarStatus) {
-            radarStatus.textContent = 'Radar temporarily unavailable.';
-        }
-    };
-
-    const setLatestFrame = async () => {
-        try {
-            const noaaRadarUrl = getNoaaRadarImageUrl({ lat: coords.lat, lon: coords.lon });
-            if (!noaaRadarUrl) throw new Error('No NOAA radar URL available.');
-
-            const mapTileUrl = getOpenStreetMapTileUrl({ lat: coords.lat, lon: coords.lon });
-            radarImage.src = noaaRadarUrl;
-            radarImage.style.backgroundColor = '#d4e2ee';
-            radarImage.style.backgroundImage = mapTileUrl ? `url(${mapTileUrl})` : '';
-            radarImage.style.backgroundPosition = 'center';
-            radarImage.style.backgroundSize = 'cover';
-            radarImage.style.backgroundRepeat = 'no-repeat';
-            radarImage.onerror = fallback;
-
-            if (radarStatus) {
-                radarStatus.textContent = `Updated ${new Date().toLocaleTimeString()} · NOAA reflectivity image`;
-            }
-        } catch (error) {
-            if (isWaterTempDebugEnabled()) {
-                console.warn('[radar] failed to load NOAA radar image', error);
-            }
-            fallback();
-        }
-    };
-
-    await setLatestFrame();
-    window.clearInterval(window.__fishcastRadarRefreshInterval);
-    window.__fishcastRadarRefreshInterval = window.setInterval(setLatestFrame, 5 * 60 * 1000);
+function getIsoDateInTimezone(date, timezone) {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone || 'UTC',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    });
+    return formatter.format(date);
 }
 
 export function renderForecast(data) {
@@ -902,9 +881,13 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
     
     debugLog('Water temp evolution (physics):', waterTemps.map(t => t.toFixed(1) + '°F').join(' → '));
     
-    // Start at day 1 so "Extended forecast" excludes today.
-    for (let i = 1; i < dailyData.time.length; i++) {
+    const timezone = weather?.forecast?.timezone || weather?.meta?.timezone || 'UTC';
+    const todayIso = getIsoDateInTimezone(runNow, timezone);
+
+    // Exclude current day from the "Extended forecast" regardless of timezone alignment.
+    for (let i = 0; i < dailyData.time.length; i++) {
         const date = dailyData.time[i];
+        if (date <= todayIso) continue;
         const maxTemp = toTempF(dailyData.temperature_2m_max[i], weather);
         const minTemp = toTempF(dailyData.temperature_2m_min[i], weather);
         const precipProb = dailyData.precipitation_probability_max[i];
