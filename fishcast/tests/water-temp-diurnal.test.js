@@ -167,6 +167,98 @@ test('sunrise and sunset timestamps anchor morning and afternoon period estimate
   );
 });
 
+test('midday period anchors to solar midpoint between sunrise and sunset', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-06-20',
+    temps: [61, 60, 59, 58, 58, 59, 62, 66, 71, 76, 80, 83, 85, 86, 87, 86, 83, 79, 75, 71, 68, 65, 63, 62],
+    clouds: Array(24).fill(20),
+    winds: Array(24).fill(5)
+  });
+
+  const legacyNoonMidday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 74,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-06-20T12:00:00Z'),
+    period: 'midday'
+  });
+
+  const solarNoonAnchoredMidday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 74,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-06-20T12:00:00Z'),
+    period: 'midday',
+    sunriseTime: '2026-06-20T05:45',
+    sunsetTime: '2026-06-20T20:30'
+  });
+
+  const explicitNoon = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 74,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-06-20T12:00:00Z'),
+    period: 'midday',
+    targetHour: 12
+  });
+
+  const explicitSolarMidpoint = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 74,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-06-20T12:00:00Z'),
+    period: 'midday',
+    targetHour: 13 + (7.5 / 60)
+  });
+
+  assert.equal(legacyNoonMidday, explicitNoon, 'legacy midday behavior should resolve to fixed 12:00 without solar anchors');
+  assert.equal(solarNoonAnchoredMidday, explicitSolarMidpoint, 'midday should resolve to sunrise/sunset solar midpoint when provided');
+});
+
+
+
+test('midday estimate responds to local noon calming versus all-day mean wind', () => {
+  const breezyMorningCalmNoon = buildHourlyDay({
+    date: '2026-04-02',
+    temps: [44, 43, 42, 42, 42, 43, 46, 50, 55, 60, 64, 67, 69, 70, 70, 69, 66, 62, 58, 54, 51, 49, 47, 46],
+    clouds: Array(24).fill(35),
+    winds: [16, 16, 15, 15, 14, 14, 13, 12, 10, 9, 8, 7, 4, 4, 5, 6, 8, 10, 11, 12, 13, 14, 15, 16]
+  });
+
+  const breezyAllDay = buildHourlyDay({
+    date: '2026-04-02',
+    temps: [44, 43, 42, 42, 42, 43, 46, 50, 55, 60, 64, 67, 69, 70, 70, 69, 66, 62, 58, 54, 51, 49, 47, 46],
+    clouds: Array(24).fill(35),
+    winds: Array(24).fill(12)
+  });
+
+  const calmNoonMidday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 54,
+    waterType: 'pond',
+    hourly: breezyMorningCalmNoon,
+    date: new Date('2026-04-02T12:00:00Z'),
+    period: 'midday',
+    sunriseTime: '2026-04-02T06:40',
+    sunsetTime: '2026-04-02T19:20'
+  });
+
+  const windyMidday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 54,
+    waterType: 'pond',
+    hourly: breezyAllDay,
+    date: new Date('2026-04-02T12:00:00Z'),
+    period: 'midday',
+    sunriseTime: '2026-04-02T06:40',
+    sunsetTime: '2026-04-02T19:20'
+  });
+
+  assert.ok(calmNoonMidday > windyMidday, `calmer local midday wind should warm water estimate (${calmNoonMidday} vs ${windyMidday})`);
+});
+
 test('targetHour supports minute-level now interpolation without period bucket snapping', () => {
   const hourly = buildHourlyDay({
     date: '2026-04-18',

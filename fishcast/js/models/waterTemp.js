@@ -10,7 +10,7 @@ import { storage } from '../services/storage.js';
 import { createLogger } from '../utils/logger.js';
 import { getPressureRate } from './fishingScore.js';
 import { toWindMph } from '../utils/units.js';
-import { getLocalDayKey } from '../utils/weatherPayload.js';
+import { getLocalDayKey, parseHourlyTimestamp } from '../utils/weatherPayload.js';
 import { normalizeWaterTempContext } from './waterPayloadNormalize.js';
 
 const debugLog = createLogger('water-temp');
@@ -134,6 +134,23 @@ function getDiurnalAdjustmentLimit(waterType) {
     return 1.8;
 }
 
+function getHourInTimezone(timestamp, timezone = 'UTC') {
+    if (typeof timestamp !== 'string') return null;
+    const ts = parseHourlyTimestamp(timestamp, timezone);
+    if (!Number.isFinite(ts)) return parseHourFromTimestamp(timestamp);
+
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).formatToParts(new Date(ts));
+    const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+    const minute = Number(parts.find((part) => part.type === 'minute')?.value);
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+    return hour + (minute / 60);
+}
+
 function parseHourFromTimestamp(timestamp) {
     if (typeof timestamp !== 'string') return null;
     const match = timestamp.match(/T(\d{2}):(\d{2})/);
@@ -146,12 +163,19 @@ function parseHourFromTimestamp(timestamp) {
 }
 
 function getPeriodTargetHour(period, { sunriseTime, sunsetTime } = {}) {
+    const sunriseHour = parseHourFromTimestamp(sunriseTime);
+    const sunsetHour = parseHourFromTimestamp(sunsetTime);
+
     if (period === 'morning') {
-        const sunriseHour = parseHourFromTimestamp(sunriseTime);
         return Number.isFinite(sunriseHour) ? sunriseHour : 9;
     }
+    if (period === 'midday') {
+        if (Number.isFinite(sunriseHour) && Number.isFinite(sunsetHour) && sunsetHour > sunriseHour) {
+            return sunriseHour + ((sunsetHour - sunriseHour) / 2);
+        }
+        return 12;
+    }
     if (period === 'afternoon') {
-        const sunsetHour = parseHourFromTimestamp(sunsetTime);
         return Number.isFinite(sunsetHour) ? sunsetHour : 15;
     }
     return 12;
@@ -981,6 +1005,44 @@ export function estimateTempByDepth(surfaceTemp, waterType, depth_ft, currentDat
 }
 
 
+function buildObservedPeriodAnchorOffset({
+    dailySurfaceTemp,
+    waterType,
+    context,
+    sunriseTime,
+    sunsetTime,
+    dayKey
+}) {
+    if (!context?.coords || !context?.timezone || !Number.isFinite(dailySurfaceTemp)) return 0;
+
+    const observed = storage.getWaterTempObserved(context.coords.lat, context.coords.lon, waterType);
+    if (!observed || !Number.isFinite(observed.tempF) || typeof observed.timestamp !== 'string') return 0;
+
+    const observedAt = new Date(observed.timestamp);
+    if (!Number.isFinite(observedAt.getTime())) return 0;
+
+    const observedDayKey = getLocalDayKey(observedAt, context.timezone);
+    if (observedDayKey !== dayKey) return 0;
+
+    const observedHour = getHourInTimezone(observed.timestamp, context.timezone);
+    if (!Number.isFinite(observedHour)) return 0;
+
+    const modeledAtObservedHour = estimateWaterTempByPeriod({
+        dailySurfaceTemp,
+        waterType,
+        context,
+        period: 'midday',
+        sunriseTime,
+        sunsetTime,
+        dayKey,
+        targetHour: observedHour
+    });
+    if (!Number.isFinite(modeledAtObservedHour)) return 0;
+
+    const rawOffset = observed.tempF - modeledAtObservedHour;
+    return clamp(rawOffset, -OBSERVED_TEMP_CALIBRATION_MAX_OFFSET_F, OBSERVED_TEMP_CALIBRATION_MAX_OFFSET_F);
+}
+
 export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
     const fallback = Number(Math.round((dailySurfaceTemp || 0) * 10) / 10);
     if (!context?.payload) {
@@ -1035,9 +1097,18 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
         dayKey: anchorDayKey
     });
 
+    const observedPeriodOffset = buildObservedPeriodAnchorOffset({
+        dailySurfaceTemp,
+        waterType,
+        context,
+        sunriseTime,
+        sunsetTime,
+        dayKey: anchorDayKey
+    });
+
     const hourIso = context.hourlyNowTimeISOZ || context.anchorDateISOZ;
     const nowHour = parseHourFromTimestamp(hourIso);
-    const surfaceNow = Number.isFinite(nowHour)
+    const surfaceNowRaw = Number.isFinite(nowHour)
         ? estimateWaterTempByPeriod({
             dailySurfaceTemp,
             waterType,
@@ -1050,6 +1121,11 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
         })
         : fallback;
 
+    const sunriseAdjusted = clamp(sunrise + observedPeriodOffset, 32, 95);
+    const middayAdjusted = clamp(midday + observedPeriodOffset, 32, 95);
+    const sunsetAdjusted = clamp(sunset + observedPeriodOffset, 32, 95);
+    const surfaceNow = clamp(surfaceNowRaw + observedPeriodOffset, 32, 95);
+
     const depthFor = (temp, whenDate) => ({
         temp2ft: estimateTempByDepth(temp, waterType, 2, whenDate).toFixed(1),
         temp4ft: estimateTempByDepth(temp, waterType, 4, whenDate).toFixed(1),
@@ -1060,13 +1136,13 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
 
     return {
         surfaceNow: Number(surfaceNow.toFixed(1)),
-        sunrise: Number(sunrise.toFixed(1)),
-        midday: Number(midday.toFixed(1)),
-        sunset: Number(sunset.toFixed(1)),
+        sunrise: Number(sunriseAdjusted.toFixed(1)),
+        midday: Number(middayAdjusted.toFixed(1)),
+        sunset: Number(sunsetAdjusted.toFixed(1)),
         depthTemps: {
-            sunrise: depthFor(sunrise, anchorDate),
-            midday: depthFor(midday, anchorDate),
-            sunset: depthFor(sunset, anchorDate)
+            sunrise: depthFor(sunriseAdjusted, anchorDate),
+            midday: depthFor(middayAdjusted, anchorDate),
+            sunset: depthFor(sunsetAdjusted, anchorDate)
         }
     };
 }
@@ -1306,7 +1382,11 @@ export function estimateWaterTempByPeriod({
     const targetCloud = Number.isFinite(hourlyCloud[targetIndex]) ? hourlyCloud[targetIndex] : cloudMean;
     const cloudBlend = (cloudMean * 0.45) + (targetCloud * 0.55);
     const cloudDamping = clamp(1 - ((cloudBlend / 100) * 0.82), 0.12, 1);
-    const windDamping = clamp(1 - (windMean * response.windDamping), 0.5, 1);
+    const targetWind = normalizeLikelyWindMph(hourlyWind[targetIndex], 'mph');
+    const windBlend = Number.isFinite(targetWind)
+        ? ((windMean * 0.4) + (targetWind * 0.6))
+        : windMean;
+    const windDamping = clamp(1 - (windBlend * response.windDamping), 0.5, 1);
 
     const solarTerm = dailyAirRange * response.solarGain * solarPhase * cloudDamping * windDamping;
     const airAnomalyTerm = Number.isFinite(targetAir)
