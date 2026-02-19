@@ -1,5 +1,5 @@
 // FishCast Service Worker
-const CACHE_NAME = 'fishcast-v6';
+const CACHE_NAME = 'fishcast-v7';
 const APP_PATH = '/fishcast/';
 const DEBUG_SW = false;
 const DEV_SW = DEBUG_SW || (typeof self !== 'undefined' && /localhost|127\.0\.0\.1/.test(self.location.hostname));
@@ -134,10 +134,37 @@ async function handleFetch(request) {
       }
     }
 
-    const cachedResponse = await caches.match(request);
-    if (cachedResponse) {
-      logSW('cache-hit', url.href);
-      return cachedResponse;
+    // App shell code/assets should prefer network so field-model updates are
+    // visible immediately after deploys instead of being pinned by cache-first.
+    const isAppCodeAsset =
+      url.pathname.startsWith(`${APP_PATH}js/`) ||
+      url.pathname.startsWith(`${APP_PATH}styles/`) ||
+      url.pathname === `${APP_PATH}index.html`;
+
+    if (!isAppCodeAsset) {
+      const cachedResponse = await caches.match(request);
+      if (cachedResponse) {
+        logSW('cache-hit', url.href);
+        return cachedResponse;
+      }
+    }
+
+    if (isAppCodeAsset) {
+      try {
+        const networkFresh = await fetch(request);
+        if (networkFresh?.status === 200) {
+          const clone = networkFresh.clone();
+          caches.open(CACHE_NAME)
+            .then(cache => cache.put(request, clone))
+            .catch(error => logSW('cache-put-failed', url.href, error));
+        }
+        logSW('network-first-app-asset', url.href);
+        return networkFresh;
+      } catch (error) {
+        logSW('network-first-app-asset-failed', url.href, error);
+        const cachedFallback = await caches.match(request);
+        if (cachedFallback) return cachedFallback;
+      }
     }
 
     try {
