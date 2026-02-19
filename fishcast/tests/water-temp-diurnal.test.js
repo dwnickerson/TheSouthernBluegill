@@ -166,3 +166,43 @@ test('sunrise and sunset timestamps anchor morning and afternoon period estimate
     `sunrise-anchored morning (${sunriseTemp}°F) should be cooler than legacy 9 AM morning (${legacyMorningTemp}°F)`
   );
 });
+
+test('targetHour supports minute-level now interpolation without period bucket snapping', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-04-18',
+    temps: [48, 47, 46, 45, 45, 46, 49, 53, 58, 63, 67, 70, 72, 73, 73, 72, 69, 65, 60, 56, 53, 51, 50, 49],
+    clouds: Array(24).fill(30),
+    winds: Array(24).fill(5)
+  });
+
+  const sunrise = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 57,
+    waterType: 'pond',
+    hourly,
+    period: 'morning',
+    sunriseTime: '2026-04-18T06:35',
+    sunsetTime: '2026-04-18T19:35'
+  });
+
+  const midday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 57,
+    waterType: 'pond',
+    hourly,
+    period: 'midday',
+    sunriseTime: '2026-04-18T06:35',
+    sunsetTime: '2026-04-18T19:35'
+  });
+
+  const now0635 = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 57,
+    waterType: 'pond',
+    hourly,
+    period: 'midday',
+    sunriseTime: '2026-04-18T06:35',
+    sunsetTime: '2026-04-18T19:35',
+    targetHour: 6 + (35 / 60)
+  });
+
+  assert.ok(now0635 <= sunrise + 0.6, `06:35 now (${now0635}) should remain close to sunrise (${sunrise})`);
+  assert.ok(now0635 <= midday, `06:35 now (${now0635}) should not exceed midday (${midday})`);
+});
