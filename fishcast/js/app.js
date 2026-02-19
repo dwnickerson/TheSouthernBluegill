@@ -167,7 +167,10 @@ async function generateForecast(event) {
                 debug: localStorage.getItem('fishcast_debug_water_temp') === 'true'
             }
         );
-        const todayWaterTemp = Number.isFinite(waterTempsEvolution[0]) ? waterTempsEvolution[0] : waterTemp;
+        // Canonical "today" water temperature should come from estimateWaterTemp().
+        // Projection day-0 is useful for trend continuity, but can diverge from the
+        // direct estimate path and create confusing UI mismatches.
+        const todayWaterTemp = waterTemp;
 
         const waterTempView = buildWaterTempView({
             dailySurfaceTemp: todayWaterTemp,

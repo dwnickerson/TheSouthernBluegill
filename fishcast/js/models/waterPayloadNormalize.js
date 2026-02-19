@@ -6,8 +6,13 @@ function toIsoUtc(value) {
     if (typeof value !== 'string') return null;
     const trimmed = value.trim();
     if (!trimmed) return null;
-    const withZone = hasTimezoneSuffix(trimmed) ? trimmed : `${trimmed}Z`;
-    const parsed = new Date(withZone);
+    if (!hasTimezoneSuffix(trimmed)) {
+        // Keep timezone-naive local timestamps as local wall-clock strings.
+        // Weather API calls use timezone=auto, so forcing a Z suffix can shift
+        // local hour interpretation and break sunrise/"now" alignment.
+        return trimmed;
+    }
+    const parsed = new Date(trimmed);
     if (!Number.isFinite(parsed.getTime())) return null;
     return parsed.toISOString();
 }
@@ -17,16 +22,76 @@ function normalizeHourlyTimeArray(hourlyTime = []) {
     return hourlyTime.map((value) => toIsoUtc(value)).filter((value) => typeof value === 'string');
 }
 
-function getClosestHourIndex(hourlyTimesIso, nowIso) {
-    const nowTs = Date.parse(nowIso);
-    if (!Number.isFinite(nowTs) || !hourlyTimesIso.length) return null;
+function parseNaiveTime(value) {
+    if (typeof value !== 'string') return null;
+    const m = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (!m) return null;
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    const hour = Number(m[4]);
+    const minute = Number(m[5]);
+    if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
+    return { year, month, day, hour, minute };
+}
+
+function toUtcMillisFromNaive(parts) {
+    if (!parts) return null;
+    return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+}
+
+function formatPartsInTimezone(date, timeZone) {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+    const parts = formatter.formatToParts(date);
+    const year = Number(parts.find((p) => p.type === 'year')?.value);
+    const month = Number(parts.find((p) => p.type === 'month')?.value);
+    const day = Number(parts.find((p) => p.type === 'day')?.value);
+    const hour = Number(parts.find((p) => p.type === 'hour')?.value);
+    const minute = Number(parts.find((p) => p.type === 'minute')?.value);
+    if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
+    return { year, month, day, hour, minute };
+}
+
+function getClosestHourIndex(hourlyTimesIso, nowIso, timezone = 'UTC') {
+    if (!hourlyTimesIso.length) return null;
+
+    const hasExplicitZones = hourlyTimesIso.some((value) => hasTimezoneSuffix(value));
+    if (hasExplicitZones) {
+        const nowTs = Date.parse(nowIso);
+        if (!Number.isFinite(nowTs)) return null;
+
+        let closestIndex = null;
+        let closestDelta = Infinity;
+        hourlyTimesIso.forEach((value, index) => {
+            const ts = Date.parse(value);
+            if (!Number.isFinite(ts)) return;
+            const delta = Math.abs(ts - nowTs);
+            if (delta < closestDelta) {
+                closestDelta = delta;
+                closestIndex = index;
+            }
+        });
+        return closestIndex;
+    }
+
+    const nowLocalParts = formatPartsInTimezone(new Date(nowIso), timezone);
+    const nowLocalTs = toUtcMillisFromNaive(nowLocalParts);
+    if (!Number.isFinite(nowLocalTs)) return null;
 
     let closestIndex = null;
     let closestDelta = Infinity;
     hourlyTimesIso.forEach((value, index) => {
-        const ts = Date.parse(value);
+        const ts = toUtcMillisFromNaive(parseNaiveTime(value));
         if (!Number.isFinite(ts)) return;
-        const delta = Math.abs(ts - nowTs);
+        const delta = Math.abs(ts - nowLocalTs);
         if (delta < closestDelta) {
             closestDelta = delta;
             closestIndex = index;
@@ -98,12 +163,13 @@ export function normalizeWaterTempContext({ coords, waterType, timezone, weather
     const hourlyUnits = forecast?.hourly_units || {};
     const dailyUnits = forecast?.daily_units || {};
     const currentUnits = forecast?.current_units || {};
+    const resolvedTimezone = timezone || forecast?.timezone || weatherPayload?.meta?.timezone || 'UTC';
     const inputTempUnit = String(weatherPayload?.meta?.units?.temp || hourlyUnits.temperature_2m || currentUnits.temperature_2m || dailyUnits.temperature_2m_max || 'F').toLowerCase();
     const inputWindUnit = String(weatherPayload?.meta?.units?.wind || hourlyUnits.wind_speed_10m || currentUnits.wind_speed_10m || dailyUnits.wind_speed_10m_mean || 'mph').toLowerCase();
     const inputPrecipUnit = String(weatherPayload?.meta?.units?.precip || dailyUnits.precipitation_sum || currentUnits.precipitation || 'in').toLowerCase();
     const normalizedHourlyTime = normalizeHourlyTimeArray(hourly.time || []);
     const nowIso = toIsoUtc(nowOverride || weatherPayload?.meta?.nowIso || new Date().toISOString()) || new Date().toISOString();
-    const nowHourIndex = getClosestHourIndex(normalizedHourlyTime, nowIso);
+    const nowHourIndex = getClosestHourIndex(normalizedHourlyTime, nowIso, resolvedTimezone);
     const safeIndex = Number.isInteger(nowHourIndex) ? nowHourIndex : 0;
     const hourlyNowTimeISOZ = normalizedHourlyTime[safeIndex] || nowIso;
     const anchorDateISOZ = hourlyNowTimeISOZ;
@@ -155,7 +221,7 @@ export function normalizeWaterTempContext({ coords, waterType, timezone, weather
         },
         meta: {
             ...(weatherPayload?.meta || {}),
-            timezone: timezone || forecast?.timezone || weatherPayload?.meta?.timezone || 'UTC',
+            timezone: resolvedTimezone,
             source: weatherPayload?.meta?.source || 'UNKNOWN',
             nowIso,
             nowHourIndex,

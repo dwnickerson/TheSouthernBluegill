@@ -1036,10 +1036,19 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
     });
 
     const hourIso = context.hourlyNowTimeISOZ || context.anchorDateISOZ;
-    const hour = Number.parseInt(String(hourIso).slice(11, 13), 10);
-    const nowPeriod = !Number.isFinite(hour) ? 'midday' : (hour < 11 ? 'morning' : (hour < 14 ? 'midday' : 'afternoon'));
-    const periodMap = { morning: sunrise, midday, afternoon: sunset };
-    const surfaceNow = Number.isFinite(periodMap[nowPeriod]) ? periodMap[nowPeriod] : fallback;
+    const nowHour = parseHourFromTimestamp(hourIso);
+    const surfaceNow = Number.isFinite(nowHour)
+        ? estimateWaterTempByPeriod({
+            dailySurfaceTemp,
+            waterType,
+            context,
+            period: 'midday',
+            sunriseTime,
+            sunsetTime,
+            dayKey: anchorDayKey,
+            targetHour: nowHour
+        })
+        : fallback;
 
     const depthFor = (temp, whenDate) => ({
         temp2ft: estimateTempByDepth(temp, waterType, 2, whenDate).toFixed(1),
@@ -1224,7 +1233,8 @@ export function estimateWaterTempByPeriod({
     sunriseTime = null,
     sunsetTime = null,
     context = null,
-    dayKey = null
+    dayKey = null,
+    targetHour = null
 }) {
     if (!Number.isFinite(dailySurfaceTemp)) return null;
 
@@ -1238,7 +1248,7 @@ export function estimateWaterTempByPeriod({
         return Math.round(dailySurfaceTemp * 10) / 10;
     }
 
-    const periodHour = getPeriodTargetHour(period, { sunriseTime, sunsetTime });
+    const periodHour = Number.isFinite(targetHour) ? targetHour : getPeriodTargetHour(period, { sunriseTime, sunsetTime });
     const fallbackDateKey = typeof dayKey === 'string' && dayKey
         ? dayKey
         : (context?.anchorDateISOZ || (date instanceof Date ? date.toISOString() : new Date(date).toISOString())).slice(0, 10);
@@ -1247,7 +1257,7 @@ export function estimateWaterTempByPeriod({
         .map((timeValue, index) => {
             const hourIso = String(timeValue || '');
             const hourKey = hourIso.slice(0, 10);
-            const hour = Number.parseInt(hourIso.slice(11, 13), 10);
+            const hour = parseHourFromTimestamp(hourIso);
             return { index, hourKey, hour };
         })
         .filter((entry) => entry.hourKey === fallbackDateKey);
