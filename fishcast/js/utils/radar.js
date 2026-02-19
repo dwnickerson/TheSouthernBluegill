@@ -1,13 +1,3 @@
-function toTileX(lon, zoom) {
-    return Math.floor(((lon + 180) / 360) * (2 ** zoom));
-}
-
-function toTileY(lat, zoom) {
-    const latRad = (lat * Math.PI) / 180;
-    const n = Math.PI - (2 * Math.PI * Math.log(Math.tan((Math.PI / 4) + (latRad / 2)))) / (2 * Math.PI);
-    return Math.floor((n / Math.PI) * (2 ** (zoom - 1)));
-}
-
 function getNormalizedCoords(lat, lon) {
     const latProvided = lat !== null && lat !== undefined && String(lat).trim() !== '';
     const lonProvided = lon !== null && lon !== undefined && String(lon).trim() !== '';
@@ -26,22 +16,21 @@ function getNormalizedCoords(lat, lon) {
     return { latClamped, lonClamped };
 }
 
-export function getRainViewerMetadataUrl() {
-    return 'https://api.rainviewer.com/public/weather-maps.json';
-}
-
-export function getRainViewerTileUrl({ lat, lon, framePath, zoom = 6, tileSize = 512, colorScheme = 4, smooth = 1, snow = 1 }) {
+export function getNoaaRadarImageUrl({ lat, lon, width = 1024, height = 512, spanDegrees = 4 }) {
     const normalizedCoords = getNormalizedCoords(lat, lon);
-    if (!normalizedCoords || !framePath) {
+    if (!normalizedCoords) {
         return '';
     }
 
     const { latClamped, lonClamped } = normalizedCoords;
-    const normalizedFramePath = String(framePath).startsWith('/') ? framePath : `/${framePath}`;
-    const x = toTileX(lonClamped, zoom);
-    const y = toTileY(latClamped, zoom);
+    const halfSpan = Math.max(0.5, Number(spanDegrees) / 2);
+    const minLat = Math.max(-85, latClamped - halfSpan);
+    const maxLat = Math.min(85, latClamped + halfSpan);
+    const minLon = Math.max(-180, lonClamped - halfSpan);
+    const maxLon = Math.min(180, lonClamped + halfSpan);
+    const bbox = [minLat, minLon, maxLat, maxLon].map((value) => value.toFixed(4)).join(',');
 
-    return `https://tilecache.rainviewer.com${normalizedFramePath}/${tileSize}/${zoom}/${x}/${y}/${colorScheme}/${smooth}_${snow}.png`;
+    return `https://nowcoast.noaa.gov/geoserver/observations_radar/ows?service=WMS&version=1.3.0&request=GetMap&layers=observations_radar_base_reflectivity&styles=&format=image/png&transparent=true&width=${Math.round(width)}&height=${Math.round(height)}&crs=EPSG:4326&bbox=${bbox}`;
 }
 
 export function getOpenStreetMapTileUrl({ lat, lon, zoom = 6 }) {
@@ -51,7 +40,9 @@ export function getOpenStreetMapTileUrl({ lat, lon, zoom = 6 }) {
     }
 
     const { latClamped, lonClamped } = normalizedCoords;
-    const x = toTileX(lonClamped, zoom);
-    const y = toTileY(latClamped, zoom);
+    const x = Math.floor(((lonClamped + 180) / 360) * (2 ** zoom));
+    const latRad = (latClamped * Math.PI) / 180;
+    const n = Math.PI - (2 * Math.PI * Math.log(Math.tan((Math.PI / 4) + (latRad / 2)))) / (2 * Math.PI);
+    const y = Math.floor((n / Math.PI) * (2 ** (zoom - 1)));
     return `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
 }
