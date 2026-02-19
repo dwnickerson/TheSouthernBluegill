@@ -20,7 +20,7 @@ const forecastDailyTemplate = {
   wind_speed_10m_max: [12, 12, 14, 14, 12, 12]
 };
 
-test('projection keeps day-0 anchor and aligns one value per daily date', () => {
+test('projection models day-0 and aligns one value per daily date', () => {
   const initialWaterTemp = 75.2;
   const forecast = { daily: { ...forecastDailyTemplate } };
 
@@ -29,7 +29,7 @@ test('projection keeps day-0 anchor and aligns one value per daily date', () => 
   });
 
   assert.equal(projected.length, forecast.daily.time.length, 'projection should align with daily dates');
-  assert.equal(projected[0], initialWaterTemp, 'day-0 should remain current anchored temp');
+  assert.ok(Math.abs(projected[0] - initialWaterTemp) <= 1.0, `day-0 should remain close to seeded temp, got ${projected[0].toFixed(2)}°F from seed ${initialWaterTemp.toFixed(1)}°F`);
   assert.notEqual(projected[1], projected[0], 'day-1 should reflect tomorrow forcing, not duplicate day-0');
 });
 

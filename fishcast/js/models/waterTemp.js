@@ -1064,7 +1064,7 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
 
 // Project daily water temperatures using the same primitives as estimateWaterTemp.
 // Returns temperatures aligned to forecast.daily arrays:
-// temps[0] = anchored current/"today" temp, temps[1] = tomorrow using daily[1] forcing, etc.
+// temps[0] = modeled today temp from seed + day-0 forcing; temps[1] = tomorrow, etc.
 export function projectWaterTemps(initialWaterTemp, forecastData, waterType, latitude, options = {}) {
     const body = WATER_BODIES_V2[waterType];
     const daily = forecastData?.daily || {};
@@ -1075,7 +1075,8 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
         return [];
     }
 
-    const temps = [clamp(initialWaterTemp, 32, 95)];
+    const seedTemp = clamp(initialWaterTemp, 32, 95);
+    const temps = [];
     const cloudCover = Array.isArray(daily.cloud_cover_mean) ? daily.cloud_cover_mean : [];
     const tempMeans = Array.isArray(daily.temperature_2m_mean) ? daily.temperature_2m_mean : [];
     const tempMins = Array.isArray(daily.temperature_2m_min) ? daily.temperature_2m_min : [];
@@ -1107,8 +1108,8 @@ export function projectWaterTemps(initialWaterTemp, forecastData, waterType, lat
 
     const normalizedAirMeans = tempMeans.map((value) => normalizeAirTempToF(value, tempUnit));
 
-    for (let dayIndex = 1; dayIndex < dayCount; dayIndex++) {
-        const prevTemp = temps[dayIndex - 1];
+    for (let dayIndex = 0; dayIndex < dayCount; dayIndex++) {
+        const prevTemp = dayIndex === 0 ? seedTemp : temps[dayIndex - 1];
         const meanTempRaw = Number.isFinite(tempMeans[dayIndex])
             ? tempMeans[dayIndex]
             : average([tempMins[dayIndex], tempMaxes[dayIndex]]);

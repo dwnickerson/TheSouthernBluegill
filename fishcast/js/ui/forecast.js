@@ -781,7 +781,7 @@ export function renderForecast(data) {
 
     // Multi-day forecast if requested
     if (days > 1) {
-        html += renderMultiDayForecast(data, weather, speciesKey, waterType, coords, canonicalWaterTemp, runNow, debugScoring, locationKey);
+        html += renderMultiDayForecast(data, weather, speciesKey, waterType, coords, canonicalWaterTemp, runNow, debugScoring, locationKey, data.waterTempsEvolution);
     }
 
     html += `
@@ -871,25 +871,28 @@ function getDayWaterTempView({ waterTemp, waterType, waterContext, dateIso }) {
     return buildWaterTempView({ dailySurfaceTemp: waterTemp, waterType, context });
 }
 
-function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, initialWaterTemp, runNow, debugScoring, locationKey) {
+function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, initialWaterTemp, runNow, debugScoring, locationKey, precomputedWaterTemps = null) {
     let html = '<div class="multi-day-forecast"><h3>Extended forecast</h3><div class="forecast-days">';
     
     const dailyData = weather.forecast.daily;
     
     // 🔬 PHYSICS: Calculate water temps for all days using thermal model
-    const waterTemps = projectWaterTemps(
-        initialWaterTemp, 
-        weather.forecast, 
-        waterType,
-        coords.lat,
-        {
-            anchorDate: runNow,
-            tempUnit: weather?.meta?.units?.temp || 'F',
-            precipUnit: weather?.meta?.units?.precip || 'in',
-            historicalDaily: weather?.historical?.daily || {},
-            debug: localStorage.getItem('fishcast_debug_water_temp') === 'true'
-        }
-    );
+    const waterTemps = Array.isArray(precomputedWaterTemps) && precomputedWaterTemps.length === dailyData.time.length
+        ? precomputedWaterTemps
+        : projectWaterTemps(
+            initialWaterTemp,
+            weather.forecast,
+            waterType,
+            coords.lat,
+            {
+                anchorDate: runNow,
+                tempUnit: weather?.meta?.units?.temp || 'F',
+                precipUnit: weather?.meta?.units?.precip || 'in',
+                historicalDaily: weather?.historical?.daily || {},
+                context: data.waterContext,
+                debug: localStorage.getItem('fishcast_debug_water_temp') === 'true'
+            }
+        );
     
     // Store globally for day detail modal
     window.waterTempsEvolution = waterTemps;
