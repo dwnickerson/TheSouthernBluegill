@@ -9,7 +9,7 @@ import { calculateSolunar } from '../models/solunar.js';
 import { buildWaterTempView, projectWaterTemps } from '../models/waterTemp.js';
 import { createLogger } from '../utils/logger.js';
 import { toWindMph } from '../utils/units.js';
-import { getRainViewerMetadataUrl, getRainViewerTileUrl } from '../utils/radar.js';
+import { getOpenStreetMapTileUrl, getRainViewerMetadataUrl, getRainViewerTileUrl } from '../utils/radar.js';
 
 const debugLog = createLogger('forecast');
 const FISHCAST_BUILD_ID = `${Date.now()}`;
@@ -524,9 +524,15 @@ async function hydrateRadarTiles(coords) {
             const radarPast = Array.isArray(metadata?.radar?.past) ? metadata.radar.past : [];
             const latest = radarPast[radarPast.length - 1];
             const framePath = latest?.path;
-            const tileUrl = getRainViewerTileUrl({ lat: coords.lat, lon: coords.lon, framePath });
+            const tileUrl = getRainViewerTileUrl({ lat: coords.lat, lon: coords.lon, framePath, colorScheme: 2, smooth: 0, snow: 0 });
             if (!tileUrl) throw new Error('No RainViewer frame path available.');
+            const mapTileUrl = getOpenStreetMapTileUrl({ lat: coords.lat, lon: coords.lon });
             radarImage.src = tileUrl;
+            radarImage.style.backgroundColor = '#dbe9f4';
+            radarImage.style.backgroundImage = mapTileUrl ? `url(${mapTileUrl})` : '';
+            radarImage.style.backgroundPosition = 'center';
+            radarImage.style.backgroundSize = 'cover';
+            radarImage.style.backgroundRepeat = 'no-repeat';
             radarImage.onerror = fallback;
             if (radarStatus) {
                 radarStatus.textContent = `Updated ${new Date((latest.time || 0) * 1000).toLocaleTimeString()}`;
@@ -909,7 +915,6 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
         const weatherIcon = getWeatherIcon(weatherCode);
         const precipAmountInches = toPrecipInches(dailyData.precipitation_sum?.[i], weather);
         const dayWaterView = getDayWaterTempView({ waterTemp: waterTemps[i], waterType, waterContext: data.waterContext, dateIso: date });
-        const pressureSummary = getDailyPressureSummary(weather.forecast.hourly, date);
         
         // Get wind data for the day
         const windSpeed = dailyData.wind_speed_10m_max ? toWindMph(dailyData.wind_speed_10m_max[i], weather?.forecast?.daily_units?.wind_speed_10m_max || weather?.forecast?.hourly_units?.wind_speed_10m || '') ?? 0 : 0;
@@ -936,7 +941,6 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
                 <div class="day-precip">${precipProb}% rain</div>
                 <div style="font-size: 0.85em; color: #888; margin-top: 4px;">Water: ${dayWaterView.sunrise.toFixed(0)}° / ${dayWaterView.midday.toFixed(0)}° / ${dayWaterView.sunset.toFixed(0)}°F</div>
                 <div style="font-size: 0.85em; color: #888;">${windSpeed.toFixed(0)} mph ${windDir}</div>
-                <div style="font-size: 0.85em; color: #888;">Pressure: ${pressureSummary.pressureInHg ? `${pressureSummary.pressureInHg.toFixed(2)} inHg` : 'N/A'} · ${getPressureIndicator(pressureSummary.pressureStatus)}</div>
                 <div class="day-hourly-trend">${precipAmountInches.toFixed(2)} in</div>
             </div>
         `;
@@ -985,6 +989,7 @@ window.showDayDetails = function(dayIndex, date) {
     const fishPhase = getFishPhaseLabel(speciesData, waterTempEstimate);
     
     const dayWaterView = getDayWaterTempView({ waterTemp: waterTempEstimate, waterType: data.waterType, waterContext: data.waterContext, dateIso: date });
+    const dayPressureSummary = getDailyPressureSummary(data.weather.forecast.hourly, date);
     
     // Highlight selected day
     document.querySelectorAll('.forecast-day-card').forEach(card => {
@@ -1027,6 +1032,14 @@ window.showDayDetails = function(dayIndex, date) {
                     <div class="detail-row">
                         <span class="detail-label">Wind</span>
                         <span class="detail-value">${windSpeed.toFixed(1)} mph ${windDir}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Pressure</span>
+                        <span class="detail-value">${dayPressureSummary.pressureInHg ? `${dayPressureSummary.pressureInHg.toFixed(2)} inHg` : 'N/A'}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Pressure Status</span>
+                        <span class="detail-value">${getPressureIndicator(dayPressureSummary.pressureStatus)}</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Sunrise / Sunset</span>
