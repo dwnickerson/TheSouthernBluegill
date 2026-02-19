@@ -16,7 +16,7 @@ function getNormalizedCoords(lat, lon) {
     return { latClamped, lonClamped };
 }
 
-export function getNoaaRadarImageUrl({ lat, lon, width = 1024, height = 512, spanDegrees = 4 }) {
+export function getNoaaRadarImageUrl({ lat, lon, width = 1024, height = 512, spanDegrees = 4, timestampMs = Date.now() }) {
     const normalizedCoords = getNormalizedCoords(lat, lon);
     if (!normalizedCoords) {
         return '';
@@ -28,9 +28,10 @@ export function getNoaaRadarImageUrl({ lat, lon, width = 1024, height = 512, spa
     const maxLat = Math.min(85, latClamped + halfSpan);
     const minLon = Math.max(-180, lonClamped - halfSpan);
     const maxLon = Math.min(180, lonClamped + halfSpan);
-    const bbox = [minLat, minLon, maxLat, maxLon].map((value) => value.toFixed(4)).join(',');
+    const bbox = [minLon, minLat, maxLon, maxLat].map((value) => value.toFixed(4)).join(',');
 
-    return `https://nowcoast.noaa.gov/geoserver/observations_radar/ows?service=WMS&version=1.3.0&request=GetMap&layers=observations_radar_base_reflectivity&styles=&format=image/png&transparent=true&width=${Math.round(width)}&height=${Math.round(height)}&crs=EPSG:4326&bbox=${bbox}`;
+    const cacheBust = Number.isFinite(Number(timestampMs)) ? Number(timestampMs) : Date.now();
+    return `https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/radar_meteo_imagery_nexrad_time/MapServer/export?bbox=${bbox}&bboxSR=4326&imageSR=4326&size=${Math.round(width)}%2C${Math.round(height)}&format=png32&transparent=true&f=image&time=${cacheBust}`;
 }
 
 export function getOpenStreetMapTileUrl({ lat, lon, zoom = 6 }) {
