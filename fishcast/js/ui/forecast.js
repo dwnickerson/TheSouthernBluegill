@@ -9,7 +9,7 @@ import { calculateSolunar } from '../models/solunar.js';
 import { buildWaterTempView, projectWaterTemps } from '../models/waterTemp.js';
 import { createLogger } from '../utils/logger.js';
 import { toWindMph } from '../utils/units.js';
-import { getOpenStreetMapTileUrl, getRainViewerMetadataUrl, getRainViewerTileUrl } from '../utils/radar.js';
+import { getNoaaRadarImageUrl, getOpenStreetMapTileUrl } from '../utils/radar.js';
 
 const debugLog = createLogger('forecast');
 const FISHCAST_BUILD_ID = `${Date.now()}`;
@@ -496,9 +496,10 @@ function renderWeatherRadar(coords) {
     return `
         <div class="weather-radar-card">
             <h3>Weather radar</h3>
-            <p>Latest RainViewer precipitation tile centered on ${coords.name}.</p>
+            <p>Latest NOAA radar reflectivity near ${coords.name}. Crosshair marks the selected coordinates.</p>
             <div class="weather-radar-shell">
                 <img class="weather-radar-frame" data-radar-image="true" alt="Weather radar for ${coords.name}" loading="lazy" />
+                <span class="weather-radar-crosshair" aria-hidden="true"></span>
             </div>
             <small data-radar-status="true" style="color: var(--text-secondary);"></small>
         </div>
@@ -518,28 +519,24 @@ async function hydrateRadarTiles(coords) {
 
     const setLatestFrame = async () => {
         try {
-            const metadataResp = await fetch(getRainViewerMetadataUrl(), { cache: 'no-store' });
-            if (!metadataResp.ok) throw new Error(`Radar metadata failed (${metadataResp.status})`);
-            const metadata = await metadataResp.json();
-            const radarPast = Array.isArray(metadata?.radar?.past) ? metadata.radar.past : [];
-            const latest = radarPast[radarPast.length - 1];
-            const framePath = latest?.path;
-            const tileUrl = getRainViewerTileUrl({ lat: coords.lat, lon: coords.lon, framePath, colorScheme: 2, smooth: 0, snow: 0 });
-            if (!tileUrl) throw new Error('No RainViewer frame path available.');
+            const noaaRadarUrl = getNoaaRadarImageUrl({ lat: coords.lat, lon: coords.lon });
+            if (!noaaRadarUrl) throw new Error('No NOAA radar URL available.');
+
             const mapTileUrl = getOpenStreetMapTileUrl({ lat: coords.lat, lon: coords.lon });
-            radarImage.src = tileUrl;
-            radarImage.style.backgroundColor = '#dbe9f4';
+            radarImage.src = noaaRadarUrl;
+            radarImage.style.backgroundColor = '#d4e2ee';
             radarImage.style.backgroundImage = mapTileUrl ? `url(${mapTileUrl})` : '';
             radarImage.style.backgroundPosition = 'center';
             radarImage.style.backgroundSize = 'cover';
             radarImage.style.backgroundRepeat = 'no-repeat';
             radarImage.onerror = fallback;
+
             if (radarStatus) {
-                radarStatus.textContent = `Updated ${new Date((latest.time || 0) * 1000).toLocaleTimeString()}`;
+                radarStatus.textContent = `Updated ${new Date().toLocaleTimeString()} · NOAA reflectivity image`;
             }
         } catch (error) {
             if (isWaterTempDebugEnabled()) {
-                console.warn('[radar] failed to load RainViewer tile', error);
+                console.warn('[radar] failed to load NOAA radar image', error);
             }
             fallback();
         }
