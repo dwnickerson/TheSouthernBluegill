@@ -31,10 +31,10 @@ test('water temp render path does not recompute context or depth temps in UI', (
 });
 
 
-test('extended forecast includes today card', () => {
+test('extended forecast excludes today card', () => {
   assert.match(
     source,
-    /for \(let i = 0; i < dailyData\.time\.length; i\+\+\)/,
-    'extended forecast loop should start at day 0 so today is included'
+    /for \(let i = 1; i < dailyData\.time\.length; i\+\+\)/,
+    'extended forecast loop should start at day 1 so today is excluded'
   );
 });

@@ -902,8 +902,8 @@ function renderMultiDayForecast(data, weather, speciesKey, waterType, coords, in
     
     debugLog('Water temp evolution (physics):', waterTemps.map(t => t.toFixed(1) + '°F').join(' → '));
     
-    // Include day 0 (today) in extended forecast cards.
-    for (let i = 0; i < dailyData.time.length; i++) {
+    // Start at day 1 so "Extended forecast" excludes today.
+    for (let i = 1; i < dailyData.time.length; i++) {
         const date = dailyData.time[i];
         const maxTemp = toTempF(dailyData.temperature_2m_max[i], weather);
         const minTemp = toTempF(dailyData.temperature_2m_min[i], weather);
