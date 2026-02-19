@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test fishcast/tests/*.test.js",
-    "test:smoke": "node fishcast/tests/smoke/runSmokeTests.js"
+    "test:smoke": "node fishcast/tests/smoke/runSmokeTests.js",
+    "test:timezone": "node --test fishcast/tests/water-temp-timezone-context.test.js",
+    "test:model": "node --test fishcast/tests/water-temp-*.test.js fishcast/tests/scoring-engine.test.js"
   }
 }

@@ -121,3 +121,17 @@ With only public weather + generic water-body class, ±0.5°F at daily scale is 
 
 ## Bottom line
 Current model is a strong heuristic physics hybrid for broad forecast guidance. For true ±0.5°F accuracy, you need explicit surface energy-balance drivers + body-specific hydrodynamics/morphometry + continuous water-temperature truth data assimilation.
+
+
+## 5) Immediate model-audit action plan (implementation order)
+
+1. **Lock timezone and units as non-regression constraints**
+   - Keep `water-temp-timezone-context` and `water-temp-units` tests green before any model tuning.
+2. **Add explicit radiation + humidity forcing inputs**
+   - Request hourly shortwave radiation + dew point and introduce evap/solar terms.
+3. **Tighten calibration by water body metadata**
+   - Expand from type-level priors to per-water-body parameters (depth/fetch/shade).
+4. **Assimilate trusted observations with confidence weighting**
+   - Blend reports/sensors with quality weighting and decay, then expose confidence interval.
+5. **Track model error by scenario class**
+   - Add recurring audit snapshots for cold fronts, warm fronts, and stable periods to detect bias drift.
