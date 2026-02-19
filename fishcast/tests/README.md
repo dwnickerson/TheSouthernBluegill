@@ -2,24 +2,41 @@
 
 ## Test types
 
-- `fishcast/js/models/*.unit.test.js`: existing model unit tests.
-- `fishcast/tests/*.test.js`: Node test runner suites.
+- `fishcast/js/models/*.unit.test.js`: model-focused unit tests (legacy + targeted scenarios).
+- `fishcast/tests/*.test.js`: Node test runner suites for forecast engine, water temp, timezone, units, SW safety, and UI view-model contracts.
 - `fishcast/tests/smoke/`: authoritative smoke-test safety gate.
 - `fishcast/tests/legacy/`: archived design-reference audit markdown reports (non-gating).
 
-## Run tests
+## Which command should I run?
 
-### Existing Node test suites
+- **Timezone verification (quick):**
+  ```bash
+  npm run test:timezone
+  ```
+  Use this when validating day/time alignment behavior.
 
-```bash
-npm test
-```
+- **Model/scoring validation (focused):**
+  ```bash
+  npm run test:model
+  ```
+  Use this after changing water-temperature or scoring logic.
 
-### Authoritative smoke suite
+- **Full Node suite (broad):**
+  ```bash
+  npm test
+  ```
+  Runs all suites under `fishcast/tests/*.test.js`.
 
-```bash
-node fishcast/tests/smoke/runSmokeTests.js
-```
+- **Release smoke gate (must-pass before deploy):**
+  ```bash
+  npm run test:smoke
+  ```
+
+## How to read results
+
+- `ok` means the specific behavior is verified.
+- `not ok` means at least one invariant failed and should be investigated before shipping.
+- Final summary gives `pass/fail` totals and total duration.
 
 ## What the smoke suite protects
 

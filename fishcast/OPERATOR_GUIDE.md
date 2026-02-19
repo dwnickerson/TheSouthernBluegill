@@ -37,3 +37,21 @@ Scores should move mainly when one or more of these materially change:
 ## Freeze policy behavior
 - After 7:00 PM America/Chicago, tomorrow score remains locked to prior run.
 - Unlock occurs only when major shift threshold is exceeded.
+
+
+## Timezone status
+- ✅ Water/weather scoring and day-window alignment are pinned to `America/Chicago` in the weather ingest + scoring pipeline.
+- Verification test: `npm run test:timezone` (passes when local-hour alignment is correct for naive hourly timestamps).
+
+## Community reporting status
+- Reporting is active in-app through the water temperature report modal and quick report flow.
+- Reports are currently stored in browser localStorage (`waterTempReports`) and blended into the model by recency + distance + water body type.
+- There is no external server-side reporting pipeline in this repo at this time.
+
+## Test quick-start (what to run + what each run means)
+- `npm run test:timezone`
+  - Validates timezone/day alignment in the water temperature context logic.
+- `npm run test:model`
+  - Runs water-temperature and scoring behavior suites (core estimate + score stability behavior).
+- `npm run test:smoke`
+  - Runs end-to-end logic safety scenarios used as a release gate.
