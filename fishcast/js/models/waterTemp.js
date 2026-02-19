@@ -19,7 +19,10 @@ const WIND_FALLBACK_MAX_REDUCTION = 0.6;
 const FORECAST_MAX_WIND_GUST_WEIGHT = 0.2;
 const EXTERNAL_REPORTS_ENABLED = false;
 export const WATER_TEMP_MODEL_VERSION = '2.4.0';
-const OBSERVED_TEMP_CALIBRATION_MAX_OFFSET_F = 3;
+// Field checks in small southern ponds can diverge by >3°F from the physics baseline
+// after abrupt fronts. Cap retained for safety, but widened so fresh observed reports
+// can pull the model back into alignment instead of getting stuck warm-biased.
+const OBSERVED_TEMP_CALIBRATION_MAX_OFFSET_F = 6;
 const OBSERVED_TEMP_CALIBRATION_DECAY_HOURS = 60;
 
 function warnIfUnitMismatch(message) {
