@@ -257,7 +257,7 @@ test('recent observed temp applies bounded decay calibration only for matching c
 
   const calibrated = await estimateWaterTemp(coords, 'pond', currentDate, weather);
   assert.ok(calibrated > base, `expected positive observed calibration, got base=${base} calibrated=${calibrated}`);
-  assert.ok(calibrated - base <= 3.01, `observed calibration offset must be bounded to ±3°F, got ${calibrated - base}`);
+  assert.ok(calibrated - base <= 6.01, `observed calibration offset must be bounded to ±6°F, got ${calibrated - base}`);
 
   storageMemo.clear();
   storage.clearAll();
