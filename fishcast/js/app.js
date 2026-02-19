@@ -8,7 +8,7 @@ debugLog('FishCast starting', window.location.href);
 import { storage } from './services/storage.js';
 import { getLocation } from './services/geocoding.js';
 import { getWeather } from './services/weatherAPI.js';
-import { estimateWaterTemp, buildWaterTempView } from './models/waterTemp.js';
+import { estimateWaterTemp, buildWaterTempView, projectWaterTemps } from './models/waterTemp.js';
 import { renderForecast, showLoading, showError } from './ui/forecast.js';
 import { normalizeWaterTempContext } from './models/waterPayloadNormalize.js';
 import { applySavedTheme } from './utils/theme.js';
@@ -153,8 +153,24 @@ async function generateForecast(event) {
             { context: waterContext }
         );
 
+        const waterTempsEvolution = projectWaterTemps(
+            waterTemp,
+            weather.forecast,
+            waterType,
+            coords.lat,
+            {
+                anchorDate: runNow,
+                tempUnit: weather?.meta?.units?.temp || 'F',
+                precipUnit: weather?.meta?.units?.precip || 'in',
+                historicalDaily: weather?.historical?.daily || {},
+                context: waterContext,
+                debug: localStorage.getItem('fishcast_debug_water_temp') === 'true'
+            }
+        );
+        const todayWaterTemp = Number.isFinite(waterTempsEvolution[0]) ? waterTempsEvolution[0] : waterTemp;
+
         const waterTempView = buildWaterTempView({
-            dailySurfaceTemp: waterTemp,
+            dailySurfaceTemp: todayWaterTemp,
             waterType,
             context: waterContext
         });
@@ -162,9 +178,10 @@ async function generateForecast(event) {
         // Render the forecast
         renderForecast({
             coords,
-            waterTemp,
+            waterTemp: todayWaterTemp,
             waterTempView,
             waterContext,
+            waterTempsEvolution,
             weather,
             speciesKey,
             waterType,
