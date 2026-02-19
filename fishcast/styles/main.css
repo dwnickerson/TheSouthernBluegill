@@ -581,6 +581,43 @@ button[type="submit"]:hover,
     height: 500px;
     border: 0;
     display: block;
+    filter: contrast(1.15) saturate(1.1);
+}
+
+.weather-radar-crosshair {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 26px;
+    height: 26px;
+    transform: translate(-50%, -50%);
+    border-radius: 999px;
+    border: 2px solid rgba(21, 39, 64, 0.8);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
+    pointer-events: none;
+}
+
+.weather-radar-crosshair::before,
+.weather-radar-crosshair::after {
+    content: '';
+    position: absolute;
+    background: rgba(21, 39, 64, 0.85);
+}
+
+.weather-radar-crosshair::before {
+    width: 2px;
+    height: 34px;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.weather-radar-crosshair::after {
+    width: 34px;
+    height: 2px;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
 }
 
 .weather-radar-tint {

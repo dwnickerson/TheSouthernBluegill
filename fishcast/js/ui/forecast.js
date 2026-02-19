@@ -496,9 +496,10 @@ function renderWeatherRadar(coords) {
     return `
         <div class="weather-radar-card">
             <h3>Weather radar</h3>
-            <p>Latest RainViewer precipitation tile centered on ${coords.name}.</p>
+            <p>Latest RainViewer precipitation tile near ${coords.name}. Crosshair marks the selected coordinates.</p>
             <div class="weather-radar-shell">
                 <img class="weather-radar-frame" data-radar-image="true" alt="Weather radar for ${coords.name}" loading="lazy" />
+                <span class="weather-radar-crosshair" aria-hidden="true"></span>
             </div>
             <small data-radar-status="true" style="color: var(--text-secondary);"></small>
         </div>
@@ -524,18 +525,18 @@ async function hydrateRadarTiles(coords) {
             const radarPast = Array.isArray(metadata?.radar?.past) ? metadata.radar.past : [];
             const latest = radarPast[radarPast.length - 1];
             const framePath = latest?.path;
-            const tileUrl = getRainViewerTileUrl({ lat: coords.lat, lon: coords.lon, framePath, colorScheme: 2, smooth: 0, snow: 0 });
+            const tileUrl = getRainViewerTileUrl({ lat: coords.lat, lon: coords.lon, framePath, colorScheme: 3, smooth: 1, snow: 0 });
             if (!tileUrl) throw new Error('No RainViewer frame path available.');
             const mapTileUrl = getOpenStreetMapTileUrl({ lat: coords.lat, lon: coords.lon });
             radarImage.src = tileUrl;
-            radarImage.style.backgroundColor = '#dbe9f4';
+            radarImage.style.backgroundColor = '#d4e2ee';
             radarImage.style.backgroundImage = mapTileUrl ? `url(${mapTileUrl})` : '';
             radarImage.style.backgroundPosition = 'center';
             radarImage.style.backgroundSize = 'cover';
             radarImage.style.backgroundRepeat = 'no-repeat';
             radarImage.onerror = fallback;
             if (radarStatus) {
-                radarStatus.textContent = `Updated ${new Date((latest.time || 0) * 1000).toLocaleTimeString()}`;
+                radarStatus.textContent = `Updated ${new Date((latest.time || 0) * 1000).toLocaleTimeString()} · tile view (not full-map recenter)`;
             }
         } catch (error) {
             if (isWaterTempDebugEnabled()) {
