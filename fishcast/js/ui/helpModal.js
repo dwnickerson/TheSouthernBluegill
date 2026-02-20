@@ -3,7 +3,50 @@ import { storage } from '../services/storage.js';
 import { renderFavorites } from './favorites.js';
 
 export function openAbout() {
-    document.body.insertAdjacentHTML('beforeend', `<div class="modal show" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" onclick="if(event.target === this) window.closeAbout()"><div class="modal-content" onclick="event.stopPropagation()" style="max-height: 90vh; overflow-y: auto;"><div class="modal-header"><button type="button" class="modal-close" aria-label="Close about" onclick="window.closeAbout()">×</button><span id="aboutTitle">About FishCast</span></div><div style="padding:20px;"><h3 style="margin-top:0;color:var(--accent);">FishCast</h3><p style="color:var(--text-secondary)">Science-based fishing forecasts with community water reports.</p><h4>How it works</h4><ul><li>Physics-based water temperature modeling.</li><li>Species-specific behavior phases.</li><li>Weather + solunar signal integration.</li></ul><h4>Need help?</h4><p>Email <a href="mailto:info@thesouthernbluegill.com">info@thesouthernbluegill.com</a></p><div style="margin-top:20px;text-align:center;"><button class="action-btn" onclick="window.closeAbout()">Close</button></div></div></div></div>`);
+    document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal show" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" onclick="if(event.target === this) window.closeAbout()">
+            <div class="modal-content" onclick="event.stopPropagation()" style="max-height: 90vh; overflow-y: auto;">
+                <div class="modal-header">
+                    <button type="button" class="modal-close" aria-label="Close about" onclick="window.closeAbout()">×</button>
+                    <span id="aboutTitle">About FishCast</span>
+                </div>
+                <div style="padding:20px; line-height:1.55;">
+                    <h3 style="margin-top:0; color:var(--accent);">FishCast Forecast Engine</h3>
+                    <p style="color:var(--text-secondary); margin-bottom:14px;">FishCast is the Southern Bluegill Association's field-ready forecasting app built to help anglers make better timing decisions. Instead of relying on a single weather number, FishCast blends weather science, fish behavior, and practical on-the-water patterns into one readable forecast.</p>
+
+                    <h4 style="margin:16px 0 8px;">What the forecast includes</h4>
+                    <ul style="margin:0 0 14px 20px; padding:0;">
+                        <li><strong>Hourly + multi-day outlooks</strong> tuned for your selected species and water body type.</li>
+                        <li><strong>Modeled water temperature trends</strong> using air temperature and day/night transitions.</li>
+                        <li><strong>Species phase logic</strong> (prespawn, spawn, postspawn, feeding windows, and stress periods).</li>
+                        <li><strong>Weather pressure and wind context</strong> translated into practical fish activity expectations.</li>
+                        <li><strong>Solunar signal weighting</strong> to highlight stronger feeding opportunities.</li>
+                    </ul>
+
+                    <h4 style="margin:16px 0 8px;">How FishCast scoring works</h4>
+                    <p style="margin:0 0 10px;">Each forecast score is a weighted blend of environmental inputs and species behavior assumptions. The app evaluates trend direction (improving, stable, declining), then maps that to an easy-read activity score and confidence tier. The goal is not to promise a guaranteed bite, but to identify higher-probability windows and reduce guesswork.</p>
+
+                    <h4 style="margin:16px 0 8px;">Best-use recommendations</h4>
+                    <ul style="margin:0 0 14px 20px; padding:0;">
+                        <li>Compare <strong>today vs. next 3-7 days</strong> before choosing your trip window.</li>
+                        <li>Use the <strong>saved locations</strong> tool to track your regular waters quickly.</li>
+                        <li>Keep your <strong>target species and water type accurate</strong>; this materially changes the guidance.</li>
+                        <li>Pair FishCast with real-time observations (water clarity, bait presence, and recent fronts).</li>
+                    </ul>
+
+                    <h4 style="margin:16px 0 8px;">Important notes</h4>
+                    <p style="margin:0 0 10px;">Forecasts are decision support, not certainty. Localized runoff, dam releases, fishing pressure, and micro-habitat conditions can shift outcomes quickly. For safety, always check local advisories and weather alerts before heading out.</p>
+
+                    <h4 style="margin:16px 0 8px;">Contact & support</h4>
+                    <p style="margin:0;">Questions, bug reports, or feature ideas: <a href="mailto:info@thesouthernbluegill.com">info@thesouthernbluegill.com</a></p>
+
+                    <div style="margin-top:20px; text-align:center;">
+                        <button class="action-btn" onclick="window.closeAbout()">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `);
 }
 
 export function closeAbout() {
