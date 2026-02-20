@@ -604,9 +604,10 @@ export function renderForecast(data) {
     const todayPrecipIn = weather.forecast.daily?.precipitation_sum?.[0] || 0;
     const todayHighTemp = toTempF(weather.forecast.daily.temperature_2m_max[0], weather);
     const todayLowTemp = toTempF(weather.forecast.daily.temperature_2m_min[0], weather);
+    const currentAirTemp = toTempF(weather.forecast.current.temperature_2m, weather);
     const feelsLikeTemp = toTempF(weather.forecast.current.apparent_temperature, weather);
     const humidity = Number(weather.forecast.current.relative_humidity_2m) || 0;
-    const dewPointF = calculateDewPointF(toTempF(weather.forecast.current.temperature_2m, weather), humidity);
+    const dewPointF = calculateDewPointF(currentAirTemp, humidity);
     
     // NEW: Water clarity badge
     const clarityIcons = {
@@ -643,7 +644,7 @@ export function renderForecast(data) {
             <div class="rating ${currentScore.colorClass}">${currentScore.rating}</div>
             <div class="summary-grid">
                 <div class="summary-card"><div class="label">Conditions</div><div class="value weather-condition-value"><span class="weather-symbol">${weatherIcon.icon}</span><span>${weatherIcon.label}</span></div></div>
-                <div class="summary-card"><div class="label">Air temp range</div><div class="value">${todayLowTemp.toFixed(0)}°F to ${todayHighTemp.toFixed(0)}°F</div></div>
+                <div class="summary-card"><div class="label">Air temp</div><div class="value">${currentAirTemp.toFixed(0)}°F</div></div>
                 <div class="summary-card"><div class="label">Feels like</div><div class="value">${feelsLikeTemp.toFixed(0)}°F</div></div>
                 <div class="summary-card"><div class="label">Water surface</div><div class="value" data-water-field="surface">${waterTempView.surfaceNow.toFixed(1)}°F</div></div>
                 <div class="summary-card"><div class="label">Wind</div><div class="value">${windSpeed.toFixed(0)} mph ${windDir}</div></div>
@@ -682,7 +683,7 @@ export function renderForecast(data) {
                 <div class="detail-row">
                     <span class="detail-label">Air Temperature</span>
                     <span class="detail-value">
-                        ${toTempF(weather.forecast.current.temperature_2m, weather).toFixed(1)}°F 
+                        ${currentAirTemp.toFixed(1)}°F 
                         <small>(feels like ${toTempF(weather.forecast.current.apparent_temperature, weather).toFixed(1)}°F)</small>
                     </span>
                 </div>
