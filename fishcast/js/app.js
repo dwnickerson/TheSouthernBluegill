@@ -167,10 +167,13 @@ async function generateForecast(event) {
                 debug: localStorage.getItem('fishcast_debug_water_temp') === 'true'
             }
         );
-        // Canonical "today" water temperature should come from estimateWaterTemp().
-        // Projection day-0 is useful for trend continuity, but can diverge from the
-        // direct estimate path and create confusing UI mismatches.
-        const todayWaterTemp = waterTemp;
+        // Keep "today" aligned with the same projection stream used by extended cards.
+        // When a future day rolls into "today", this avoids an abrupt model swap where
+        // yesterday's day+1 card and today's view disagree on period temperatures.
+        const projectedTodayWaterTemp = Number.isFinite(waterTempsEvolution?.[0])
+            ? waterTempsEvolution[0]
+            : null;
+        const todayWaterTemp = projectedTodayWaterTemp ?? waterTemp;
 
         const waterTempView = buildWaterTempView({
             dailySurfaceTemp: todayWaterTemp,
