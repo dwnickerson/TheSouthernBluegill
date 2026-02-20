@@ -1135,9 +1135,12 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
         })
         : fallback;
 
-    const sunriseAdjusted = clamp(sunrise + observedPeriodOffset, 32, 95);
-    const middayAdjusted = clamp(midday + observedPeriodOffset, 32, 95);
-    const sunsetAdjusted = clamp(sunset + observedPeriodOffset, 32, 95);
+    // Keep sunrise/midday/sunset tied to the projection model so today's profile
+    // remains continuous with yesterday's extended day+1 card. Observed reports
+    // can still nudge the "surface now" value without rewriting period anchors.
+    const sunriseAdjusted = clamp(sunrise, 32, 95);
+    const middayAdjusted = clamp(midday, 32, 95);
+    const sunsetAdjusted = clamp(sunset, 32, 95);
     const surfaceNow = clamp(surfaceNowRaw + observedPeriodOffset, 32, 95);
 
     const depthFor = (temp, whenDate) => ({
