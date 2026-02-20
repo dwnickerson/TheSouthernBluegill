@@ -165,6 +165,15 @@ function parseHourFromTimestamp(timestamp) {
     return hour + (minutes / 60);
 }
 
+function getResolvedDayKey(timeValue, timezone = 'UTC') {
+    if (typeof timeValue !== 'string' || !timeValue) return null;
+    const parsedTs = parseHourlyTimestamp(timeValue, timezone);
+    if (Number.isFinite(parsedTs)) {
+        return getLocalDayKey(new Date(parsedTs), timezone);
+    }
+    return timeValue.slice(0, 10);
+}
+
 function getPeriodTargetHour(period, { sunriseTime, sunsetTime } = {}) {
     const sunriseHour = parseHourFromTimestamp(sunriseTime);
     const sunsetHour = parseHourFromTimestamp(sunsetTime);
@@ -1065,9 +1074,11 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
         };
     }
 
+    const timezone = context.timezone || context.payload?.meta?.timezone || 'UTC';
     const daily = context.payload.forecast?.daily || {};
     const dailyTimes = Array.isArray(daily.time) ? daily.time : [];
-    const anchorDayKey = String(context.anchorDateISOZ || '').slice(0, 10);
+    const anchorDayKey = getResolvedDayKey(String(context.anchorDateISOZ || ''), timezone)
+        || String(context.anchorDateISOZ || '').slice(0, 10);
     const dayIndex = Math.max(0, dailyTimes.findIndex((value) => value === anchorDayKey));
     const sunriseTime = Array.isArray(daily.sunrise) ? (daily.sunrise[dayIndex] || null) : null;
     const sunsetTime = Array.isArray(daily.sunset) ? (daily.sunset[dayIndex] || null) : null;
@@ -1328,14 +1339,18 @@ export function estimateWaterTempByPeriod({
     }
 
     const periodHour = Number.isFinite(targetHour) ? targetHour : getPeriodTargetHour(period, { sunriseTime, sunsetTime });
+    const resolvedTimezone = context?.timezone || timezone || 'UTC';
     const fallbackDateKey = typeof dayKey === 'string' && dayKey
         ? dayKey
-        : (context?.anchorDateISOZ || (date instanceof Date ? date.toISOString() : new Date(date).toISOString())).slice(0, 10);
+        : getResolvedDayKey(
+            context?.anchorDateISOZ || (date instanceof Date ? date.toISOString() : new Date(date).toISOString()),
+            resolvedTimezone
+        );
 
     const dayIndices = hourlyTimes
         .map((timeValue, index) => {
             const hourIso = String(timeValue || '');
-            const hourKey = hourIso.slice(0, 10);
+            const hourKey = getResolvedDayKey(hourIso, resolvedTimezone) || hourIso.slice(0, 10);
             const hour = parseHourFromTimestamp(hourIso);
             return { index, hourKey, hour };
         })
