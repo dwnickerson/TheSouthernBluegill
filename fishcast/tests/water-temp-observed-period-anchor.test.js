@@ -47,7 +47,7 @@ function buildContext(nowOverride = '2026-02-19T18:00:00.000Z') {
   });
 }
 
-test('same-day observed water temp anchors sunrise/midday/sunset period view', () => {
+test('same-day observed water temp anchors surface-now while keeping period projections stable', () => {
   storage.clearAll();
 
   const context = buildContext();
@@ -56,12 +56,12 @@ test('same-day observed water temp anchors sunrise/midday/sunset period view', (
   storage.setWaterTempObserved(34.2576, -88.7034, 'pond', 55.4, '2026-02-19T18:00:00.000Z');
   const anchored = buildWaterTempView({ dailySurfaceTemp: 53.4, waterType: 'pond', context });
 
-  assert.ok(Math.abs(anchored.midday - 55.4) <= 0.2, `midday should align to observed noon reading, got ${anchored.midday}`);
-  assert.ok(Math.abs(anchored.midday - baseline.midday) >= 0.5, `observed anchor should materially adjust midday (${anchored.midday} vs ${baseline.midday})`);
+  assert.ok(Math.abs(anchored.surfaceNow - 55.4) <= 0.3, `surface-now should align to observed reading, got ${anchored.surfaceNow}`);
+  assert.ok(Math.abs(anchored.surfaceNow - baseline.surfaceNow) >= 0.5, `observed anchor should materially adjust surface-now (${anchored.surfaceNow} vs ${baseline.surfaceNow})`);
 
-  const baselineRise = baseline.midday - baseline.sunrise;
-  const anchoredRise = anchored.midday - anchored.sunrise;
-  assert.ok(Math.abs(anchoredRise - baselineRise) <= 0.1, 'observed anchor should shift the curve without distorting intraday spread');
+  assert.ok(Math.abs(anchored.midday - baseline.midday) <= 0.1, 'observed anchor should not rewrite midday projection');
+  assert.ok(Math.abs(anchored.sunrise - baseline.sunrise) <= 0.1, 'observed anchor should not rewrite sunrise projection');
+  assert.ok(Math.abs(anchored.sunset - baseline.sunset) <= 0.1, 'observed anchor should not rewrite sunset projection');
 
   storage.clearAll();
 });
