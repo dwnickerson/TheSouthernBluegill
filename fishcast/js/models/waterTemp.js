@@ -134,8 +134,21 @@ function getDiurnalResponseByWaterType(waterType) {
     };
 }
 
-function getDiurnalAdjustmentLimit(waterType) {
-    if (waterType === 'pond') return 4.6;
+function getDiurnalAdjustmentLimit(waterType, { dailyAirRange = 0, cloudBlend = 50, windBlend = 0, targetShortwave = null } = {}) {
+    if (waterType === 'pond') {
+        const rangeSignal = clamp((dailyAirRange - 14) / 14, 0, 1);
+        const clearSignal = clamp((55 - cloudBlend) / 45, 0, 1);
+        const calmSignal = clamp((9 - windBlend) / 9, 0, 1);
+        const shortwaveSignal = Number.isFinite(targetShortwave)
+            ? clamp((targetShortwave - 280) / 420, 0, 1)
+            : 0;
+
+        // Allow stronger daytime warm spikes for shallow ponds when hourly forcing is
+        // hot/bright/calm. This helps "surface now" match sunny afternoon checks
+        // without relaxing cloudy or windy regimes.
+        const warmBoost = (rangeSignal * 1.4) + (clearSignal * 0.9) + (calmSignal * 0.8) + (shortwaveSignal * 1.3);
+        return 4.6 + (warmBoost * 1.45);
+    }
     if (waterType === 'lake') return 2.3;
     return 1.8;
 }
@@ -1425,7 +1438,12 @@ export function estimateWaterTempByPeriod({
     const shortwaveTerm = shortwaveSeries.length && Number.isFinite(targetShortwave)
         ? clamp((targetShortwave - (average(shortwaveSeries) || 0)) / 350, -1.2, 1.2) * response.shortwaveCoupling * windDamping
         : 0;
-    const adjustmentLimit = getDiurnalAdjustmentLimit(waterType);
+    const adjustmentLimit = getDiurnalAdjustmentLimit(waterType, {
+        dailyAirRange,
+        cloudBlend,
+        windBlend,
+        targetShortwave
+    });
     let totalAdjustment = clamp(solarTerm + airAnomalyTerm + shortwaveTerm, -adjustmentLimit, adjustmentLimit);
 
     if (waterType === 'pond' && period === 'morning') {

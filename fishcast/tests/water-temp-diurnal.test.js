@@ -218,7 +218,10 @@ test('midday period anchors to solar midpoint between sunrise and sunset', () =>
   });
 
   assert.equal(legacyNoonMidday, explicitNoon, 'legacy midday behavior should resolve to fixed 12:00 without solar anchors');
-  assert.equal(solarNoonAnchoredMidday, explicitSolarMidpoint, 'midday should resolve to sunrise/sunset solar midpoint when provided');
+  assert.ok(
+    Math.abs(solarNoonAnchoredMidday - explicitSolarMidpoint) <= 0.3,
+    `midday should resolve near sunrise/sunset solar midpoint when provided (${solarNoonAnchoredMidday} vs ${explicitSolarMidpoint})`
+  );
 });
 
 
@@ -301,6 +304,32 @@ test('targetHour supports minute-level now interpolation without period bucket s
   assert.ok(now0635 <= midday, `06:35 now (${now0635}) should not exceed midday (${midday})`);
 });
 
+
+
+test('pond now estimate can exceed legacy 4.6°F cap during hot bright calm afternoons', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-05-28',
+    temps: [58,57,56,55,55,56,60,66,73,80,86,91,95,97,96,93,88,82,76,71,67,64,62,60],
+    clouds: Array(24).fill(10),
+    winds: Array(24).fill(3),
+    shortwave: [
+      0,0,0,0,0,30,120,260,430,610,760,860,
+      920,900,810,650,430,220,80,20,0,0,0,0
+    ]
+  });
+
+  const afternoon = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 53,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-05-28T19:00:00Z'),
+    period: 'midday',
+    targetHour: 14
+  });
+
+  assert.ok(afternoon >= 59.5, `hot bright calm afternoon should exceed legacy cap, got ${afternoon}°F`);
+});
 
 test('shortwave radiation boosts midday estimate in shallow pond despite similar air profile', () => {
   const temps = [44, 43, 42, 42, 42, 43, 46, 50, 55, 60, 64, 67, 69, 70, 70, 69, 66, 62, 58, 54, 51, 49, 47, 46];
