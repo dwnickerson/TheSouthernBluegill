@@ -64,3 +64,29 @@ This data indicates our intraday pond terms were still a bit aggressive under ov
 
 These changes preserve clear/calm daytime rise while reducing false warm spikes in cloudy/windy conditions similar to the Tupelo set.
 
+## Why a 53°F estimate can still miss a 60.9°F field reading
+When operators see a large same-day miss (example: model ~53°F vs observed 60.9°F), the gap is usually a stack of constraints rather than one bug:
+
+1. **Observed calibration is intentionally bounded** to keep single reports from causing runaway estimates.
+   - Maximum pull is capped at ±6°F, then decayed by report age.
+   - If the baseline is cold-biased and the report is not fresh, calibration may not fully bridge a ~8°F gap in one step.
+
+2. **Day-level estimate vs instant field timestamp mismatch** can look like model failure.
+   - If users compare a warm-afternoon probe reading to a daily/sunrise-biased number, residuals inflate.
+   - The period estimator (morning/midday/afternoon) should be used for same-day operational checks.
+
+3. **Hourly forcing can be stale even when app UI looks current**.
+   - Weather payload is cached for up to 60 minutes.
+   - Network fallback can return stale cached data after fetch failures.
+   - A rapid warm-up window can outrun the last cached run.
+
+4. **Location-key quantization can prevent intended observed correction from applying**.
+   - Stored observed reports are keyed by lat/lon rounded to 4 decimals plus water type.
+   - If the forecast run and the reported point resolve to slightly different rounded coordinates, calibration for that reading may not apply.
+
+### Operator triage checklist for this exact symptom
+- Confirm the compared value is a **period estimate** for the right local time block, not a daily surface number.
+- Confirm the forecast response metadata (`stale`, `fromCache`, `staleReason`) to detect cached/fallback weather.
+- Confirm the observed entry timestamp age (hours since report) to estimate calibration decay impact.
+- Confirm reported coordinates and queried coordinates round to the same 4-decimal key.
+- If all above are correct and residual is still >5°F, capture hourly cloud/wind/shortwave for that timestamp and re-tune pond diurnal gains for that regime.
