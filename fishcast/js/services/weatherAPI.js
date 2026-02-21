@@ -177,16 +177,28 @@ export async function getWeather(lat, lon, days = APP_CONSTANTS.DEFAULT_FORECAST
         `forecast_days=${days}`;
 
     try {
-        const [historicalData, rawForecastData] = await Promise.all([
+        const [historicalResult, forecastResult] = await Promise.allSettled([
             fetchJsonWithRetry(historicalUrl),
             fetchJsonWithRetry(forecastUrl)
         ]);
+
+        if (forecastResult.status !== 'fulfilled') {
+            throw forecastResult.reason;
+        }
+
+        const rawForecastData = forecastResult.value;
+        const historicalData = historicalResult.status === 'fulfilled'
+            ? historicalResult.value
+            : { daily: cached?.payload?.historical?.daily || {} };
 
         const normalized = validateAndNormalizeForecast(rawForecastData, nowIso);
         const payload = normalizeWeatherPayload({
             historical: historicalData,
             forecast: normalized.forecast,
-            meta: { ...normalized.meta, source: 'LIVE' }
+            meta: {
+                ...normalized.meta,
+                source: historicalResult.status === 'fulfilled' ? 'LIVE' : 'LIVE_FORECAST_FALLBACK'
+            }
         }, { now: new Date(nowIso), source: 'LIVE' });
 
         const isDev = typeof process !== 'undefined' && process?.env?.NODE_ENV !== 'production';
@@ -199,11 +211,18 @@ export async function getWeather(lat, lon, days = APP_CONSTANTS.DEFAULT_FORECAST
             cachedAt: now
         }, WEATHER_CACHE_VARIANT);
 
-        return {
+        const result = {
             ...payload,
             stale: false,
             fromCache: false
         };
+
+        if (historicalResult.status !== 'fulfilled') {
+            result.partial = true;
+            result.partialReason = `Historical weather fallback: ${historicalResult.reason?.message || 'request failed'}`;
+        }
+
+        return result;
     } catch (error) {
         if (cached?.payload) {
             return {
