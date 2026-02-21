@@ -114,6 +114,7 @@ function getDiurnalResponseByWaterType(waterType) {
             // produced +5°F to +7°F offsets versus reported surface checks.
             solarGain: 0.19,
             airCoupling: 0.11,
+            shortwaveCoupling: 0.9,
             windDamping: 0.035
         };
     }
@@ -121,12 +122,14 @@ function getDiurnalResponseByWaterType(waterType) {
         return {
             solarGain: 0.2,
             airCoupling: 0.18,
+            shortwaveCoupling: 0.55,
             windDamping: 0.02
         };
     }
     return {
         solarGain: 0.14,
         airCoupling: 0.12,
+        shortwaveCoupling: 0.4,
         windDamping: 0.015
     };
 }
@@ -1336,6 +1339,7 @@ export function estimateWaterTempByPeriod({
     const hourlyAir = Array.isArray(hourlySource?.temperature_2m) ? hourlySource.temperature_2m : [];
     const hourlyCloud = Array.isArray(hourlySource?.cloud_cover) ? hourlySource.cloud_cover : [];
     const hourlyWind = Array.isArray(hourlySource?.wind_speed_10m) ? hourlySource.wind_speed_10m : [];
+    const hourlyShortwave = Array.isArray(hourlySource?.shortwave_radiation) ? hourlySource.shortwave_radiation : [];
 
     if (!hourlyTimes.length || !hourlyAir.length) {
         return Math.round(dailySurfaceTemp * 10) / 10;
@@ -1371,6 +1375,9 @@ export function estimateWaterTempByPeriod({
         .filter(Number.isFinite);
     const cloudSeries = dayIndices
         .map(({ index }) => hourlyCloud[index])
+        .filter(Number.isFinite);
+    const shortwaveSeries = dayIndices
+        .map(({ index }) => Number(hourlyShortwave[index]))
         .filter(Number.isFinite);
 
     if (!airSeries.length) {
@@ -1413,8 +1420,13 @@ export function estimateWaterTempByPeriod({
     const airAnomalyTerm = Number.isFinite(targetAir)
         ? (targetAir - dailyAirMean) * response.airCoupling * windDamping
         : 0;
+
+    const targetShortwave = Number(hourlyShortwave[targetIndex]);
+    const shortwaveTerm = shortwaveSeries.length && Number.isFinite(targetShortwave)
+        ? clamp((targetShortwave - (average(shortwaveSeries) || 0)) / 350, -1.2, 1.2) * response.shortwaveCoupling * windDamping
+        : 0;
     const adjustmentLimit = getDiurnalAdjustmentLimit(waterType);
-    let totalAdjustment = clamp(solarTerm + airAnomalyTerm, -adjustmentLimit, adjustmentLimit);
+    let totalAdjustment = clamp(solarTerm + airAnomalyTerm + shortwaveTerm, -adjustmentLimit, adjustmentLimit);
 
     if (waterType === 'pond' && period === 'morning') {
         const windyMorning = windMean >= 10;

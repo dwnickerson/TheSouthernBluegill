@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 
 import { estimateWaterTempByPeriod } from '../js/models/waterTemp.js';
 
-function buildHourlyDay({ date = '2026-02-12', temps = [], clouds = [], winds = [] }) {
+function buildHourlyDay({ date = '2026-02-12', temps = [], clouds = [], winds = [], shortwave = [] }) {
   const time = [];
   const temperature_2m = [];
   const cloud_cover = [];
   const wind_speed_10m = [];
+  const shortwave_radiation = [];
 
   for (let hour = 0; hour < 24; hour++) {
     const hh = String(hour).padStart(2, '0');
@@ -15,9 +16,10 @@ function buildHourlyDay({ date = '2026-02-12', temps = [], clouds = [], winds = 
     temperature_2m.push(temps[hour] ?? 50);
     cloud_cover.push(clouds[hour] ?? 40);
     wind_speed_10m.push(winds[hour] ?? 5);
+    shortwave_radiation.push(shortwave[hour] ?? 0);
   }
 
-  return { time, temperature_2m, cloud_cover, wind_speed_10m };
+  return { time, temperature_2m, cloud_cover, wind_speed_10m, shortwave_radiation };
 }
 
 test('pond period estimate captures daytime warming on clear calm day', () => {
@@ -297,4 +299,48 @@ test('targetHour supports minute-level now interpolation without period bucket s
 
   assert.ok(now0635 <= sunrise + 0.6, `06:35 now (${now0635}) should remain close to sunrise (${sunrise})`);
   assert.ok(now0635 <= midday, `06:35 now (${now0635}) should not exceed midday (${midday})`);
+});
+
+
+test('shortwave radiation boosts midday estimate in shallow pond despite similar air profile', () => {
+  const temps = [44, 43, 42, 42, 42, 43, 46, 50, 55, 60, 64, 67, 69, 70, 70, 69, 66, 62, 58, 54, 51, 49, 47, 46];
+  const clouds = Array(24).fill(35);
+  const winds = Array(24).fill(6);
+
+  const dimDay = buildHourlyDay({
+    date: '2026-04-03',
+    temps,
+    clouds,
+    winds,
+    shortwave: Array(24).fill(80)
+  });
+
+  const brightMidday = buildHourlyDay({
+    date: '2026-04-03',
+    temps,
+    clouds,
+    winds,
+    shortwave: [
+      0, 0, 0, 0, 0, 20, 80, 150, 260, 380, 500, 620,
+      720, 760, 700, 560, 380, 220, 90, 20, 0, 0, 0, 0
+    ]
+  });
+
+  const dimMidday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 54,
+    waterType: 'pond',
+    hourly: dimDay,
+    date: new Date('2026-04-03T12:00:00Z'),
+    period: 'midday'
+  });
+
+  const brightMiddayTemp = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 54,
+    waterType: 'pond',
+    hourly: brightMidday,
+    date: new Date('2026-04-03T12:00:00Z'),
+    period: 'midday'
+  });
+
+  assert.ok(brightMiddayTemp > dimMidday, `higher shortwave should raise midday estimate (${brightMiddayTemp} vs ${dimMidday})`);
 });

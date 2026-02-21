@@ -119,6 +119,13 @@ function getLocalDateKey(date, timeZone = TZ) {
     return `${y}-${m}-${d}`;
 }
 
+function dayKeyToEpochDay(dayKey) {
+    if (typeof dayKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) return null;
+    const ms = Date.parse(`${dayKey}T00:00:00Z`);
+    if (!Number.isFinite(ms)) return null;
+    return Math.floor(ms / 86400000);
+}
+
 function average(values) {
     if (!values.length) return null;
     return values.reduce((sum, v) => sum + v, 0) / values.length;
@@ -509,7 +516,13 @@ export function applyStabilityControls({ baseScore, inputs, speciesKey, location
     const previous = storage.get(key, null);
     const localHour = getLocalHour(now);
     const todayKey = getLocalDateKey(now);
-    const isTomorrow = dateKey !== todayKey;
+    const todayEpochDay = dayKeyToEpochDay(todayKey);
+    const targetEpochDay = dayKeyToEpochDay(dateKey);
+    const daysAhead = Number.isFinite(todayEpochDay) && Number.isFinite(targetEpochDay)
+        ? targetEpochDay - todayEpochDay
+        : (dateKey !== todayKey ? 1 : 0);
+    const isFuture = daysAhead >= 1;
+    const isTomorrow = daysAhead === 1;
     let nextScore = baseScore;
     let reason = 'base_score';
 
@@ -525,10 +538,12 @@ export function applyStabilityControls({ baseScore, inputs, speciesKey, location
             reason = 'gated_non_material_change';
         }
 
-        if (isTomorrow && !hardMajor) {
+        if (isFuture && !hardMajor) {
             const blended = Math.round(previous.score * (1 - SMOOTHING_ALPHA) + baseScore * SMOOTHING_ALPHA);
             nextScore = major ? Math.round((blended + baseScore) / 2) : blended;
-            reason = major ? 'tomorrow_smoothed_major' : 'tomorrow_smoothed';
+            reason = isTomorrow
+                ? (major ? 'tomorrow_smoothed_major' : 'tomorrow_smoothed')
+                : (major ? 'future_smoothed_major' : 'future_smoothed');
         }
 
         if (isTomorrow && localHour >= FREEZE_HOUR_LOCAL && !hardMajor) {

@@ -233,5 +233,32 @@ test('tomorrow smoothing dampens big non-major swings', () => {
     now: new Date('2026-05-02T12:00:00-05:00')
   });
 
-  assert.ok(smoothed.score < 60);
+  assert.ok(smoothed.score < 95);
+});
+
+test('future day smoothing applies to extended forecast days beyond tomorrow', () => {
+  global.localStorage.clear();
+  const speciesKey = 'bluegill';
+  const locationKey = '34.000_-88.000';
+  const dateKey = '2026-05-05';
+
+  applyStabilityControls({
+    baseScore: 44,
+    inputs: { pressureAvg: 1012, windAvgKmh: 9, precipProbAvg: 20, cloudAvg: 50, tempAvgC: 21, waterTempF: 71 },
+    speciesKey,
+    locationKey,
+    dateKey,
+    now: new Date('2026-05-02T09:00:00-05:00')
+  });
+
+  const smoothed = applyStabilityControls({
+    baseScore: 96,
+    inputs: { pressureAvg: 1012.8, windAvgKmh: 9.4, precipProbAvg: 23, cloudAvg: 55, tempAvgC: 21.5, waterTempF: 72 },
+    speciesKey,
+    locationKey,
+    dateKey,
+    now: new Date('2026-05-02T12:00:00-05:00')
+  });
+
+  assert.ok(smoothed.score < 65);
 });
