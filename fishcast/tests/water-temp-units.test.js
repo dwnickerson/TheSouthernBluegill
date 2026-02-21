@@ -59,17 +59,11 @@ test('estimateWaterTemp respects weather temperature units metadata', async () =
 
 const { buildWaterTempView } = await import('../js/models/waterTemp.js');
 
-test('buildWaterTempView period estimates respect hourly Celsius metadata', () => {
-  const hourlyTimes = [
-    '2026-05-15T09:00',
-    '2026-05-15T12:00',
-    '2026-05-15T15:00'
-  ];
-  const hourlyC = [20, 24, 26]; // 68F, 75.2F, 78.8F
-  const contextC = {
+test('buildWaterTempView uses timezone-local hour when hourly timestamps include Z offset', () => {
+  const baseContext = {
     timezone: 'America/Chicago',
     anchorDateISOZ: '2026-05-15T18:00:00Z',
-    hourlyNowTimeISOZ: '2026-05-15T15:00',
+    hourlyNowTimeISOZ: '2026-05-15T20:00:00Z', // 15:00 local
     payload: {
       forecast: {
         daily: {
@@ -78,39 +72,47 @@ test('buildWaterTempView period estimates respect hourly Celsius metadata', () =
           sunset: ['2026-05-15T19:50']
         },
         hourly: {
-          time: hourlyTimes,
-          temperature_2m: hourlyC,
           cloud_cover: [25, 25, 25],
           wind_speed_10m: [3, 3, 3],
-          shortwave_radiation: [120, 620, 300]
-        }
-      },
-      meta: {
-        units: { temp: 'C' }
-      }
-    }
-  };
-
-  const contextF = {
-    ...contextC,
-    payload: {
-      ...contextC.payload,
-      forecast: {
-        ...contextC.payload.forecast,
-        hourly: {
-          ...contextC.payload.forecast.hourly,
+          shortwave_radiation: [120, 620, 300],
           temperature_2m: [68, 75.2, 78.8]
         }
-      },
-      meta: {
-        units: { temp: 'F' }
       }
     }
   };
 
-  const viewFromC = buildWaterTempView({ dailySurfaceTemp: 72, waterType: 'pond', context: contextC });
-  const viewFromF = buildWaterTempView({ dailySurfaceTemp: 72, waterType: 'pond', context: contextF });
+  const contextNaive = {
+    ...baseContext,
+    hourlyNowTimeISOZ: '2026-05-15T15:00',
+    payload: {
+      ...baseContext.payload,
+      forecast: {
+        ...baseContext.payload.forecast,
+        hourly: {
+          ...baseContext.payload.forecast.hourly,
+          time: ['2026-05-15T09:00', '2026-05-15T12:00', '2026-05-15T15:00']
+        }
+      }
+    }
+  };
 
-  assert.ok(Math.abs(viewFromC.surfaceNow - viewFromF.surfaceNow) < 0.2, `Expected matching surfaceNow, got ${viewFromC.surfaceNow} vs ${viewFromF.surfaceNow}`);
-  assert.ok(Math.abs(viewFromC.midday - viewFromF.midday) < 0.2, `Expected matching midday, got ${viewFromC.midday} vs ${viewFromF.midday}`);
+  const contextUtc = {
+    ...baseContext,
+    payload: {
+      ...baseContext.payload,
+      forecast: {
+        ...baseContext.payload.forecast,
+        hourly: {
+          ...baseContext.payload.forecast.hourly,
+          time: ['2026-05-15T14:00:00Z', '2026-05-15T17:00:00Z', '2026-05-15T20:00:00Z']
+        }
+      }
+    }
+  };
+
+  const viewNaive = buildWaterTempView({ dailySurfaceTemp: 72, waterType: 'pond', context: contextNaive });
+  const viewUtc = buildWaterTempView({ dailySurfaceTemp: 72, waterType: 'pond', context: contextUtc });
+
+  assert.ok(Math.abs(viewNaive.surfaceNow - viewUtc.surfaceNow) < 0.2, `Expected matching surfaceNow, got ${viewNaive.surfaceNow} vs ${viewUtc.surfaceNow}`);
+  assert.ok(Math.abs(viewNaive.midday - viewUtc.midday) < 0.2, `Expected matching midday, got ${viewNaive.midday} vs ${viewUtc.midday}`);
 });

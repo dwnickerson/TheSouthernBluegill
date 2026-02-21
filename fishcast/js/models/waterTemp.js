@@ -1124,7 +1124,7 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
     });
 
     const hourIso = context.hourlyNowTimeISOZ || context.anchorDateISOZ;
-    const nowHour = parseHourFromTimestamp(hourIso);
+    const nowHour = getHourInTimezone(hourIso, timezone);
     const surfaceNowRaw = Number.isFinite(nowHour)
         ? estimateWaterTempByPeriod({
             dailySurfaceTemp,
@@ -1335,7 +1335,6 @@ export function estimateWaterTempByPeriod({
     if (!Number.isFinite(dailySurfaceTemp)) return null;
 
     const hourlySource = context?.payload?.forecast?.hourly || hourly || {};
-    const tempUnit = context?.payload?.meta?.units?.temp || context?.meta?.units?.temp || 'F';
     const hourlyTimes = Array.isArray(hourlySource?.time) ? hourlySource.time : [];
     const hourlyAir = Array.isArray(hourlySource?.temperature_2m) ? hourlySource.temperature_2m : [];
     const hourlyCloud = Array.isArray(hourlySource?.cloud_cover) ? hourlySource.cloud_cover : [];
@@ -1359,7 +1358,7 @@ export function estimateWaterTempByPeriod({
         .map((timeValue, index) => {
             const hourIso = String(timeValue || '');
             const hourKey = getResolvedDayKey(hourIso, resolvedTimezone) || hourIso.slice(0, 10);
-            const hour = parseHourFromTimestamp(hourIso);
+            const hour = getHourInTimezone(hourIso, resolvedTimezone);
             return { index, hourKey, hour };
         })
         .filter((entry) => entry.hourKey === fallbackDateKey);
@@ -1369,7 +1368,7 @@ export function estimateWaterTempByPeriod({
     }
 
     const airSeries = dayIndices
-        .map(({ index }) => normalizeAirTempToF(hourlyAir[index], tempUnit))
+        .map(({ index }) => normalizeAirTempToF(hourlyAir[index], 'F'))
         .filter(Number.isFinite);
     const windSeries = dayIndices
         .map(({ index }) => normalizeLikelyWindMph(hourlyWind[index], 'mph'))
@@ -1392,7 +1391,7 @@ export function estimateWaterTempByPeriod({
         return currentDelta < bestDelta ? entry : best;
     }, null);
     const targetIndex = targetEntry?.index ?? -1;
-    const targetAir = normalizeAirTempToF(hourlyAir[targetIndex], tempUnit);
+    const targetAir = normalizeAirTempToF(hourlyAir[targetIndex], 'F');
     const dailyAirMean = average(airSeries) || targetAir || 0;
     const dailyAirRange = Math.max(...airSeries) - Math.min(...airSeries);
     const cloudMean = average(cloudSeries) || 50;
