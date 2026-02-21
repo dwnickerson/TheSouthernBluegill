@@ -55,3 +55,64 @@ test('estimateWaterTemp respects weather temperature units metadata', async () =
 
   assert.ok(Math.abs(fromF - fromC) < 0.2, `Expected unit-normalized results to match, got ${fromF} vs ${fromC}`);
 });
+
+
+const { buildWaterTempView } = await import('../js/models/waterTemp.js');
+
+test('buildWaterTempView uses timezone-local hour when hourly timestamps include Z offset', () => {
+  const baseContext = {
+    timezone: 'America/Chicago',
+    anchorDateISOZ: '2026-05-15T18:00:00Z',
+    hourlyNowTimeISOZ: '2026-05-15T20:00:00Z', // 15:00 local
+    payload: {
+      forecast: {
+        daily: {
+          time: ['2026-05-15'],
+          sunrise: ['2026-05-15T06:10'],
+          sunset: ['2026-05-15T19:50']
+        },
+        hourly: {
+          cloud_cover: [25, 25, 25],
+          wind_speed_10m: [3, 3, 3],
+          shortwave_radiation: [120, 620, 300],
+          temperature_2m: [68, 75.2, 78.8]
+        }
+      }
+    }
+  };
+
+  const contextNaive = {
+    ...baseContext,
+    hourlyNowTimeISOZ: '2026-05-15T15:00',
+    payload: {
+      ...baseContext.payload,
+      forecast: {
+        ...baseContext.payload.forecast,
+        hourly: {
+          ...baseContext.payload.forecast.hourly,
+          time: ['2026-05-15T09:00', '2026-05-15T12:00', '2026-05-15T15:00']
+        }
+      }
+    }
+  };
+
+  const contextUtc = {
+    ...baseContext,
+    payload: {
+      ...baseContext.payload,
+      forecast: {
+        ...baseContext.payload.forecast,
+        hourly: {
+          ...baseContext.payload.forecast.hourly,
+          time: ['2026-05-15T14:00:00Z', '2026-05-15T17:00:00Z', '2026-05-15T20:00:00Z']
+        }
+      }
+    }
+  };
+
+  const viewNaive = buildWaterTempView({ dailySurfaceTemp: 72, waterType: 'pond', context: contextNaive });
+  const viewUtc = buildWaterTempView({ dailySurfaceTemp: 72, waterType: 'pond', context: contextUtc });
+
+  assert.ok(Math.abs(viewNaive.surfaceNow - viewUtc.surfaceNow) < 0.2, `Expected matching surfaceNow, got ${viewNaive.surfaceNow} vs ${viewUtc.surfaceNow}`);
+  assert.ok(Math.abs(viewNaive.midday - viewUtc.midday) < 0.2, `Expected matching midday, got ${viewNaive.midday} vs ${viewUtc.midday}`);
+});

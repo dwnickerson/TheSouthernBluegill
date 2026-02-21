@@ -1124,7 +1124,7 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
     });
 
     const hourIso = context.hourlyNowTimeISOZ || context.anchorDateISOZ;
-    const nowHour = parseHourFromTimestamp(hourIso);
+    const nowHour = getHourInTimezone(hourIso, timezone);
     const surfaceNowRaw = Number.isFinite(nowHour)
         ? estimateWaterTempByPeriod({
             dailySurfaceTemp,
@@ -1358,7 +1358,7 @@ export function estimateWaterTempByPeriod({
         .map((timeValue, index) => {
             const hourIso = String(timeValue || '');
             const hourKey = getResolvedDayKey(hourIso, resolvedTimezone) || hourIso.slice(0, 10);
-            const hour = parseHourFromTimestamp(hourIso);
+            const hour = getHourInTimezone(hourIso, resolvedTimezone);
             return { index, hourKey, hour };
         })
         .filter((entry) => entry.hourKey === fallbackDateKey);
