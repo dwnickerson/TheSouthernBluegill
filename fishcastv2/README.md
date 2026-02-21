@@ -5,6 +5,7 @@ This directory is a standalone rebuild of FishCast architecture. It does **not**
 ## What changed in v2
 
 - Single `ForecastState` built once in `js/app/state.js`.
+- v2 controller fetches live Open-Meteo forecast (`current`, `hourly`, `daily`) with fixture fallback for resilience.
 - Single water-temperature pipeline in the state builder (compute once, render everywhere).
 - Timezone is explicit (`state.meta.timezone` from Open-Meteo payload).
 - UI is pure state rendering (`js/ui/render.js`) with no post-render recomputation.
@@ -39,4 +40,4 @@ Option B (direct file open):
 
 1. Keep `fishcastv2/` running side-by-side while validating parity.
 2. Replace existing page entrypoint to point at `fishcastv2/js/app/controller.js`.
-3. Migrate API wiring from fixture fetch to live weather service in one place (state builder input).
+3. Keep validating live API behavior and fixture fallback reliability as v2 matures.
