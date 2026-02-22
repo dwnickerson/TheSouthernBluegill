@@ -12,6 +12,17 @@ function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
 }
 
+function finiteOrNull(v) {
+  return Number.isFinite(v) ? v : null;
+}
+
+function firstFinite(...vals) {
+  for (const v of vals) {
+    if (Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
 function buildUrls({ lat, lon, pastDays, futureDays }) {
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 3600 * 1000);
@@ -61,17 +72,28 @@ function buildUrls({ lat, lon, pastDays, futureDays }) {
 }
 
 function buildSeries(archive, forecast) {
-  const mapDaily = (payload, source) => payload.daily.time.map((date, i) => ({
-    date,
-    source,
-    tMax: payload.daily.temperature_2m_max[i],
-    tMin: payload.daily.temperature_2m_min[i],
-    tMean: payload.daily.temperature_2m_mean[i],
-    precip: payload.daily.precipitation_sum[i],
-    windMax: payload.daily.windspeed_10m_max[i],
-    solar: payload.daily.shortwave_radiation_sum[i],
-    cloud: payload.daily.cloudcover_mean[i]
-  }));
+  const mapDaily = (payload, source) => payload.daily.time.map((date, i) => {
+    const tMax = finiteOrNull(payload.daily.temperature_2m_max[i]);
+    const tMin = finiteOrNull(payload.daily.temperature_2m_min[i]);
+    const tMeanRaw = finiteOrNull(payload.daily.temperature_2m_mean[i]);
+    const tMeanFallback = (Number.isFinite(tMax) && Number.isFinite(tMin)) ? (tMax + tMin) / 2 : null;
+    const windRaw = finiteOrNull(payload.daily.windspeed_10m_max[i]);
+    const precipRaw = finiteOrNull(payload.daily.precipitation_sum[i]);
+    const solarRaw = finiteOrNull(payload.daily.shortwave_radiation_sum[i]);
+    const cloudRaw = finiteOrNull(payload.daily.cloudcover_mean[i]);
+
+    return {
+      date,
+      source,
+      tMax,
+      tMin,
+      tMean: firstFinite(tMeanRaw, tMeanFallback),
+      precip: firstFinite(precipRaw, 0),
+      windMax: firstFinite(windRaw, 0),
+      solar: firstFinite(solarRaw, 0),
+      cloud: clamp(firstFinite(cloudRaw, 0), 0, 100)
+    };
+  });
 
   return [...mapDaily(archive, 'past'), ...mapDaily(forecast, 'future_or_today')];
 }
@@ -80,21 +102,33 @@ function computeModel(rows, { acres, depthFt, startWaterTemp }) {
   const areaFactor = 1 / (1 + acres / 12);
   const depthFactor = 1 / (1 + depthFt / 6);
   const alpha = clamp(0.3 * areaFactor * depthFactor, 0.03, 0.25);
+  const FREEZING_F_FRESH_WATER = 32;
 
-  let water = Number.isFinite(startWaterTemp) ? startWaterTemp : rows[0].tMean;
+  const initialRow = rows[0] || {};
+  const initialAir = firstFinite(initialRow.tMean, initialRow.tMax, initialRow.tMin, 55);
+  let water = Number.isFinite(startWaterTemp) ? startWaterTemp : initialAir;
+  water = clamp(water, FREEZING_F_FRESH_WATER, 100);
   return rows.map((r, idx) => {
-    const solarHeat = (r.solar || 0) * 0.0018;
-    const windCool = (r.windMax || 0) * 0.25;
-    const cloudCool = (r.cloud || 0) * 0.03;
-    const rainCool = (r.precip || 0) * 1.2;
-    const airBlend = 0.65 * r.tMean + 0.2 * r.tMax + 0.15 * r.tMin;
-    const equilibrium = airBlend + solarHeat - windCool - cloudCool - rainCool;
+    const tMean = firstFinite(r.tMean, r.tMax, r.tMin, water);
+    const tMax = firstFinite(r.tMax, tMean);
+    const tMin = firstFinite(r.tMin, tMean);
+    const solarHeat = firstFinite(r.solar, 0) * 0.0018;
+    const windCool = firstFinite(r.windMax, 0) * 0.25;
+    const cloudCool = firstFinite(r.cloud, 0) * 0.03;
+    const rainCool = firstFinite(r.precip, 0) * 1.2;
+    const airBlend = 0.65 * tMean + 0.2 * tMax + 0.15 * tMin;
+    const equilibriumRaw = airBlend + solarHeat - windCool - cloudCool - rainCool;
+    const equilibrium = clamp(equilibriumRaw, FREEZING_F_FRESH_WATER, 100);
 
     const prevWater = idx === 0 ? water : rows[idx - 1].waterEstimate;
     water = prevWater + alpha * (equilibrium - prevWater);
+    water = clamp(water, FREEZING_F_FRESH_WATER, 100);
 
     return {
       ...r,
+      tMean: round1(tMean),
+      tMax: round1(tMax),
+      tMin: round1(tMin),
       solarHeat: round1(solarHeat),
       windCool: round1(windCool),
       cloudCool: round1(cloudCool),
@@ -110,9 +144,12 @@ function computeModel(rows, { acres, depthFt, startWaterTemp }) {
 function applyCurrentAdjustment(rows, current) {
   const today = rows.find((r) => r.source === 'future_or_today');
   if (!today || !current) return rows;
-  const currentEffect = round1(0.35 * (current.temperature_2m - today.tMean) - 0.05 * current.windspeed_10m);
+  const currentAir = firstFinite(current.temperature_2m, null);
+  const currentWind = firstFinite(current.windspeed_10m, 0);
+  if (!Number.isFinite(currentAir) || !Number.isFinite(today.tMean)) return rows;
+  const currentEffect = round1(0.35 * (currentAir - today.tMean) - 0.05 * currentWind);
   today.currentEffect = currentEffect;
-  today.waterEstimate = round1(today.waterEstimate + currentEffect);
+  today.waterEstimate = round1(clamp(today.waterEstimate + currentEffect, 32, 100));
   return rows;
 }
 
