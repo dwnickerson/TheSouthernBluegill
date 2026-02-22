@@ -44,11 +44,18 @@
 
   <section class="card">
     <h2>Validation Inputs</h2>
-    <p class="muted">Enter measured water temps (°F) by date to compare against model results.</p>
+    <p class="muted">Enter measured water temps (°F) by date/time bucket (sunrise, midday, sunset) to compare against model results.</p>
     <div id="validationInputs"></div>
     <div class="card" style="margin-top:8px;">
       <h3 style="margin-top:0;">Add Past Validation Input</h3>
       <label>Date <input id="manualValidationDate" type="date"></label>
+      <label>Time Bucket
+        <select id="manualValidationSlot">
+          <option value="midday">Midday</option>
+          <option value="sunrise">Sunrise</option>
+          <option value="sunset">Sunset</option>
+        </select>
+      </label>
       <label>Observed °F <input id="manualValidationTemp" type="number" step="0.1" placeholder="e.g. 71.2"></label>
       <button id="addValidationPoint">Add validation point</button>
       <button id="clearValidationPoints">Clear saved points</button>
