@@ -17,14 +17,16 @@ This is a clean restart focused on one job:
 
 ## Formula (daily)
 
-- `currentEffect = 0.35*(currentAir - todayTmean) - 0.05*currentWind` (using instantaneous current wind for the intraday nudge)
-- mean daily wind increases effective exchange/mixing,
+- `daylightFraction = clamp(shortwaveRadiation / 35, 0.12, 1)` (proxy for how much of the day had active solar heating)
+- `airBlend = daytimeWeight*dayAir + overnightWeight*nightAir` where daytime/overnight weights depend on daylight fraction
+- `effectiveWind = meanDailyWind * (0.45 + 0.55*daylightFraction)` (reduces all-day wind overcooling on low-solar days)
+- `equilibrium = airBlend + solarHeat - windCool - cloudCool - rainCool`
 - `waterToday = waterYesterday + alpha*(equilibrium - waterYesterday)`
 - `alpha` depends on pond size/depth (smaller alpha = slower temperature response).
 
-Current conditions nudge today's result:
+Current conditions then nudge today:
 
-- `currentEffect = 0.35*(currentAir - todayTmean) - 0.05*currentWind`
+- `currentEffect = 0.35*(currentAir - todayTmean) - 0.03*currentWind*currentWindExposure`
 
 ## Run
 
