@@ -146,7 +146,12 @@ export async function buildForecastState({ coords, waterType, speciesKey, days, 
   };
 
   const nowPeriod = getNowPeriod(weather.hourly.time || [], context.nowHourIndex, timezone);
-  const surfaceNow = round1(today.periods[nowPeriod] ?? today.surfaceDaily ?? surfaceNowRaw);
+
+  // Keep "surface now" anchored to the model's real-time estimate (which can
+  // include observed calibration and current-hour forcing) rather than the
+  // derived sunrise/midday/sunset display buckets. Buckets are for intraday
+  // shape; they should not overwrite the current surface estimate.
+  const surfaceNow = round1(surfaceNowRaw ?? today.periods[nowPeriod] ?? today.surfaceDaily);
 
   const explainToday = await computeExplainTerms({ coords, waterType, date: nowDate, weatherPayload, context });
   const explainFuture = await Promise.all(
