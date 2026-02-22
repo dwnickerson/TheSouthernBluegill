@@ -13,9 +13,8 @@ This is a clean restart focused on one job:
 3. Computes a daily equilibrium signal from weather terms (air blend, solar warming, wind/cloud/rain cooling).
 4. Adds first-pass placeholders for missing physics: water clarity/turbidity, inflow/outflow exchange, sediment heat storage, and true mixed-layer depth.
 5. Updates pond temperature with depth/area response plus mixed-layer and flow turnover effects.
-6. Lets operator enter observed water temperatures with sunrise/midday/sunset buckets, save past validation inputs in browser storage, and reports model error (MAE).
-7. Applies a simple historical bias correction when saved validation points match past modeled dates.
-8. Renders all source data and all computed terms in one table.
+6. Lets operator enter observed water temperatures, save past validation inputs in browser storage, and reports model error (MAE).
+7. Renders all source data and all computed terms in one table.
 
 ## Formula (daily)
 
@@ -30,12 +29,6 @@ This is a clean restart focused on one job:
 Current conditions then nudge today:
 
 - `currentEffect = 0.35*(currentAir - todayTmean) - 0.03*currentWind*currentWindExposure`
-
-Validation slots and correction:
-
-- Daily forecast output is a blended daily estimate (closest to midday), not a fixed clock hour.
-- Validation buckets add a simple offset for comparison: sunrise `-1.2°F`, midday `0°F`, sunset `-0.4°F`.
-- If validation points align with past model dates, mean bias from those historical errors is applied as a correction to the run.
 
 ## Run
 
