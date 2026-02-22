@@ -103,25 +103,35 @@ function computeModel(rows, { acres, depthFt, startWaterTemp }) {
   const depthFactor = 1 / (1 + depthFt / 6);
   const alpha = clamp(0.08 + 0.35 * areaFactor * depthFactor, 0.06, 0.35);
   const FREEZING_F_FRESH_WATER = 32;
+  const MAX_DAILY_SOLAR_MJ_M2 = 35;
 
   const initialRow = rows[0] || {};
   const initialAir = firstFinite(initialRow.tMean, initialRow.tMax, initialRow.tMin, 55);
   let water = Number.isFinite(startWaterTemp) ? startWaterTemp : initialAir;
   water = clamp(water, FREEZING_F_FRESH_WATER, 100);
-  return rows.map((r, idx) => {
+
+  return rows.map((r) => {
     const tMean = firstFinite(r.tMean, r.tMax, r.tMin, water);
     const tMax = firstFinite(r.tMax, tMean);
     const tMin = firstFinite(r.tMin, tMean);
-    const solarHeat = firstFinite(r.solar, 0) * 0.0018;
+    const solar = firstFinite(r.solar, 0);
+    const daylightFraction = clamp(solar / MAX_DAILY_SOLAR_MJ_M2, 0.12, 1);
+    const solarHeat = solar * 0.0018;
     const windMph = firstFinite(r.windMean, 0);
-    const windCool = windMph * 0.25;
+    const windExposure = 0.45 + 0.55 * daylightFraction;
+    const effectiveWind = windMph * windExposure;
+    const windCool = effectiveWind * 0.25;
     const cloudCool = firstFinite(r.cloud, 0) * 0.03;
     const rainCool = firstFinite(r.precip, 0) * 1.2;
-    const airBlend = 0.65 * tMean + 0.2 * tMax + 0.15 * tMin;
+    const daytimeWeight = 0.35 + 0.45 * daylightFraction;
+    const overnightWeight = 1 - daytimeWeight;
+    const dayAir = 0.4 * tMean + 0.6 * tMax;
+    const nightAir = 0.7 * tMean + 0.3 * tMin;
+    const airBlend = daytimeWeight * dayAir + overnightWeight * nightAir;
     const equilibriumRaw = airBlend + solarHeat - windCool - cloudCool - rainCool;
     const equilibrium = clamp(equilibriumRaw, FREEZING_F_FRESH_WATER, 100);
 
-    const prevWater = idx === 0 ? water : rows[idx - 1].waterEstimate;
+    const prevWater = water;
     water = prevWater + alpha * (equilibrium - prevWater);
     water = clamp(water, FREEZING_F_FRESH_WATER, 100);
 
@@ -131,6 +141,8 @@ function computeModel(rows, { acres, depthFt, startWaterTemp }) {
       tMax: round1(tMax),
       tMin: round1(tMin),
       solarHeat: round1(solarHeat),
+      daylightFraction: round1(daylightFraction),
+      effectiveWind: round1(effectiveWind),
       windCool: round1(windCool),
       cloudCool: round1(cloudCool),
       rainCool: round1(rainCool),
@@ -148,7 +160,9 @@ function applyCurrentAdjustment(rows, current) {
   const currentAir = firstFinite(current.temperature_2m, null);
   const currentWind = firstFinite(current.windspeed_10m, 0);
   if (!Number.isFinite(currentAir) || !Number.isFinite(today.tMean)) return rows;
-  const currentEffect = round1(0.35 * (currentAir - today.tMean) - 0.05 * currentWind);
+  const daylightFraction = firstFinite(today.daylightFraction, 0.35);
+  const currentWindExposure = 0.35 + 0.65 * daylightFraction;
+  const currentEffect = round1(0.35 * (currentAir - today.tMean) - 0.03 * currentWind * currentWindExposure);
   today.currentEffect = currentEffect;
   today.waterEstimate = round1(clamp(today.waterEstimate + currentEffect, 32, 100));
   return rows;
@@ -170,10 +184,10 @@ function renderSummary({ label, acres, depth, rows, timezone, current }) {
 }
 
 function renderTable(rows) {
-  const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'Precip', 'Solar', 'Cloud', 'AirBlend', 'Solar+', 'Wind-', 'Cloud-', 'Rain-', 'Equilibrium', 'Alpha', 'WaterEst'];
+  const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'WindEff', 'DayFrac', 'Precip', 'Solar', 'Cloud', 'AirBlend', 'Solar+', 'Wind-', 'Cloud-', 'Rain-', 'Equilibrium', 'Alpha', 'WaterEst'];
   const body = rows.map((r) => `<tr>
     <td>${r.date}</td><td>${r.source}</td><td>${r.tMin}</td><td>${r.tMean}</td><td>${r.tMax}</td>
-    <td>${r.windMean}</td><td>${r.precip}</td><td>${r.solar}</td><td>${r.cloud}</td>
+    <td>${r.windMean}</td><td>${r.effectiveWind}</td><td>${r.daylightFraction}</td><td>${r.precip}</td><td>${r.solar}</td><td>${r.cloud}</td>
     <td>${r.airBlend}</td><td>${r.solarHeat}</td><td>${r.windCool}</td><td>${r.cloudCool}</td><td>${r.rainCool}</td>
     <td>${r.equilibrium}</td><td>${r.alpha}</td><td><strong>${r.waterEstimate}</strong></td>
   </tr>`).join('');
