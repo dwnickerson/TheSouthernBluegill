@@ -3,18 +3,54 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FishCast v2</title>
+  <title>FishCast v2 — Pond Water Temperature Prototype</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 24px; background: #f5f8fb; }
-    .summary-card, .day-card { background: #fff; border: 1px solid #d4deeb; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
-    .extended-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-    button { margin-right: 8px; }
-    pre { background: #1f2937; color: #f9fafb; padding: 12px; border-radius: 6px; overflow-x: auto; }
+    :root { color-scheme: light dark; }
+    body { font-family: Arial, sans-serif; margin: 16px; background: #f4f7fb; color: #111; }
+    .card { background: #fff; border: 1px solid #d2dbe8; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border: 1px solid #d2dbe8; padding: 6px; text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    input, button { padding: 6px; margin: 2px; }
+    .muted { color: #555; font-size: 13px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .ok { color: #0a7f2e; }
   </style>
 </head>
 <body>
-  <h1>FishCast v2 (state-first rebuild)</h1>
-  <div id="app">Loading…</div>
+  <h1>FishCast v2 Reset — Tupelo, MS Pond Prototype</h1>
+  <p class="muted">Simple model using <strong>past + present + future weather</strong> to estimate water temperature in a 4.9-acre pond (avg depth 8 ft).</p>
+
+  <section class="card">
+    <h2>Inputs</h2>
+    <div class="grid">
+      <label>Latitude <input id="lat" type="number" value="34.2576" step="0.0001"></label>
+      <label>Longitude <input id="lon" type="number" value="-88.7034" step="0.0001"></label>
+      <label>Location Label <input id="label" type="text" value="Tupelo, Mississippi pond"></label>
+      <label>Pond Area (acres) <input id="acres" type="number" value="4.9" step="0.1"></label>
+      <label>Avg Depth (ft) <input id="depth" type="number" value="8" step="0.1"></label>
+      <label>Past Days <input id="pastDays" type="number" value="7" min="3" max="30"></label>
+      <label>Future Days <input id="futureDays" type="number" value="7" min="1" max="14"></label>
+      <label>Starting Water Temp °F (optional) <input id="startWater" type="number" placeholder="auto from first past day"></label>
+    </div>
+    <button id="run">Run model</button>
+  </section>
+
+  <section class="card">
+    <h2>Validation Inputs</h2>
+    <p class="muted">Enter measured water temps (°F) by date to compare against model results.</p>
+    <div id="validationInputs"></div>
+    <button id="evaluate">Evaluate fit</button>
+    <p id="fitOut"></p>
+  </section>
+
+  <section class="card" id="summary"></section>
+  <section class="card">
+    <h2>Data + Calculation Trace</h2>
+    <p class="muted">Every row shows weather inputs and how each term changed the equilibrium and estimated water temperature.</p>
+    <div id="tableWrap"></div>
+  </section>
+
   <script type="module" src="./js/app/controller.js"></script>
 </body>
 </html>
