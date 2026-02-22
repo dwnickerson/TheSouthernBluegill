@@ -260,11 +260,21 @@ function renderManualValidationList() {
 }
 
 function renderValidationInputs(rows) {
-  const options = rows.slice(-10).map((r) => `
+  const eligibleRows = getValidationRows(rows);
+  const options = eligibleRows.slice(-10).map((r) => `
     <label>${r.date}: <input type="number" step="0.1" data-date="${r.date}" placeholder="observed °F"></label>
   `).join('');
   byId('validationInputs').innerHTML = options;
   renderManualValidationList();
+}
+
+function getValidationRows(rows) {
+  const firstForecastDate = rows.find((r) => r.source === 'future_or_today')?.date;
+  return rows.filter((r) => r.source === 'past' || r.date === firstForecastDate);
+}
+
+function getValidationDateSet(rows) {
+  return new Set(getValidationRows(rows).map((r) => r.date));
 }
 
 function getAllValidationInputs() {
@@ -289,7 +299,10 @@ function evaluateFit(rows) {
     return;
   }
 
-  const joined = obs.map((o) => {
+  const allowedDates = getValidationDateSet(rows);
+  const joined = obs
+    .filter((o) => allowedDates.has(o.date))
+    .map((o) => {
     const model = rows.find((r) => r.date === o.date)?.waterEstimate;
     return { ...o, model, err: round1(o.observed - model) };
   }).filter((r) => Number.isFinite(r.model));
@@ -343,8 +356,13 @@ runModel().catch(() => {});
 byId('addValidationPoint').addEventListener('click', () => {
   const date = byId('manualValidationDate').value;
   const observed = Number(byId('manualValidationTemp').value);
+  const todayIso = new Date().toISOString().slice(0, 10);
   if (!date || !Number.isFinite(observed)) {
     byId('fitOut').textContent = 'Enter a valid date and observed temperature before adding.';
+    return;
+  }
+  if (date > todayIso) {
+    byId('fitOut').textContent = 'Validation points must be today or earlier.';
     return;
   }
   const points = loadSavedValidationPoints().filter((p) => p.date !== date);
