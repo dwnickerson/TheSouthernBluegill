@@ -34,7 +34,7 @@ function buildUrls({ lat, lon, pastDays, futureDays }) {
     'temperature_2m_min',
     'temperature_2m_mean',
     'precipitation_sum',
-    'windspeed_10m_max',
+    'windspeed_10m_mean',
     'shortwave_radiation_sum',
     'cloudcover_mean'
   ].join(',');
@@ -77,7 +77,7 @@ function buildSeries(archive, forecast) {
     const tMin = finiteOrNull(payload.daily.temperature_2m_min[i]);
     const tMeanRaw = finiteOrNull(payload.daily.temperature_2m_mean[i]);
     const tMeanFallback = (Number.isFinite(tMax) && Number.isFinite(tMin)) ? (tMax + tMin) / 2 : null;
-    const windRaw = finiteOrNull(payload.daily.windspeed_10m_max[i]);
+    const windRaw = finiteOrNull(payload.daily.windspeed_10m_mean[i]);
     const precipRaw = finiteOrNull(payload.daily.precipitation_sum[i]);
     const solarRaw = finiteOrNull(payload.daily.shortwave_radiation_sum[i]);
     const cloudRaw = finiteOrNull(payload.daily.cloudcover_mean[i]);
@@ -89,7 +89,7 @@ function buildSeries(archive, forecast) {
       tMin,
       tMean: firstFinite(tMeanRaw, tMeanFallback),
       precip: firstFinite(precipRaw, 0),
-      windMax: firstFinite(windRaw, 0),
+      windMean: firstFinite(windRaw, 0),
       solar: firstFinite(solarRaw, 0),
       cloud: clamp(firstFinite(cloudRaw, 0), 0, 100)
     };
@@ -101,7 +101,7 @@ function buildSeries(archive, forecast) {
 function computeModel(rows, { acres, depthFt, startWaterTemp }) {
   const areaFactor = 1 / (1 + acres / 12);
   const depthFactor = 1 / (1 + depthFt / 6);
-  const alpha = clamp(0.3 * areaFactor * depthFactor, 0.03, 0.25);
+    const windMph = firstFinite(r.windMean, 0);
   const FREEZING_F_FRESH_WATER = 32;
 
   const initialRow = rows[0] || {};
@@ -172,7 +172,7 @@ function renderTable(rows) {
   const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'Precip', 'Solar', 'Cloud', 'AirBlend', 'Solar+', 'Wind-', 'Cloud-', 'Rain-', 'Equilibrium', 'Alpha', 'WaterEst'];
   const body = rows.map((r) => `<tr>
     <td>${r.date}</td><td>${r.source}</td><td>${r.tMin}</td><td>${r.tMean}</td><td>${r.tMax}</td>
-    <td>${r.windMax}</td><td>${r.precip}</td><td>${r.solar}</td><td>${r.cloud}</td>
+    <td>${r.windMean}</td><td>${r.precip}</td><td>${r.solar}</td><td>${r.cloud}</td>
     <td>${r.airBlend}</td><td>${r.solarHeat}</td><td>${r.windCool}</td><td>${r.cloudCool}</td><td>${r.rainCool}</td>
     <td>${r.equilibrium}</td><td>${r.alpha}</td><td><strong>${r.waterEstimate}</strong></td>
   </tr>`).join('');
