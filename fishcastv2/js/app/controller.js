@@ -262,7 +262,10 @@ function renderManualValidationList() {
 function renderValidationInputs(rows) {
   const eligibleRows = getValidationRows(rows);
   const options = eligibleRows.slice(-10).map((r) => `
-    <label>${r.date}: <input type="number" step="0.1" data-date="${r.date}" placeholder="observed °F"></label>
+    <div class="validation-row">
+      <label for="validation-${r.date}">${r.date}:</label>
+      <input id="validation-${r.date}" type="number" step="0.1" data-date="${r.date}" placeholder="observed °F">
+    </div>
   `).join('');
   byId('validationInputs').innerHTML = options;
   renderManualValidationList();
