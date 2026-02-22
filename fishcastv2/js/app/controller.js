@@ -101,7 +101,7 @@ function buildSeries(archive, forecast) {
 function computeModel(rows, { acres, depthFt, startWaterTemp }) {
   const areaFactor = 1 / (1 + acres / 12);
   const depthFactor = 1 / (1 + depthFt / 6);
-    const windMph = firstFinite(r.windMean, 0);
+  const alpha = clamp(0.08 + 0.35 * areaFactor * depthFactor, 0.06, 0.35);
   const FREEZING_F_FRESH_WATER = 32;
 
   const initialRow = rows[0] || {};
@@ -113,7 +113,8 @@ function computeModel(rows, { acres, depthFt, startWaterTemp }) {
     const tMax = firstFinite(r.tMax, tMean);
     const tMin = firstFinite(r.tMin, tMean);
     const solarHeat = firstFinite(r.solar, 0) * 0.0018;
-    const windCool = firstFinite(r.windMax, 0) * 0.25;
+    const windMph = firstFinite(r.windMean, 0);
+    const windCool = windMph * 0.25;
     const cloudCool = firstFinite(r.cloud, 0) * 0.03;
     const rainCool = firstFinite(r.precip, 0) * 1.2;
     const airBlend = 0.65 * tMean + 0.2 * tMax + 0.15 * tMin;
