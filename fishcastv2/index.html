@@ -15,6 +15,13 @@
     .muted { color: #555; font-size: 13px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
     .ok { color: #0a7f2e; }
+    #validationInputs { display: grid; gap: 8px; margin-top: 6px; }
+    .validation-row { display: grid; grid-template-columns: 220px minmax(180px, 260px); align-items: center; gap: 10px; }
+    .validation-row label { margin: 0; }
+    .validation-row input { width: 100%; }
+    @media (max-width: 640px) {
+      .validation-row { grid-template-columns: 1fr; gap: 4px; }
+    }
   </style>
 </head>
 <body>
