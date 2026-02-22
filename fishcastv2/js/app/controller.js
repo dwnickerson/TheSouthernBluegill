@@ -98,13 +98,21 @@ function buildSeries(archive, forecast) {
   return [...mapDaily(archive, 'past'), ...mapDaily(forecast, 'future_or_today')];
 }
 
-function computeModel(rows, { acres, depthFt, startWaterTemp, obsDepthFt }) {
+function computeModel(rows, { acres, depthFt, startWaterTemp, obsDepthFt, turbidityNtu, inflowCfs, outflowCfs, sedimentFactor, mixedLayerDepthFt }) {
   const areaFactor = 1 / (1 + acres / 12);
   const depthFactor = 1 / (1 + depthFt / 6);
   const alpha = clamp(0.08 + 0.35 * areaFactor * depthFactor, 0.06, 0.35);
   const observationDepthFt = clamp(firstFinite(obsDepthFt, 0), 0, Math.max(depthFt, 0.1));
   const depthRatio = clamp(depthFt > 0 ? observationDepthFt / depthFt : 0, 0, 1);
   const depthWarmBias = clamp(2.4 * (0.5 - depthRatio), -1.2, 1.8);
+  const mixedDepth = clamp(firstFinite(mixedLayerDepthFt, depthFt * 0.5, 1), 0.2, Math.max(depthFt, 0.2));
+  const mixedLayerRatio = clamp(depthFt > 0 ? mixedDepth / depthFt : 1, 0.1, 1);
+  const mixedLayerAlphaBoost = clamp(1 / Math.sqrt(mixedLayerRatio), 0.9, 2.2);
+  const clarityNtu = clamp(firstFinite(turbidityNtu, 18), 0, 300);
+  const clarityFactor = clamp(1.08 - clarityNtu / 250, 0.25, 1.15);
+  const netFlowCfs = firstFinite(inflowCfs, 0) - firstFinite(outflowCfs, 0);
+  const flowTurnover = clamp(Math.abs(netFlowCfs) / Math.max(acres * depthFt, 0.5), 0, 0.3);
+  const sediment = clamp(firstFinite(sedimentFactor, 0.45), 0, 1);
   const FREEZING_F_FRESH_WATER = 32;
   const MAX_DAILY_SOLAR_MJ_M2 = 35;
 
@@ -119,7 +127,7 @@ function computeModel(rows, { acres, depthFt, startWaterTemp, obsDepthFt }) {
     const tMin = firstFinite(r.tMin, tMean);
     const solar = firstFinite(r.solar, 0);
     const daylightFraction = clamp(solar / MAX_DAILY_SOLAR_MJ_M2, 0.12, 1);
-    const solarHeat = solar * 0.0018;
+    const solarHeat = solar * 0.0018 * clarityFactor;
     const windMph = firstFinite(r.windMean, 0);
     const windExposure = 0.45 + 0.55 * daylightFraction;
     const effectiveWind = windMph * windExposure;
@@ -131,11 +139,15 @@ function computeModel(rows, { acres, depthFt, startWaterTemp, obsDepthFt }) {
     const dayAir = 0.4 * tMean + 0.6 * tMax;
     const nightAir = 0.7 * tMean + 0.3 * tMin;
     const airBlend = daytimeWeight * dayAir + overnightWeight * nightAir;
-    const equilibriumRaw = airBlend + solarHeat - windCool - cloudCool - rainCool;
+    const flowTempPull = netFlowCfs * 1.4;
+    const equilibriumRaw = airBlend + solarHeat - windCool - cloudCool - rainCool + flowTempPull;
     const equilibrium = clamp(equilibriumRaw, FREEZING_F_FRESH_WATER, 100);
 
     const prevWater = water;
-    water = prevWater + alpha * (equilibrium - prevWater);
+    const sedimentLag = (0.28 + 0.32 * sediment) * prevWater + (0.72 - 0.32 * sediment) * equilibrium;
+    const equilibriumWithSediment = clamp(sedimentLag, FREEZING_F_FRESH_WATER, 100);
+    const mixedLayerAlpha = clamp(alpha * mixedLayerAlphaBoost * (1 + 0.35 * flowTurnover), 0.05, 0.65);
+    water = prevWater + mixedLayerAlpha * (equilibriumWithSediment - prevWater);
     water = clamp(water, FREEZING_F_FRESH_WATER, 100);
 
     return {
@@ -152,6 +164,15 @@ function computeModel(rows, { acres, depthFt, startWaterTemp, obsDepthFt }) {
       airBlend: round1(airBlend),
       equilibrium: round1(equilibrium),
       alpha: round1(alpha),
+      mixedLayerAlpha: round1(mixedLayerAlpha),
+      mixedLayerDepthFt: round1(mixedDepth),
+      mixedLayerRatio: round1(mixedLayerRatio),
+      clarityFactor: round1(clarityFactor),
+      flowTurnover: round1(flowTurnover),
+      netFlowCfs: round1(netFlowCfs),
+      sedimentFactor: round1(sediment),
+      flowTempPull: round1(flowTempPull),
+      equilibriumWithSediment: round1(equilibriumWithSediment),
       waterEstimateBulk: round1(water),
       depthWarmBias: round1(depthWarmBias),
       waterEstimate: round1(clamp(water + depthWarmBias, FREEZING_F_FRESH_WATER, 100))
@@ -176,7 +197,7 @@ function applyCurrentAdjustment(rows, current) {
   return rows;
 }
 
-function renderSummary({ label, acres, depth, obsDepth, rows, timezone, current }) {
+function renderSummary({ label, acres, depth, obsDepth, rows, timezone, current, turbidity, inflow, outflow, sediment, mixedDepth }) {
   const past = rows.filter((r) => r.source === 'past');
   const future = rows.filter((r) => r.source === 'future_or_today');
   const latest = future[0] || rows[rows.length - 1];
@@ -190,20 +211,52 @@ function renderSummary({ label, acres, depth, obsDepth, rows, timezone, current 
     <p class="muted">Current weather used: air ${round1(current?.temperature_2m)} °F, wind ${round1(current?.windspeed_10m)} mph, cloud ${round1(current?.cloudcover)}%.</p>
     <p class="muted">Wind is actual now (hourly snapshot) for the grid cell, not your on-pond instantaneous reading. It is converted to a same-day cooling adjustment.</p>
     <p class="muted">Rows in model: past=${past.length}, future/today=${future.length}.</p>
-    <p class="muted">What is still missing: hourly solar/wind history, water clarity/turbidity, inflow/outflow, sediment heat storage, and true mixed-layer depth. Adding past observations will calibrate these unknowns.</p>
+    <p class="muted">Extended terms enabled: turbidity ${turbidity} NTU, inflow ${inflow} cfs, outflow ${outflow} cfs, sediment factor ${sediment}, mixed-layer depth ${mixedDepth} ft.</p>
+    <p class="muted">Calibration hint: add historical validation observations to tune clarity, flow, sediment, and mixed-layer coefficients.</p>
   `;
 }
 
 function renderTable(rows) {
-  const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'WindEff', 'DayFrac', 'Precip', 'Solar', 'Cloud', 'AirBlend', 'Solar+', 'Wind-', 'Cloud-', 'Rain-', 'Equilibrium', 'Alpha', 'WaterBulk', 'DepthBias', 'WaterEst'];
+  const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'WindEff', 'DayFrac', 'Precip', 'Solar', 'Cloud', 'AirBlend', 'Solar+', 'Wind-', 'Cloud-', 'Rain-', 'FlowΔ', 'Equilibrium', 'Eq+Sed', 'Alpha', 'MixAlpha', 'MixDepth', 'Clarity', 'Turnover', 'WaterBulk', 'DepthBias', 'WaterEst'];
   const body = rows.map((r) => `<tr>
     <td>${r.date}</td><td>${r.source}</td><td>${r.tMin}</td><td>${r.tMean}</td><td>${r.tMax}</td>
     <td>${r.windMean}</td><td>${r.effectiveWind}</td><td>${r.daylightFraction}</td><td>${r.precip}</td><td>${r.solar}</td><td>${r.cloud}</td>
-    <td>${r.airBlend}</td><td>${r.solarHeat}</td><td>${r.windCool}</td><td>${r.cloudCool}</td><td>${r.rainCool}</td>
-    <td>${r.equilibrium}</td><td>${r.alpha}</td><td>${r.waterEstimateBulk}</td><td>${r.depthWarmBias}</td><td><strong>${r.waterEstimate}</strong></td>
+    <td>${r.airBlend}</td><td>${r.solarHeat}</td><td>${r.windCool}</td><td>${r.cloudCool}</td><td>${r.rainCool}</td><td>${r.flowTempPull}</td>
+    <td>${r.equilibrium}</td><td>${r.equilibriumWithSediment}</td><td>${r.alpha}</td><td>${r.mixedLayerAlpha}</td><td>${r.mixedLayerDepthFt}</td><td>${r.clarityFactor}</td><td>${r.flowTurnover}</td><td>${r.waterEstimateBulk}</td><td>${r.depthWarmBias}</td><td><strong>${r.waterEstimate}</strong></td>
   </tr>`).join('');
 
   byId('tableWrap').innerHTML = `<table><thead><tr>${header.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+const VALIDATION_STORE_KEY = 'fishcastv2.validationHistory';
+
+function loadSavedValidationPoints() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(VALIDATION_STORE_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.filter((r) => typeof r?.date === 'string' && Number.isFinite(Number(r?.observed))).map((r) => ({ date: r.date, observed: Number(r.observed) })) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveValidationPoints(points) {
+  localStorage.setItem(VALIDATION_STORE_KEY, JSON.stringify(points));
+}
+
+function renderManualValidationList() {
+  const points = loadSavedValidationPoints().sort((a, b) => a.date.localeCompare(b.date));
+  byId('manualValidationList').innerHTML = points.length
+    ? `<ul>${points.map((p, i) => `<li>${p.date}: ${round1(p.observed)} °F <button data-remove-index="${i}">Remove</button></li>`).join('')}</ul>`
+    : '<p class="muted">No saved past validation inputs yet.</p>';
+
+  [...document.querySelectorAll('#manualValidationList button[data-remove-index]')].forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.removeIndex);
+      const next = loadSavedValidationPoints().sort((a, b) => a.date.localeCompare(b.date)).filter((_, i) => i !== idx);
+      saveValidationPoints(next);
+      renderManualValidationList();
+    });
+  });
 }
 
 function renderValidationInputs(rows) {
@@ -211,13 +264,25 @@ function renderValidationInputs(rows) {
     <label>${r.date}: <input type="number" step="0.1" data-date="${r.date}" placeholder="observed °F"></label>
   `).join('');
   byId('validationInputs').innerHTML = options;
+  renderManualValidationList();
+}
+
+function getAllValidationInputs() {
+  const inlineInputs = [...document.querySelectorAll('#validationInputs input[data-date]')]
+    .map((el) => ({ date: el.dataset.date, observed: Number(el.value) }))
+    .filter((r) => Number.isFinite(r.observed));
+
+  const saved = loadSavedValidationPoints();
+  const deduped = new Map();
+  [...saved, ...inlineInputs].forEach((p) => {
+    deduped.set(p.date, { date: p.date, observed: p.observed });
+  });
+
+  return [...deduped.values()];
 }
 
 function evaluateFit(rows) {
-  const inputs = [...document.querySelectorAll('#validationInputs input[data-date]')];
-  const obs = inputs
-    .map((el) => ({ date: el.dataset.date, observed: Number(el.value) }))
-    .filter((r) => Number.isFinite(r.observed));
+  const obs = getAllValidationInputs();
 
   if (!obs.length) {
     byId('fitOut').textContent = 'No observations entered yet.';
@@ -228,6 +293,11 @@ function evaluateFit(rows) {
     const model = rows.find((r) => r.date === o.date)?.waterEstimate;
     return { ...o, model, err: round1(o.observed - model) };
   }).filter((r) => Number.isFinite(r.model));
+
+  if (!joined.length) {
+    byId('fitOut').textContent = 'No matching model dates for the validation points entered.';
+    return;
+  }
 
   const mae = round1(joined.reduce((s, r) => s + Math.abs(r.err), 0) / joined.length);
   byId('fitOut').textContent = `Validation points: ${joined.length} | Mean absolute error: ${mae} °F | Details: ${joined.map((r) => `${r.date} err=${r.err}`).join(', ')}`;
@@ -240,6 +310,11 @@ async function runModel() {
   const acres = Number(byId('acres').value);
   const depth = Number(byId('depth').value);
   const obsDepth = Number(byId('obsDepth').value);
+  const turbidity = Number(byId('turbidity').value);
+  const inflow = Number(byId('inflow').value);
+  const outflow = Number(byId('outflow').value);
+  const sediment = Number(byId('sediment').value);
+  const mixedDepth = Number(byId('mixedDepth').value);
   const pastDays = Number(byId('pastDays').value);
   const futureDays = Number(byId('futureDays').value);
   const startWaterTemp = Number(byId('startWater').value);
@@ -249,11 +324,11 @@ async function runModel() {
   const [forecastData, archiveData] = await Promise.all([forecastRes.json(), archiveRes.json()]);
 
   let rows = buildSeries(archiveData, forecastData);
-  rows = computeModel(rows, { acres, depthFt: depth, startWaterTemp, obsDepthFt: obsDepth });
+  rows = computeModel(rows, { acres, depthFt: depth, startWaterTemp, obsDepthFt: obsDepth, turbidityNtu: turbidity, inflowCfs: inflow, outflowCfs: outflow, sedimentFactor: sediment, mixedLayerDepthFt: mixedDepth });
   rows = applyCurrentAdjustment(rows, forecastData.current);
 
   window.__fishcastv2Rows = rows;
-  renderSummary({ label, acres, depth, obsDepth, rows, timezone: forecastData.timezone, current: forecastData.current });
+  renderSummary({ label, acres, depth, obsDepth, rows, timezone: forecastData.timezone, current: forecastData.current, turbidity, inflow, outflow, sediment, mixedDepth });
   renderTable(rows);
   renderValidationInputs(rows);
 }
@@ -264,3 +339,22 @@ byId('run').addEventListener('click', () => runModel().catch((e) => {
 byId('evaluate').addEventListener('click', () => evaluateFit(window.__fishcastv2Rows || []));
 
 runModel().catch(() => {});
+
+byId('addValidationPoint').addEventListener('click', () => {
+  const date = byId('manualValidationDate').value;
+  const observed = Number(byId('manualValidationTemp').value);
+  if (!date || !Number.isFinite(observed)) {
+    byId('fitOut').textContent = 'Enter a valid date and observed temperature before adding.';
+    return;
+  }
+  const points = loadSavedValidationPoints().filter((p) => p.date !== date);
+  points.push({ date, observed });
+  saveValidationPoints(points);
+  byId('manualValidationTemp').value = '';
+  renderManualValidationList();
+});
+
+byId('clearValidationPoints').addEventListener('click', () => {
+  saveValidationPoints([]);
+  renderManualValidationList();
+});
