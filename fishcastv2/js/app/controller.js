@@ -98,10 +98,13 @@ function buildSeries(archive, forecast) {
   return [...mapDaily(archive, 'past'), ...mapDaily(forecast, 'future_or_today')];
 }
 
-function computeModel(rows, { acres, depthFt, startWaterTemp }) {
+function computeModel(rows, { acres, depthFt, startWaterTemp, obsDepthFt }) {
   const areaFactor = 1 / (1 + acres / 12);
   const depthFactor = 1 / (1 + depthFt / 6);
   const alpha = clamp(0.08 + 0.35 * areaFactor * depthFactor, 0.06, 0.35);
+  const observationDepthFt = clamp(firstFinite(obsDepthFt, 0), 0, Math.max(depthFt, 0.1));
+  const depthRatio = clamp(depthFt > 0 ? observationDepthFt / depthFt : 0, 0, 1);
+  const depthWarmBias = clamp(2.4 * (0.5 - depthRatio), -1.2, 1.8);
   const FREEZING_F_FRESH_WATER = 32;
   const MAX_DAILY_SOLAR_MJ_M2 = 35;
 
@@ -149,7 +152,9 @@ function computeModel(rows, { acres, depthFt, startWaterTemp }) {
       airBlend: round1(airBlend),
       equilibrium: round1(equilibrium),
       alpha: round1(alpha),
-      waterEstimate: round1(water)
+      waterEstimateBulk: round1(water),
+      depthWarmBias: round1(depthWarmBias),
+      waterEstimate: round1(clamp(water + depthWarmBias, FREEZING_F_FRESH_WATER, 100))
     };
   });
 }
@@ -162,13 +167,16 @@ function applyCurrentAdjustment(rows, current) {
   if (!Number.isFinite(currentAir) || !Number.isFinite(today.tMean)) return rows;
   const daylightFraction = firstFinite(today.daylightFraction, 0.35);
   const currentWindExposure = 0.35 + 0.65 * daylightFraction;
-  const currentEffect = round1(0.35 * (currentAir - today.tMean) - 0.03 * currentWind * currentWindExposure);
+  const windCoolingNow = 0.03 * currentWind * currentWindExposure;
+  const currentEffect = round1(0.35 * (currentAir - today.tMean) - windCoolingNow);
+  today.currentWindExposure = round1(currentWindExposure);
+  today.currentWindCooling = round1(windCoolingNow);
   today.currentEffect = currentEffect;
   today.waterEstimate = round1(clamp(today.waterEstimate + currentEffect, 32, 100));
   return rows;
 }
 
-function renderSummary({ label, acres, depth, rows, timezone, current }) {
+function renderSummary({ label, acres, depth, obsDepth, rows, timezone, current }) {
   const past = rows.filter((r) => r.source === 'past');
   const future = rows.filter((r) => r.source === 'future_or_today');
   const latest = future[0] || rows[rows.length - 1];
@@ -176,20 +184,23 @@ function renderSummary({ label, acres, depth, rows, timezone, current }) {
     <h2>Summary</h2>
     <p><strong>${label}</strong> | Timezone: ${timezone}</p>
     <p>Pond geometry: ${acres} acres, avg depth ${depth} ft.</p>
+    <p class="muted">Reported measurement depth: ${obsDepth} ft (used to estimate near-surface vs whole-pond temperature offset).</p>
     <p><strong>Estimated water temp now:</strong> <span class="ok">${latest?.waterEstimate ?? '--'} °F</span></p>
     <p class="muted">Model sequence: past daily weather initializes thermal state → current weather nudges today's estimate → future daily weather projects forward.</p>
     <p class="muted">Current weather used: air ${round1(current?.temperature_2m)} °F, wind ${round1(current?.windspeed_10m)} mph, cloud ${round1(current?.cloudcover)}%.</p>
+    <p class="muted">Wind is actual now (hourly snapshot) for the grid cell, not your on-pond instantaneous reading. It is converted to a same-day cooling adjustment.</p>
     <p class="muted">Rows in model: past=${past.length}, future/today=${future.length}.</p>
+    <p class="muted">What is still missing: hourly solar/wind history, water clarity/turbidity, inflow/outflow, sediment heat storage, and true mixed-layer depth. Adding past observations will calibrate these unknowns.</p>
   `;
 }
 
 function renderTable(rows) {
-  const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'WindEff', 'DayFrac', 'Precip', 'Solar', 'Cloud', 'AirBlend', 'Solar+', 'Wind-', 'Cloud-', 'Rain-', 'Equilibrium', 'Alpha', 'WaterEst'];
+  const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'WindEff', 'DayFrac', 'Precip', 'Solar', 'Cloud', 'AirBlend', 'Solar+', 'Wind-', 'Cloud-', 'Rain-', 'Equilibrium', 'Alpha', 'WaterBulk', 'DepthBias', 'WaterEst'];
   const body = rows.map((r) => `<tr>
     <td>${r.date}</td><td>${r.source}</td><td>${r.tMin}</td><td>${r.tMean}</td><td>${r.tMax}</td>
     <td>${r.windMean}</td><td>${r.effectiveWind}</td><td>${r.daylightFraction}</td><td>${r.precip}</td><td>${r.solar}</td><td>${r.cloud}</td>
     <td>${r.airBlend}</td><td>${r.solarHeat}</td><td>${r.windCool}</td><td>${r.cloudCool}</td><td>${r.rainCool}</td>
-    <td>${r.equilibrium}</td><td>${r.alpha}</td><td><strong>${r.waterEstimate}</strong></td>
+    <td>${r.equilibrium}</td><td>${r.alpha}</td><td>${r.waterEstimateBulk}</td><td>${r.depthWarmBias}</td><td><strong>${r.waterEstimate}</strong></td>
   </tr>`).join('');
 
   byId('tableWrap').innerHTML = `<table><thead><tr>${header.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
@@ -228,6 +239,7 @@ async function runModel() {
   const label = byId('label').value;
   const acres = Number(byId('acres').value);
   const depth = Number(byId('depth').value);
+  const obsDepth = Number(byId('obsDepth').value);
   const pastDays = Number(byId('pastDays').value);
   const futureDays = Number(byId('futureDays').value);
   const startWaterTemp = Number(byId('startWater').value);
@@ -237,11 +249,11 @@ async function runModel() {
   const [forecastData, archiveData] = await Promise.all([forecastRes.json(), archiveRes.json()]);
 
   let rows = buildSeries(archiveData, forecastData);
-  rows = computeModel(rows, { acres, depthFt: depth, startWaterTemp });
+  rows = computeModel(rows, { acres, depthFt: depth, startWaterTemp, obsDepthFt: obsDepth });
   rows = applyCurrentAdjustment(rows, forecastData.current);
 
   window.__fishcastv2Rows = rows;
-  renderSummary({ label, acres, depth, rows, timezone: forecastData.timezone, current: forecastData.current });
+  renderSummary({ label, acres, depth, obsDepth, rows, timezone: forecastData.timezone, current: forecastData.current });
   renderTable(rows);
   renderValidationInputs(rows);
 }
