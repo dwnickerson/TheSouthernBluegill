@@ -8,6 +8,13 @@ function round1(n) {
   return Number.isFinite(n) ? Math.round(n * 10) / 10 : null;
 }
 
+function parseOptionalNumberInput(id) {
+  const raw = byId(id)?.value;
+  if (typeof raw !== 'string' || raw.trim() === '') return null;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : null;
+}
+
 function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
 }
@@ -299,7 +306,7 @@ function getAllValidationInputs() {
 
 
 function computeValidationBias(rows, points) {
-  if (!points.length) return null;
+  if (points.length < 2) return null;
   const slotOffsets = { sunrise: -1.2, midday: 0, sunset: -0.4 };
   const errors = points
     .map((o) => {
@@ -313,8 +320,9 @@ function computeValidationBias(rows, points) {
     })
     .filter((v) => Number.isFinite(v));
 
-  if (!errors.length) return null;
-  return round1(errors.reduce((sum, err) => sum + err, 0) / errors.length);
+  if (errors.length < 2) return null;
+  const meanError = errors.reduce((sum, err) => sum + err, 0) / errors.length;
+  return round1(clamp(meanError, -8, 8));
 }
 
 function applyValidationBias(rows, points) {
@@ -382,7 +390,7 @@ async function runModel() {
   const mixedDepth = Number(byId('mixedDepth').value);
   const pastDays = Number(byId('pastDays').value);
   const futureDays = Number(byId('futureDays').value);
-  const startWaterTemp = Number(byId('startWater').value);
+  const startWaterTemp = parseOptionalNumberInput('startWater');
 
   const { forecast, archive } = buildUrls({ lat, lon, pastDays, futureDays });
   const [forecastRes, archiveRes] = await Promise.all([fetch(forecast), fetch(archive)]);
