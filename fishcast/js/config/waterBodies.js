@@ -8,7 +8,9 @@ export const WATER_BODIES_V2 = {
         thermocline_depth: 8,          // Feet - where temp drops rapidly
         max_daily_change: 3,           // Max °F change per day
         deep_stable_temp: 55,          // Bottom temp in summer
-        mixing_wind_threshold: 5       // mph - when wind starts mixing layers
+        mixing_wind_threshold: 5,      // mph - when wind starts mixing layers
+        wind_reduction_factor: 0.68,   // 0-1 sheltering factor for on-pond effective wind
+        evaporation_multiplier: 0.85   // Scales latent heat/evaporative cooling intensity
     },
     lake: {
         thermal_lag_days: 10,
@@ -17,7 +19,9 @@ export const WATER_BODIES_V2 = {
         thermocline_depth: 15,
         max_daily_change: 2,
         deep_stable_temp: 50,
-        mixing_wind_threshold: 8
+        mixing_wind_threshold: 8,
+        wind_reduction_factor: 0.8,
+        evaporation_multiplier: 1
     },
     reservoir: {
         thermal_lag_days: 14,
@@ -26,6 +30,8 @@ export const WATER_BODIES_V2 = {
         thermocline_depth: 25,
         max_daily_change: 1.5,
         deep_stable_temp: 45,
-        mixing_wind_threshold: 10
+        mixing_wind_threshold: 10,
+        wind_reduction_factor: 0.9,
+        evaporation_multiplier: 1
     }
 };

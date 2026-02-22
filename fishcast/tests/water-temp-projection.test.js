@@ -396,3 +396,60 @@ test('Tupelo late-winter sequence keeps pond and lake extended projections physi
   const lakeRange = Math.max(...lakeProjected) - Math.min(...lakeProjected);
   assert.ok(lakeRange < pondRange, `lake range should be narrower than pond (${lakeRange.toFixed(2)} vs ${pondRange.toFixed(2)}°F)`);
 });
+
+test('high-wind pond projection remains bounded with sheltering defaults', () => {
+  const forecast = {
+    daily: {
+      ...forecastDailyTemplate,
+      temperature_2m_mean: [62, 58, 58, 59, 60, 60],
+      cloud_cover_mean: [68, 70, 68, 66, 64, 62],
+      wind_speed_10m_mean: [12, 24, 18, 16, 14, 12],
+      wind_speed_10m_max: [20, 40, 30, 26, 24, 20]
+    }
+  };
+
+  const pondProjected = projectWaterTemps(70, forecast, 'pond', 34.5, {
+    anchorDate: new Date('2026-02-22T12:00:00Z')
+  });
+
+  const pondDay1Drop = pondProjected[1] - pondProjected[0];
+  assert.ok(pondDay1Drop >= -4.2, `pond day-1 cooling should stay bounded under windy fronts, got ${pondDay1Drop.toFixed(2)}°F`);
+  assert.ok(Number.isFinite(pondProjected[1]), 'pond high-wind day should still return finite projection');
+});
+
+test('pond evaporation multiplier reduces dry-wind evaporative cooling vs lake defaults', () => {
+  const forecast = {
+    daily: {
+      ...forecastDailyTemplate,
+      temperature_2m_mean: [73, 71, 71, 72, 72, 72],
+      cloud_cover_mean: [20, 18, 22, 24, 26, 28],
+      wind_speed_10m_mean: [10, 14, 12, 11, 10, 10],
+      wind_speed_10m_max: [16, 22, 20, 18, 16, 16]
+    },
+    hourly: {
+      time: ['2026-06-01T00:00:00Z', '2026-06-01T12:00:00Z', '2026-06-02T00:00:00Z', '2026-06-02T12:00:00Z'],
+      relative_humidity_2m: [35, 38, 34, 36],
+      wind_speed_10m: [12, 15, 12, 14],
+      cloud_cover: [20, 15, 22, 25],
+      weather_code: [1, 1, 1, 1],
+      precipitation_probability: [0, 0, 0, 0],
+      surface_pressure: [1015, 1014, 1013, 1013]
+    },
+    current: {
+      relative_humidity_2m: 36,
+      wind_speed_10m: 13,
+      weather_code: 1,
+      precipitation: 0,
+      temperature_2m: 73
+    }
+  };
+
+  const pondProjected = projectWaterTemps(74, forecast, 'pond', 34.2, {
+    anchorDate: new Date('2026-06-01T12:00:00Z')
+  });
+  const pondDay1Drop = pondProjected[1] - pondProjected[0];
+  assert.ok(Number.isFinite(pondDay1Drop), 'pond projection should remain finite under dry/windy forcing');
+  assert.ok(pondDay1Drop >= -2.0, `reduced latent term should prevent excessive day-1 pond cooling, got ${pondDay1Drop.toFixed(2)}°F`);
+});
+
+
