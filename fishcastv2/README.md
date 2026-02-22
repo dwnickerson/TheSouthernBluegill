@@ -17,8 +17,8 @@ This is a clean restart focused on one job:
 
 ## Formula (daily)
 
-- `airBlend = 0.65*Tmean + 0.20*Tmax + 0.15*Tmin`
-- `equilibrium = airBlend + solarHeat - windCool - cloudCool - rainCool`
+- `currentEffect = 0.35*(currentAir - todayTmean) - 0.05*currentWind` (using instantaneous current wind for the intraday nudge)
+- mean daily wind increases effective exchange/mixing,
 - `waterToday = waterYesterday + alpha*(equilibrium - waterYesterday)`
 - `alpha` depends on pond size/depth (smaller alpha = slower temperature response).
 
