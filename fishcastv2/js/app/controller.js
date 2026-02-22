@@ -197,7 +197,7 @@ function applyCurrentAdjustment(rows, current) {
   return rows;
 }
 
-function renderSummary({ label, acres, depth, obsDepth, rows, timezone, current, turbidity, inflow, outflow, sediment, mixedDepth }) {
+function renderSummary({ label, acres, depth, obsDepth, rows, timezone, current, turbidity, inflow, outflow, sediment, mixedDepth, biasResult }) {
   const past = rows.filter((r) => r.source === 'past');
   const future = rows.filter((r) => r.source === 'future_or_today');
   const latest = future[0] || rows[rows.length - 1];
@@ -208,11 +208,13 @@ function renderSummary({ label, acres, depth, obsDepth, rows, timezone, current,
     <p class="muted">Reported measurement depth: ${obsDepth} ft (used to estimate near-surface vs whole-pond temperature offset).</p>
     <p><strong>Estimated water temp now:</strong> <span class="ok">${latest?.waterEstimate ?? '--'} °F</span></p>
     <p class="muted">Model sequence: past daily weather initializes thermal state → current weather nudges today's estimate → future daily weather projects forward.</p>
+    <p class="muted">Future water temperatures are modeled as a daily blended value (closest to midday), not a specific clock hour.</p>
     <p class="muted">Current weather used: air ${round1(current?.temperature_2m)} °F, wind ${round1(current?.windspeed_10m)} mph, cloud ${round1(current?.cloudcover)}%.</p>
     <p class="muted">Wind is actual now (hourly snapshot) for the grid cell, not your on-pond instantaneous reading. It is converted to a same-day cooling adjustment.</p>
     <p class="muted">Rows in model: past=${past.length}, future/today=${future.length}.</p>
     <p class="muted">Extended terms enabled: turbidity ${turbidity} NTU, inflow ${inflow} cfs, outflow ${outflow} cfs, sediment factor ${sediment}, mixed-layer depth ${mixedDepth} ft.</p>
     <p class="muted">Calibration hint: add historical validation observations to tune clarity, flow, sediment, and mixed-layer coefficients.</p>
+    <p class="muted">Validation bias correction: ${Number.isFinite(biasResult?.bias) ? `${biasResult.bias} °F applied using ${biasResult.pointsUsed} historical point(s).` : 'none applied (need historical points matching past modeled dates).'}</p>
   `;
 }
 
@@ -230,10 +232,19 @@ function renderTable(rows) {
 
 const VALIDATION_STORE_KEY = 'fishcastv2.validationHistory';
 
+function normalizeValidationSlot(slot) {
+  if (slot === 'sunrise' || slot === 'midday' || slot === 'sunset') return slot;
+  return 'midday';
+}
+
 function loadSavedValidationPoints() {
   try {
     const parsed = JSON.parse(localStorage.getItem(VALIDATION_STORE_KEY) || '[]');
-    return Array.isArray(parsed) ? parsed.filter((r) => typeof r?.date === 'string' && Number.isFinite(Number(r?.observed))).map((r) => ({ date: r.date, observed: Number(r.observed) })) : [];
+    return Array.isArray(parsed)
+      ? parsed
+        .filter((r) => typeof r?.date === 'string' && Number.isFinite(Number(r?.observed)))
+        .map((r) => ({ date: r.date, observed: Number(r.observed), slot: normalizeValidationSlot(r.slot) }))
+      : [];
   } catch {
     return [];
   }
@@ -246,7 +257,7 @@ function saveValidationPoints(points) {
 function renderManualValidationList() {
   const points = loadSavedValidationPoints().sort((a, b) => a.date.localeCompare(b.date));
   byId('manualValidationList').innerHTML = points.length
-    ? `<ul>${points.map((p, i) => `<li>${p.date}: ${round1(p.observed)} °F <button data-remove-index="${i}">Remove</button></li>`).join('')}</ul>`
+    ? `<ul>${points.map((p, i) => `<li>${p.date} (${p.slot}): ${round1(p.observed)} °F <button data-remove-index="${i}">Remove</button></li>`).join('')}</ul>`
     : '<p class="muted">No saved past validation inputs yet.</p>';
 
   [...document.querySelectorAll('#manualValidationList button[data-remove-index]')].forEach((btn) => {
@@ -261,28 +272,79 @@ function renderManualValidationList() {
 
 function renderValidationInputs(rows) {
   const options = rows.slice(-10).map((r) => `
-    <label>${r.date}: <input type="number" step="0.1" data-date="${r.date}" placeholder="observed °F"></label>
+    <div>
+      <strong>${r.date}</strong>
+      <label>Sunrise <input type="number" step="0.1" data-date="${r.date}" data-slot="sunrise" placeholder="observed °F"></label>
+      <label>Midday <input type="number" step="0.1" data-date="${r.date}" data-slot="midday" placeholder="observed °F"></label>
+      <label>Sunset <input type="number" step="0.1" data-date="${r.date}" data-slot="sunset" placeholder="observed °F"></label>
+    </div>
   `).join('');
   byId('validationInputs').innerHTML = options;
   renderManualValidationList();
 }
 
 function getAllValidationInputs() {
-  const inlineInputs = [...document.querySelectorAll('#validationInputs input[data-date]')]
-    .map((el) => ({ date: el.dataset.date, observed: Number(el.value) }))
+  const inlineInputs = [...document.querySelectorAll('#validationInputs input[data-date][data-slot]')]
+    .map((el) => ({ date: el.dataset.date, slot: normalizeValidationSlot(el.dataset.slot), observed: Number(el.value) }))
     .filter((r) => Number.isFinite(r.observed));
 
   const saved = loadSavedValidationPoints();
   const deduped = new Map();
   [...saved, ...inlineInputs].forEach((p) => {
-    deduped.set(p.date, { date: p.date, observed: p.observed });
+    deduped.set(`${p.date}|${p.slot}`, { date: p.date, slot: normalizeValidationSlot(p.slot), observed: p.observed });
   });
 
   return [...deduped.values()];
 }
 
+
+function computeValidationBias(rows, points) {
+  if (!points.length) return null;
+  const slotOffsets = { sunrise: -1.2, midday: 0, sunset: -0.4 };
+  const errors = points
+    .map((o) => {
+      const row = rows.find((r) => r.date === o.date);
+      if (!row || row.source !== 'past') return null;
+      const modeledBase = row.waterEstimate;
+      const offset = firstFinite(slotOffsets[o.slot], 0);
+      const model = Number.isFinite(modeledBase) ? modeledBase + offset : null;
+      if (!Number.isFinite(model)) return null;
+      return o.observed - model;
+    })
+    .filter((v) => Number.isFinite(v));
+
+  if (!errors.length) return null;
+  return round1(errors.reduce((sum, err) => sum + err, 0) / errors.length);
+}
+
+function applyValidationBias(rows, points) {
+  const bias = computeValidationBias(rows, points);
+  if (!Number.isFinite(bias)) return { rows, bias: null, pointsUsed: 0 };
+
+  let pointsUsed = 0;
+  const slotOffsets = { sunrise: -1.2, midday: 0, sunset: -0.4 };
+  points.forEach((o) => {
+    const row = rows.find((r) => r.date === o.date);
+    if (!row || row.source !== 'past') return;
+    const modeledBase = row.waterEstimate;
+    const offset = firstFinite(slotOffsets[o.slot], 0);
+    const model = Number.isFinite(modeledBase) ? modeledBase + offset : null;
+    if (Number.isFinite(model)) pointsUsed += 1;
+  });
+
+  const adjustedRows = rows.map((r) => ({
+    ...r,
+    waterEstimate: round1(clamp(firstFinite(r.waterEstimate, 32) + bias, 32, 100)),
+    waterEstimateBulk: round1(clamp(firstFinite(r.waterEstimateBulk, 32) + bias, 32, 100)),
+    validationBiasApplied: bias
+  }));
+
+  return { rows: adjustedRows, bias, pointsUsed };
+}
+
 function evaluateFit(rows) {
   const obs = getAllValidationInputs();
+  const slotOffsets = { sunrise: -1.2, midday: 0, sunset: -0.4 };
 
   if (!obs.length) {
     byId('fitOut').textContent = 'No observations entered yet.';
@@ -290,7 +352,10 @@ function evaluateFit(rows) {
   }
 
   const joined = obs.map((o) => {
-    const model = rows.find((r) => r.date === o.date)?.waterEstimate;
+    const row = rows.find((r) => r.date === o.date);
+    const modeledBase = row?.waterEstimate;
+    const offset = firstFinite(slotOffsets[o.slot], 0);
+    const model = Number.isFinite(modeledBase) ? round1(modeledBase + offset) : null;
     return { ...o, model, err: round1(o.observed - model) };
   }).filter((r) => Number.isFinite(r.model));
 
@@ -300,7 +365,7 @@ function evaluateFit(rows) {
   }
 
   const mae = round1(joined.reduce((s, r) => s + Math.abs(r.err), 0) / joined.length);
-  byId('fitOut').textContent = `Validation points: ${joined.length} | Mean absolute error: ${mae} °F | Details: ${joined.map((r) => `${r.date} err=${r.err}`).join(', ')}`;
+  byId('fitOut').textContent = `Validation points: ${joined.length} | Mean absolute error: ${mae} °F | Details: ${joined.map((r) => `${r.date}(${r.slot}) err=${r.err}`).join(', ')}`;
 }
 
 async function runModel() {
@@ -327,8 +392,13 @@ async function runModel() {
   rows = computeModel(rows, { acres, depthFt: depth, startWaterTemp, obsDepthFt: obsDepth, turbidityNtu: turbidity, inflowCfs: inflow, outflowCfs: outflow, sedimentFactor: sediment, mixedLayerDepthFt: mixedDepth });
   rows = applyCurrentAdjustment(rows, forecastData.current);
 
+  const validationPoints = getAllValidationInputs();
+  const biasResult = applyValidationBias(rows, validationPoints);
+  rows = biasResult.rows;
+
   window.__fishcastv2Rows = rows;
-  renderSummary({ label, acres, depth, obsDepth, rows, timezone: forecastData.timezone, current: forecastData.current, turbidity, inflow, outflow, sediment, mixedDepth });
+  window.__fishcastv2Bias = biasResult;
+  renderSummary({ label, acres, depth, obsDepth, rows, timezone: forecastData.timezone, current: forecastData.current, turbidity, inflow, outflow, sediment, mixedDepth, biasResult });
   renderTable(rows);
   renderValidationInputs(rows);
 }
@@ -342,13 +412,14 @@ runModel().catch(() => {});
 
 byId('addValidationPoint').addEventListener('click', () => {
   const date = byId('manualValidationDate').value;
+  const slot = normalizeValidationSlot(byId('manualValidationSlot').value);
   const observed = Number(byId('manualValidationTemp').value);
   if (!date || !Number.isFinite(observed)) {
     byId('fitOut').textContent = 'Enter a valid date and observed temperature before adding.';
     return;
   }
-  const points = loadSavedValidationPoints().filter((p) => p.date !== date);
-  points.push({ date, observed });
+  const points = loadSavedValidationPoints().filter((p) => !(p.date === date && p.slot === slot));
+  points.push({ date, slot, observed });
   saveValidationPoints(points);
   byId('manualValidationTemp').value = '';
   renderManualValidationList();
