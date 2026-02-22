@@ -647,6 +647,27 @@ function calculateAirTempInfluence(airTemps, waterType, tempUnit = 'F') {
     };
 }
 
+function getDataDrivenBaselineTemp({ seasonalBase, airTemps, waterType, tempUnit = 'F' }) {
+    const normalizedTemps = (airTemps || [])
+        .map((value) => normalizeAirTempToF(value, tempUnit))
+        .filter(Number.isFinite);
+    if (!normalizedTemps.length) return seasonalBase;
+
+    const body = WATER_BODIES_V2[waterType] || WATER_BODIES_V2.pond;
+    const lookback = clamp(body.thermal_lag_days * 2, 4, 10);
+    const recentAirMean = average(normalizedTemps.slice(-lookback));
+    if (!Number.isFinite(recentAirMean)) return seasonalBase;
+
+    // Seasonal harmonic baseline is still useful as a physics prior, but when we
+    // have recent observed air history it should pull the baseline toward reality.
+    // This avoids winter cold-bias lock-in after abrupt warmups in shallow water.
+    const sampleWeight = clamp((normalizedTemps.length - 2) / 8, 0, 1);
+    const waterOffset = waterType === 'pond' ? 1.5 : waterType === 'lake' ? 1.0 : 0.5;
+    const historicalProxy = recentAirMean + waterOffset;
+    const blendWeight = 0.55 * sampleWeight;
+    return (seasonalBase * (1 - blendWeight)) + (historicalProxy * blendWeight);
+}
+
 function getThermalInertiaCoefficient(waterType, currentWaterTemp, recentAirAvg) {
     const delta = recentAirAvg - currentWaterTemp;
     const baseInertia = waterType === 'pond' ? 0.15 : waterType === 'lake' ? 0.08 : 0.05;
@@ -834,7 +855,7 @@ async function computeWaterTempEstimateTerms({ coords, waterType, currentDate, w
 
     const latitude = coords.lat;
     const dayOfYear = getDayOfYear(currentDate);
-    const seasonalBase = getSeasonalBaseTemp(latitude, dayOfYear, waterType);
+    const seasonalBaseRaw = getSeasonalBaseTemp(latitude, dayOfYear, waterType);
     const observedCalibration = buildObservedCalibration(coords, waterType, currentDate);
     const userCalibrationApplied = Number.isFinite(observedCalibration?.observedTempF);
 
@@ -848,6 +869,12 @@ async function computeWaterTempEstimateTerms({ coords, waterType, currentDate, w
         warnIfUnitMismatch('meta temp_unit is fahrenheit but downstream temp unit hint is Celsius; potential double conversion risk.');
     }
 
+    const seasonalBase = getDataDrivenBaselineTemp({
+        seasonalBase: seasonalBaseRaw,
+        airTemps,
+        waterType,
+        tempUnit
+    });
     const airInfluence = calculateAirTempInfluence(airTemps, waterType, tempUnit);
     const hourly = getValue('forecast.hourly', {});
     const pressureMixingBoost = getPressureMixingBoost(hourly);
@@ -940,6 +967,7 @@ async function computeWaterTempEstimateTerms({ coords, waterType, currentDate, w
     const final = Math.round(estimatedTemp * 10) / 10;
     return {
         seasonalBase,
+        seasonalBaseRaw,
         userCalibrationApplied,
         solarEffect,
         airEffect,
