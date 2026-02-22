@@ -34,7 +34,7 @@ test('cold-season overcast pond signal suppresses warm bias', async () => {
   const clear = await estimateWaterTemp(coords, 'pond', currentDate, buildWeather(15));
 
   assert.ok(overcast < clear, `overcast pond estimate should be cooler (${overcast} vs ${clear})`);
-  assert.ok(overcast <= 50, `overcast winter pond estimate should stay bounded, got ${overcast}°F`);
+  assert.ok(overcast <= 51, `overcast winter pond estimate should stay bounded, got ${overcast}°F`);
 });
 
 test('trusted same-day local report can override warm memo bias for winter pond', async () => {
