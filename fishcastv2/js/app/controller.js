@@ -1,174 +1,202 @@
-import { buildForecastState } from './state.js';
-import { renderApp } from '../ui/render.js';
+const byId = (id) => document.getElementById(id);
 
-const DEFAULT_COORDS = { lat: 34.2576, lon: -88.7034, name: 'Tupelo Pond (v2)' };
-const DEFAULT_DAYS = 5;
-
-function parseUrlConfig() {
-  const params = new URLSearchParams(window.location.search || '');
-  const lat = Number(params.get('lat'));
-  const lon = Number(params.get('lon'));
-  const days = Number(params.get('days'));
-  const waterType = params.get('waterType') || 'pond';
-  const species = params.get('species') || 'bluegill';
-  const name = params.get('name') || DEFAULT_COORDS.name;
-
-  return {
-    coords: {
-      lat: Number.isFinite(lat) ? lat : DEFAULT_COORDS.lat,
-      lon: Number.isFinite(lon) ? lon : DEFAULT_COORDS.lon,
-      name
-    },
-    days: Number.isFinite(days) && days > 0 ? Math.min(Math.floor(days), 10) : DEFAULT_DAYS,
-    waterType,
-    species
-  };
+function toISODate(d) {
+  return d.toISOString().slice(0, 10);
 }
 
-function buildArchiveDateRange(now = new Date()) {
-  const end = new Date(now.getTime() - (24 * 60 * 60 * 1000));
-  const start = new Date(end.getTime() - (13 * 24 * 60 * 60 * 1000));
-  const toIsoDate = (value) => value.toISOString().slice(0, 10);
-  return { startDate: toIsoDate(start), endDate: toIsoDate(end) };
+function round1(n) {
+  return Number.isFinite(n) ? Math.round(n * 10) / 10 : null;
 }
 
-function buildForecastUrl({ lat, lon, days }) {
-  const url = new URL('https://api.open-meteo.com/v1/forecast');
-  url.search = new URLSearchParams({
+function clamp(v, lo, hi) {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+function buildUrls({ lat, lon, pastDays, futureDays }) {
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 3600 * 1000);
+  const pastStart = new Date(yesterday.getTime() - (pastDays - 1) * 24 * 3600 * 1000);
+  const futureEnd = new Date(now.getTime() + futureDays * 24 * 3600 * 1000);
+
+  const varsDaily = [
+    'temperature_2m_max',
+    'temperature_2m_min',
+    'temperature_2m_mean',
+    'precipitation_sum',
+    'windspeed_10m_max',
+    'shortwave_radiation_sum',
+    'cloudcover_mean'
+  ].join(',');
+
+  const varsCurrent = ['temperature_2m', 'windspeed_10m', 'cloudcover'].join(',');
+
+  const forecast = new URL('https://api.open-meteo.com/v1/forecast');
+  forecast.search = new URLSearchParams({
     latitude: String(lat),
     longitude: String(lon),
-    timezone: 'auto',
-    forecast_days: String(days),
-    temperature_unit: 'fahrenheit',
-    wind_speed_unit: 'mph',
-    precipitation_unit: 'inch',
-    current: 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m',
-    hourly: 'temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation_probability,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m',
-    daily: 'weather_code,temperature_2m_max,temperature_2m_min,temperature_2m_mean,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,daylight_duration,sunshine_duration,precipitation_sum,rain_sum,showers_sum,snowfall_sum,precipitation_hours,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,shortwave_radiation_sum,et0_fao_evapotranspiration'
-  }).toString();
-  return url.toString();
-}
-
-function buildHistoricalUrl({ lat, lon }) {
-  const { startDate, endDate } = buildArchiveDateRange();
-  const url = new URL('https://archive-api.open-meteo.com/v1/archive');
-  url.search = new URLSearchParams({
-    latitude: String(lat),
-    longitude: String(lon),
-    start_date: startDate,
-    end_date: endDate,
+    daily: varsDaily,
+    current: varsCurrent,
     timezone: 'auto',
     temperature_unit: 'fahrenheit',
     wind_speed_unit: 'mph',
     precipitation_unit: 'inch',
-    daily: 'temperature_2m_mean,temperature_2m_max,temperature_2m_min,cloud_cover_mean,wind_speed_10m_mean,wind_speed_10m_max,precipitation_sum'
+    start_date: toISODate(now),
+    end_date: toISODate(futureEnd)
   }).toString();
-  return url.toString();
+
+  const archive = new URL('https://archive-api.open-meteo.com/v1/archive');
+  archive.search = new URLSearchParams({
+    latitude: String(lat),
+    longitude: String(lon),
+    daily: varsDaily,
+    timezone: 'auto',
+    temperature_unit: 'fahrenheit',
+    wind_speed_unit: 'mph',
+    precipitation_unit: 'inch',
+    start_date: toISODate(pastStart),
+    end_date: toISODate(yesterday)
+  }).toString();
+
+  return { forecast: forecast.toString(), archive: archive.toString() };
 }
 
-function buildModelPayload({ forecastResponse, historicalResponse = null, source = 'open-meteo-live' }) {
-  const nowHourIndex = Array.isArray(forecastResponse?.hourly?.time)
-    ? forecastResponse.hourly.time.findIndex((value) => value === forecastResponse?.current?.time)
-    : -1;
+function buildSeries(archive, forecast) {
+  const mapDaily = (payload, source) => payload.daily.time.map((date, i) => ({
+    date,
+    source,
+    tMax: payload.daily.temperature_2m_max[i],
+    tMin: payload.daily.temperature_2m_min[i],
+    tMean: payload.daily.temperature_2m_mean[i],
+    precip: payload.daily.precipitation_sum[i],
+    windMax: payload.daily.windspeed_10m_max[i],
+    solar: payload.daily.shortwave_radiation_sum[i],
+    cloud: payload.daily.cloudcover_mean[i]
+  }));
 
-  return {
-    historical: historicalResponse,
-    forecast: forecastResponse,
-    meta: {
-      units: {
-        temp: 'F',
-        wind: 'mph',
-        precip: 'in',
-        pressure: 'hPa'
-      },
-      nowIso: forecastResponse?.current?.time || new Date().toISOString(),
-      nowHourIndex: nowHourIndex >= 0 ? nowHourIndex : undefined,
-      source
-    }
-  };
+  return [...mapDaily(archive, 'past'), ...mapDaily(forecast, 'future_or_today')];
 }
 
-async function loadFixturePayload() {
-  const response = await fetch('../fishcast/js/tools/fixtures/weatherPayload.sample.json');
-  if (!response.ok) {
-    throw new Error(`Unable to load fixture payload (${response.status})`);
-  }
-  return response.json();
-}
+function computeModel(rows, { acres, depthFt, startWaterTemp }) {
+  const areaFactor = 1 / (1 + acres / 12);
+  const depthFactor = 1 / (1 + depthFt / 6);
+  const alpha = clamp(0.3 * areaFactor * depthFactor, 0.03, 0.25);
 
-async function loadLiveForecastPayload({ coords, days }) {
-  const [forecastResult, historicalResult] = await Promise.allSettled([
-    fetch(buildForecastUrl({ lat: coords.lat, lon: coords.lon, days })),
-    fetch(buildHistoricalUrl({ lat: coords.lat, lon: coords.lon }))
-  ]);
+  let water = Number.isFinite(startWaterTemp) ? startWaterTemp : rows[0].tMean;
+  return rows.map((r, idx) => {
+    const solarHeat = (r.solar || 0) * 0.0018;
+    const windCool = (r.windMax || 0) * 0.25;
+    const cloudCool = (r.cloud || 0) * 0.03;
+    const rainCool = (r.precip || 0) * 1.2;
+    const airBlend = 0.65 * r.tMean + 0.2 * r.tMax + 0.15 * r.tMin;
+    const equilibrium = airBlend + solarHeat - windCool - cloudCool - rainCool;
 
-  if (forecastResult.status !== 'fulfilled') {
-    throw forecastResult.reason;
-  }
+    const prevWater = idx === 0 ? water : rows[idx - 1].waterEstimate;
+    water = prevWater + alpha * (equilibrium - prevWater);
 
-  const forecastResponse = forecastResult.value;
-  if (!forecastResponse.ok) {
-    throw new Error(`Live forecast request failed (${forecastResponse.status})`);
-  }
-
-  const live = await forecastResponse.json();
-
-  if (historicalResult.status !== 'fulfilled') {
-    return buildModelPayload({
-      forecastResponse: live,
-      historicalResponse: null,
-      source: 'open-meteo-live-forecast-only'
-    });
-  }
-
-  const historicalResponse = historicalResult.value;
-  if (!historicalResponse.ok) {
-    return buildModelPayload({
-      forecastResponse: live,
-      historicalResponse: null,
-      source: `open-meteo-live-forecast-only(historical-${historicalResponse.status})`
-    });
-  }
-
-  const historical = await historicalResponse.json();
-  return buildModelPayload({
-    forecastResponse: live,
-    historicalResponse: historical,
-    source: 'open-meteo-live+archive'
+    return {
+      ...r,
+      solarHeat: round1(solarHeat),
+      windCool: round1(windCool),
+      cloudCool: round1(cloudCool),
+      rainCool: round1(rainCool),
+      airBlend: round1(airBlend),
+      equilibrium: round1(equilibrium),
+      alpha: round1(alpha),
+      waterEstimate: round1(water)
+    };
   });
 }
 
-async function loadWeatherPayload({ coords, days }) {
-  try {
-    return await loadLiveForecastPayload({ coords, days });
-  } catch (error) {
-    console.warn('[FishCast v2] Falling back to fixture payload:', error);
-    return loadFixturePayload();
-  }
+function applyCurrentAdjustment(rows, current) {
+  const today = rows.find((r) => r.source === 'future_or_today');
+  if (!today || !current) return rows;
+  const currentEffect = round1(0.35 * (current.temperature_2m - today.tMean) - 0.05 * current.windspeed_10m);
+  today.currentEffect = currentEffect;
+  today.waterEstimate = round1(today.waterEstimate + currentEffect);
+  return rows;
 }
 
-async function main() {
-  const root = document.querySelector('#app');
-  if (!root) return;
-
-  const runtime = parseUrlConfig();
-  const { coords, days, waterType, species } = runtime;
-
-  try {
-    const weatherPayload = await loadWeatherPayload({ coords, days });
-    const state = await buildForecastState({
-      coords,
-      waterType,
-      speciesKey: species,
-      days,
-      weatherPayload
-    });
-
-    renderApp(root, state);
-    window.__FISHCAST_V2_STATE__ = state;
-  } catch (error) {
-    root.innerHTML = `<p>Failed to build forecast state: ${error.message}</p>`;
-  }
+function renderSummary({ label, acres, depth, rows, timezone, current }) {
+  const past = rows.filter((r) => r.source === 'past');
+  const future = rows.filter((r) => r.source === 'future_or_today');
+  const latest = future[0] || rows[rows.length - 1];
+  byId('summary').innerHTML = `
+    <h2>Summary</h2>
+    <p><strong>${label}</strong> | Timezone: ${timezone}</p>
+    <p>Pond geometry: ${acres} acres, avg depth ${depth} ft.</p>
+    <p><strong>Estimated water temp now:</strong> <span class="ok">${latest?.waterEstimate ?? '--'} °F</span></p>
+    <p class="muted">Model sequence: past daily weather initializes thermal state → current weather nudges today's estimate → future daily weather projects forward.</p>
+    <p class="muted">Current weather used: air ${round1(current?.temperature_2m)} °F, wind ${round1(current?.windspeed_10m)} mph, cloud ${round1(current?.cloudcover)}%.</p>
+    <p class="muted">Rows in model: past=${past.length}, future/today=${future.length}.</p>
+  `;
 }
 
-main();
+function renderTable(rows) {
+  const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'Precip', 'Solar', 'Cloud', 'AirBlend', 'Solar+', 'Wind-', 'Cloud-', 'Rain-', 'Equilibrium', 'Alpha', 'WaterEst'];
+  const body = rows.map((r) => `<tr>
+    <td>${r.date}</td><td>${r.source}</td><td>${r.tMin}</td><td>${r.tMean}</td><td>${r.tMax}</td>
+    <td>${r.windMax}</td><td>${r.precip}</td><td>${r.solar}</td><td>${r.cloud}</td>
+    <td>${r.airBlend}</td><td>${r.solarHeat}</td><td>${r.windCool}</td><td>${r.cloudCool}</td><td>${r.rainCool}</td>
+    <td>${r.equilibrium}</td><td>${r.alpha}</td><td><strong>${r.waterEstimate}</strong></td>
+  </tr>`).join('');
+
+  byId('tableWrap').innerHTML = `<table><thead><tr>${header.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function renderValidationInputs(rows) {
+  const options = rows.slice(-10).map((r) => `
+    <label>${r.date}: <input type="number" step="0.1" data-date="${r.date}" placeholder="observed °F"></label>
+  `).join('');
+  byId('validationInputs').innerHTML = options;
+}
+
+function evaluateFit(rows) {
+  const inputs = [...document.querySelectorAll('#validationInputs input[data-date]')];
+  const obs = inputs
+    .map((el) => ({ date: el.dataset.date, observed: Number(el.value) }))
+    .filter((r) => Number.isFinite(r.observed));
+
+  if (!obs.length) {
+    byId('fitOut').textContent = 'No observations entered yet.';
+    return;
+  }
+
+  const joined = obs.map((o) => {
+    const model = rows.find((r) => r.date === o.date)?.waterEstimate;
+    return { ...o, model, err: round1(o.observed - model) };
+  }).filter((r) => Number.isFinite(r.model));
+
+  const mae = round1(joined.reduce((s, r) => s + Math.abs(r.err), 0) / joined.length);
+  byId('fitOut').textContent = `Validation points: ${joined.length} | Mean absolute error: ${mae} °F | Details: ${joined.map((r) => `${r.date} err=${r.err}`).join(', ')}`;
+}
+
+async function runModel() {
+  const lat = Number(byId('lat').value);
+  const lon = Number(byId('lon').value);
+  const label = byId('label').value;
+  const acres = Number(byId('acres').value);
+  const depth = Number(byId('depth').value);
+  const pastDays = Number(byId('pastDays').value);
+  const futureDays = Number(byId('futureDays').value);
+  const startWaterTemp = Number(byId('startWater').value);
+
+  const { forecast, archive } = buildUrls({ lat, lon, pastDays, futureDays });
+  const [forecastRes, archiveRes] = await Promise.all([fetch(forecast), fetch(archive)]);
+  const [forecastData, archiveData] = await Promise.all([forecastRes.json(), archiveRes.json()]);
+
+  let rows = buildSeries(archiveData, forecastData);
+  rows = computeModel(rows, { acres, depthFt: depth, startWaterTemp });
+  rows = applyCurrentAdjustment(rows, forecastData.current);
+
+  window.__fishcastv2Rows = rows;
+  renderSummary({ label, acres, depth, rows, timezone: forecastData.timezone, current: forecastData.current });
+  renderTable(rows);
+  renderValidationInputs(rows);
+}
+
+byId('run').addEventListener('click', () => runModel().catch((e) => {
+  byId('summary').innerHTML = `<p>Failed to run model: ${e.message}</p>`;
+}));
+byId('evaluate').addEventListener('click', () => evaluateFit(window.__fishcastv2Rows || []));
+
+runModel().catch(() => {});
