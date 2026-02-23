@@ -321,7 +321,7 @@ function rowsToCsv(rows, params = window.__fishcastv2Params || null, observedTim
 
 function mergeValidationIntoRows(rows, validationPoints) {
   const validationByDate = new Map(validationPoints.map((point) => [point.date, point]));
-  return rows.map((row) => {
+  const mergedRows = rows.map((row) => {
     const validation = validationByDate.get(row.date);
     if (!validation) {
       return {
@@ -341,6 +341,47 @@ function mergeValidationIntoRows(rows, validationPoints) {
       validationClarityNtu: Number.isFinite(validation.clarityNtu) ? round1(validation.clarityNtu) : null
     };
   });
+
+  const rowDates = new Set(rows.map((row) => row.date));
+  const unmatchedValidationRows = validationPoints
+    .filter((point) => !rowDates.has(point.date))
+    .map((point) => ({
+      date: point.date,
+      source: 'validation_only',
+      tMin: null,
+      tMean: null,
+      tMax: null,
+      windMean: null,
+      effectiveWind: null,
+      daylightFraction: null,
+      precip: null,
+      solar: null,
+      cloud: null,
+      airBlend: null,
+      solarHeat: null,
+      windCool: null,
+      evapCool: null,
+      longwaveNet: null,
+      cloudCool: null,
+      rainCool: null,
+      flowTempPull: null,
+      equilibrium: null,
+      equilibriumWithSediment: null,
+      alpha: null,
+      mixedLayerAlpha: null,
+      layerCount: null,
+      waterEstimateBulk: null,
+      waterLow: null,
+      waterEstimate: null,
+      waterHigh: null,
+      validationObserved: round1(point.observed),
+      validationObservedTime: point.observedTime || '12:00',
+      validationError: null,
+      validationClarityNtu: Number.isFinite(point.clarityNtu) ? round1(point.clarityNtu) : null
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return [...mergedRows, ...unmatchedValidationRows];
 }
 
 function mergeTraceInputsIntoRows(rows, params, observedTime) {
