@@ -167,6 +167,7 @@ function computeModel(rows, rawParams) {
   const flowTurnover = clamp(Math.abs(netFlowCfs) / Math.max(acres * depthFt, 0.5), 0, 0.4);
   const FREEZING_F_FRESH_WATER = 32;
   const MAX_DAILY_SOLAR_MJ_M2 = 35;
+  const REFERENCE_MIXED_DEPTH_FT = 4;
 
   const initialRow = rows[0] || {};
   const initialAir = firstFinite(initialRow.tMean, initialRow.tMax, initialRow.tMin, 55);
@@ -183,20 +184,22 @@ function computeModel(rows, rawParams) {
     const baseDaylightFraction = clamp(solar / MAX_DAILY_SOLAR_MJ_M2, 0.12, 1);
     const hourWeight = Math.max(0.2, Math.sin(((modelHour + 1) / 24) * Math.PI));
     const daylightFraction = clamp(baseDaylightFraction * hourWeight, 0.08, 1);
+    const effectiveMixedDepthFt = Math.max(mixedLayerDepthFt, 0.2);
+    const depthFluxScale = clamp(REFERENCE_MIXED_DEPTH_FT / effectiveMixedDepthFt, 0.35, 2.5);
     const shadeFactor = 1 - shadingPct / 100;
     const absorbedSolar = solar * (1 - albedo) * shadeFactor;
-    const solarHeat = absorbedSolar * 0.0018 * clarityFactor;
+    const solarHeat = absorbedSolar * 0.02 * clarityFactor * depthFluxScale;
 
     const windMph = firstFinite(r.windMean, 0);
     const fetchFactor = clamp(0.75 + fetchLengthFt / 1500, 0.6, 2);
     const windExposure = (0.4 + 0.6 * daylightFraction) * windReductionFactor * fetchFactor;
     const effectiveWind = windMph * windExposure;
-    const windCool = effectiveWind * 0.21;
-    const evapCool = effectiveWind * evaporationCoeff * (1 - clamp(firstFinite(r.cloud, 0) / 150, 0, 0.6)) * 0.17;
+    const windCool = effectiveWind * 0.08 * depthFluxScale;
+    const evapCool = effectiveWind * evaporationCoeff * (1 - clamp(firstFinite(r.cloud, 0) / 150, 0, 0.6)) * 0.07 * depthFluxScale;
 
-    const longwaveNet = (0.05 + firstFinite(r.cloud, 0) * 0.002) * longwaveFactor;
-    const cloudCool = firstFinite(r.cloud, 0) * 0.02;
-    const rainCool = firstFinite(r.precip, 0) * 1.2;
+    const longwaveNet = (0.05 + firstFinite(r.cloud, 0) * 0.002) * longwaveFactor * depthFluxScale;
+    const cloudCool = firstFinite(r.cloud, 0) * 0.01 * depthFluxScale;
+    const rainCool = firstFinite(r.precip, 0) * 0.8 * depthFluxScale;
 
     const daytimeWeight = 0.35 + 0.45 * daylightFraction;
     const overnightWeight = 1 - daytimeWeight;
@@ -212,9 +215,14 @@ function computeModel(rows, rawParams) {
     const equilibrium = clamp(equilibriumRaw, FREEZING_F_FRESH_WATER, 100);
 
     const prevSurface = layers[0];
-    const sedimentExchange = (sedimentConductivity * sedimentDepthM * 0.18) * (0.5 + sedimentFactor);
-    const sedimentLag = (0.25 + 0.28 * sedimentFactor) * prevSurface + (0.75 - 0.28 * sedimentFactor) * equilibrium + sedimentExchange * 0.03;
-    const equilibriumWithSediment = clamp(sedimentLag, FREEZING_F_FRESH_WATER, 100);
+    const sedimentBlend = clamp(sedimentFactor, 0, 1);
+    const sedimentExchange = sedimentBlend * sedimentConductivity * sedimentDepthM * 0.08;
+    const sedimentLag = (0.1 + 0.25 * sedimentBlend) * prevSurface + (0.9 - 0.25 * sedimentBlend) * equilibrium + sedimentExchange;
+    const equilibriumWithSediment = clamp(
+      equilibrium + sedimentBlend * (sedimentLag - equilibrium),
+      FREEZING_F_FRESH_WATER,
+      100
+    );
 
     const alpha = clamp(dailyAlpha * areaFactor * depthFactor, 0.01, 0.5);
     const mixedLayerAlpha = clamp(mixAlpha * mixedLayerAlphaBoost * (1 + 0.35 * flowTurnover), 0.01, 0.65);
@@ -687,11 +695,35 @@ function readUiParams() {
   };
 }
 
+
+function validateUiParams(ui) {
+  if (!Number.isFinite(ui.lat) || ui.lat < -90 || ui.lat > 90) throw new Error('Latitude must be between -90 and 90.');
+  if (!Number.isFinite(ui.lon) || ui.lon < -180 || ui.lon > 180) throw new Error('Longitude must be between -180 and 180.');
+  if (!Number.isFinite(ui.depthFt) || ui.depthFt <= 0) throw new Error('Depth must be greater than 0 ft.');
+  if (!Number.isFinite(ui.acres) || ui.acres <= 0) throw new Error('Area (acres) must be greater than 0.');
+  if (!Number.isFinite(ui.futureDays) || ui.futureDays < 0 || ui.futureDays > 16) throw new Error('Future days must be between 0 and 16.');
+}
+
+async function fetchJsonOrThrow(url, label) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`${label} request failed (${response.status} ${response.statusText})`);
+  }
+  const payload = await response.json();
+  if (payload?.error) {
+    throw new Error(`${label} API error: ${payload.reason || payload.error}`);
+  }
+  return payload;
+}
+
 async function runModel() {
   const ui = readUiParams();
+  validateUiParams(ui);
   const { forecast, archive } = buildUrls({ lat: ui.lat, lon: ui.lon, pastDays: ui.pastDays, futureDays: ui.futureDays });
-  const [forecastRes, archiveRes] = await Promise.all([fetch(forecast), fetch(archive)]);
-  const [forecastData, archiveData] = await Promise.all([forecastRes.json(), archiveRes.json()]);
+  const [forecastData, archiveData] = await Promise.all([
+    fetchJsonOrThrow(forecast, 'Forecast'),
+    fetchJsonOrThrow(archive, 'Archive')
+  ]);
 
   window.__fishcastRawRows = buildSeries(archiveData, forecastData);
 
