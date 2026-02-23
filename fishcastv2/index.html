@@ -14,6 +14,14 @@
     input, select, button { padding: 6px; margin: 2px; }
     .muted { color: #555; font-size: 13px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .input-sections { display: grid; gap: 14px; }
+    .input-section { border: 1px solid #d2dbe8; border-radius: 8px; padding: 10px; background: #f8fbff; }
+    .input-section h3 { margin: 0 0 8px; font-size: 16px; }
+    .input-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 12px; }
+    .input-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+    .input-grid label.inline-check { flex-direction: row; align-items: center; gap: 8px; }
+    .input-grid label.inline-check input { margin: 0; }
+    .field-hint { font-size: 12px; color: #555; }
     .ok { color: #0a7f2e; }
     #validationInputs { display: grid; gap: 8px; margin-top: 6px; }
     .validation-row { display: grid; grid-template-columns: 220px minmax(180px, 260px); align-items: center; gap: 10px; }
@@ -39,45 +47,63 @@
 
   <section class="card">
     <h2>Inputs</h2>
-    <div class="grid">
-      <label>Latitude <input id="lat" type="number" value="34.2576" step="0.0001"></label>
-      <label>Longitude <input id="lon" type="number" value="-88.7034" step="0.0001"></label>
-      <label>Location Label <input id="label" type="text" value="Tupelo, Mississippi pond"></label>
-      <label>Pond Area (acres) <input id="acres" type="number" value="4.9" step="0.1"></label>
-      <label>Avg Depth (ft) <input id="depth" type="number" value="8" step="0.1"></label>
-      <label>Past Days (recommended 14-21) <input id="pastDays" type="number" value="14" min="14" max="21"></label>
-      <label>Future Days <input id="futureDays" type="number" value="7" min="1" max="14"></label>
-      <label>Starting Water Temp °F (optional) <input id="startWater" type="number" placeholder="auto from first past day"></label>
-      <label>Observation Depth (ft) <input id="obsDepth" type="number" value="1.7" step="0.1" min="0"></label>
-      <label>Model Snapshot Time (hour, 0-23) <input id="modelHour" type="number" value="12" step="1" min="0" max="23"></label>
-      <label>Observed Temp Time (local) <input id="observedTime" type="time" value="12:00"></label>
-      <label>Water Clarity / Turbidity (NTU) <input id="turbidity" type="number" value="18" step="1" min="0" max="500"></label>
-      <label>Water Visibility (ft) <input id="visibility" type="number" value="3" step="0.1" min="0.1" max="12"></label>
-      <label>Inflow (cfs) <input id="inflow" type="number" value="0.2" step="0.1" min="0"></label>
-      <label>Inflow Temperature °F <input id="inflowTemp" type="number" value="58" step="0.1"></label>
-      <label>Outflow (cfs) <input id="outflow" type="number" value="0.2" step="0.1" min="0"></label>
-      <label>Sediment Heat Storage Factor (0-1) <input id="sediment" type="number" value="0.45" step="0.05" min="0" max="1"></label>
-      <label>Sediment Thermal Conductivity (W/m·K) <input id="sedimentConductivity" type="number" value="1.2" step="0.1" min="0.2" max="3"></label>
-      <label>Sediment Active Depth (m) <input id="sedimentDepthM" type="number" value="0.4" step="0.05" min="0.05" max="2"></label>
-      <label>Mixed-layer Depth (ft) <input id="mixedDepth" type="number" value="4" step="0.1" min="0.2"></label>
-      <label>Wind Reduction Factor (0-1) <input id="windReduction" type="number" value="0.7" step="0.05" min="0" max="1"></label>
-      <label>Evaporation Coefficient (0.5-1.5) <input id="evapCoeff" type="number" value="1" step="0.05" min="0.5" max="1.5"></label>
-      <label>Albedo / Reflectivity (0-1) <input id="albedo" type="number" value="0.08" step="0.01" min="0" max="1"></label>
-      <label>Longwave Radiation Exchange Factor (0.5-1.5) <input id="longwaveFactor" type="number" value="1" step="0.05" min="0.5" max="1.5"></label>
-      <label>Shading / Canopy Cover (%) <input id="shading" type="number" value="20" step="1" min="0" max="100"></label>
-      <label>Fetch Length (ft) <input id="fetchLength" type="number" value="550" step="10" min="20"></label>
-      <label>Daily Alpha (0.01-0.5) <input id="dailyAlpha" type="number" value="0.18" step="0.01" min="0.01" max="0.5"></label>
-      <label>Vertical Mix Alpha (0.01-0.5) <input id="mixAlpha" type="number" value="0.2" step="0.01" min="0.01" max="0.5"></label>
-      <label>Stratification Layers
-        <select id="layerCount">
-          <option value="1">1 layer (fully mixed)</option>
-          <option value="2">2 layers</option>
-          <option value="3">3 layers</option>
-        </select>
-      </label>
-      <label>Uncertainty Band (°F) <input id="uncertaintyBand" type="number" value="2.5" step="0.1" min="0" max="10"></label>
-      <label><input id="autoCalibrate" type="checkbox"> Auto-calibrate against saved validation points</label>
-      <label><input id="runSensitivity" type="checkbox" checked> Run quick sensitivity summary</label>
+    <p class="muted">Use these grouped settings to set up pond conditions, timing, and model behavior. Start with defaults, then adjust only a few values at a time.</p>
+    <div class="input-sections">
+      <div class="input-section">
+        <h3>Location & time setup</h3>
+        <div class="input-grid">
+          <label>Latitude <input id="lat" type="number" value="34.2576" step="0.0001"></label>
+          <label>Longitude <input id="lon" type="number" value="-88.7034" step="0.0001"></label>
+          <label>Location Label <input id="label" type="text" value="Tupelo, Mississippi pond"></label>
+          <label>Pond Area (acres) <input id="acres" type="number" value="4.9" step="0.1"></label>
+          <label>Avg Depth (ft) <input id="depth" type="number" value="8" step="0.1"></label>
+          <label>Past Days <input id="pastDays" type="number" value="14" min="14" max="21"><span class="field-hint">Recommended: 14-21 days.</span></label>
+          <label>Future Days <input id="futureDays" type="number" value="7" min="1" max="14"></label>
+          <label>Starting Water Temp °F (optional) <input id="startWater" type="number" placeholder="auto from first past day"></label>
+          <label>Observation Depth (ft) <input id="obsDepth" type="number" value="1.7" step="0.1" min="0"></label>
+          <label>Model Snapshot Time (hour, 0-23) <input id="modelHour" type="number" value="12" step="1" min="0" max="23"></label>
+          <label>Observed Temp Time (local) <input id="observedTime" type="time" value="12:00"></label>
+        </div>
+      </div>
+
+      <div class="input-section">
+        <h3>Water conditions & flow</h3>
+        <div class="input-grid">
+          <label>Water Clarity / Turbidity (NTU) <input id="turbidity" type="number" value="18" step="1" min="0" max="500"></label>
+          <label>Water Visibility (ft) <input id="visibility" type="number" value="3" step="0.1" min="0.1" max="12"></label>
+          <label>Inflow (cfs) <input id="inflow" type="number" value="0.2" step="0.1" min="0"></label>
+          <label>Inflow Temperature °F <input id="inflowTemp" type="number" value="58" step="0.1"></label>
+          <label>Outflow (cfs) <input id="outflow" type="number" value="0.2" step="0.1" min="0"></label>
+          <label>Sediment Heat Storage Factor (0-1) <input id="sediment" type="number" value="0.45" step="0.05" min="0" max="1"></label>
+          <label>Sediment Thermal Conductivity (W/m·K) <input id="sedimentConductivity" type="number" value="1.2" step="0.1" min="0.2" max="3"></label>
+          <label>Sediment Active Depth (m) <input id="sedimentDepthM" type="number" value="0.4" step="0.05" min="0.05" max="2"></label>
+          <label>Mixed-layer Depth (ft) <input id="mixedDepth" type="number" value="4" step="0.1" min="0.2"></label>
+        </div>
+      </div>
+
+      <div class="input-section">
+        <h3>Energy balance tuning</h3>
+        <div class="input-grid">
+          <label>Wind Reduction Factor (0-1) <input id="windReduction" type="number" value="0.7" step="0.05" min="0" max="1"></label>
+          <label>Evaporation Coefficient (0.5-1.5) <input id="evapCoeff" type="number" value="1" step="0.05" min="0.5" max="1.5"></label>
+          <label>Albedo / Reflectivity (0-1) <input id="albedo" type="number" value="0.08" step="0.01" min="0" max="1"></label>
+          <label>Longwave Radiation Exchange Factor (0.5-1.5) <input id="longwaveFactor" type="number" value="1" step="0.05" min="0.5" max="1.5"></label>
+          <label>Shading / Canopy Cover (%) <input id="shading" type="number" value="20" step="1" min="0" max="100"></label>
+          <label>Fetch Length (ft) <input id="fetchLength" type="number" value="550" step="10" min="20"></label>
+          <label>Daily Alpha (0.01-0.5) <input id="dailyAlpha" type="number" value="0.18" step="0.01" min="0.01" max="0.5"></label>
+          <label>Vertical Mix Alpha (0.01-0.5) <input id="mixAlpha" type="number" value="0.2" step="0.01" min="0.01" max="0.5"></label>
+          <label>Stratification Layers
+            <select id="layerCount">
+              <option value="1">1 layer (fully mixed)</option>
+              <option value="2">2 layers</option>
+              <option value="3">3 layers</option>
+            </select>
+          </label>
+          <label>Uncertainty Band (°F) <input id="uncertaintyBand" type="number" value="2.5" step="0.1" min="0" max="10"></label>
+          <label class="inline-check"><input id="autoCalibrate" type="checkbox"> Auto-calibrate against saved validation points</label>
+          <label class="inline-check"><input id="runSensitivity" type="checkbox" checked> Run quick sensitivity summary</label>
+        </div>
+      </div>
     </div>
     <button id="run">Run model</button>
   </section>
@@ -99,6 +125,7 @@
       <p><strong>Sediment Conductivity + Sediment Depth:</strong> Adds a more physical bottom heat-storage term beyond the simple sediment factor.</p>
       <p><strong>Daily Alpha vs Mix Alpha:</strong> Daily alpha controls how quickly bulk pond temp approaches daily equilibrium; mix alpha controls vertical layer blending speed.</p>
       <p><strong>Auto-calibration + Uncertainty:</strong> Auto-calibration can tune selected parameters to reduce MAE on saved observations. Uncertainty band shows likely range around each estimate.</p>
+      <p><strong>Run quick sensitivity summary:</strong> When checked, FishCast runs a lightweight side test that nudges key parameters (for example wind reduction, evaporation, and shading) up/down and reports which ones move the forecast most. Use this to see what settings your result is most sensitive to before doing deeper calibration.</p>
     </details>
   </section>
 
