@@ -575,35 +575,14 @@ function renderManualValidationList() {
   });
 }
 
-function renderValidationInputs(rows) {
-  const eligibleRows = getValidationRows(rows);
-  const options = eligibleRows.slice(-10).map((r) => `
-    <div class="validation-row">
-      <label for="validation-${r.date}">${r.date}:</label>
-      <input id="validation-${r.date}" type="number" step="0.1" data-date="${r.date}" placeholder="observed °F at model snapshot hour">
-    </div>
-  `).join('');
-  byId('validationInputs').innerHTML = options;
+function renderValidationInputs() {
   renderManualValidationList();
 }
 
-function getValidationRows(rows) {
-  const firstForecastDate = rows.find((r) => r.source === 'future_or_today')?.date;
-  return rows.filter((r) => r.source === 'past' || r.date === firstForecastDate);
-}
-
 function getAllValidationInputs() {
-  const inlineInputs = [...document.querySelectorAll('#validationInputs input[data-date]')]
-    .map((el) => ({
-      date: normalizeIsoDate(el.dataset.date),
-      observed: parseOptionalNumber(el.value),
-      observedTime: byId('observedTime')?.value || '12:00'
-    }))
-    .filter((r) => Number.isFinite(r.observed));
-
   const saved = loadSavedValidationPoints();
   const deduped = new Map();
-  [...saved, ...inlineInputs].forEach((p) => {
+  saved.forEach((p) => {
     deduped.set(p.date, { date: p.date, observed: p.observed, observedTime: p.observedTime || '12:00', clarityNtu: p.clarityNtu });
   });
 

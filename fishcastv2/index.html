@@ -23,10 +23,6 @@
     .input-grid label.inline-check input { margin: 0; }
     .field-hint { font-size: 12px; color: #555; }
     .ok { color: #0a7f2e; }
-    #validationInputs { display: grid; gap: 8px; margin-top: 6px; }
-    .validation-row { display: grid; grid-template-columns: 220px minmax(180px, 260px); align-items: center; gap: 10px; }
-    .validation-row label { margin: 0; }
-    .validation-row input { width: 100%; }
     details summary { cursor: pointer; font-weight: 700; }
     .parameter-help p { margin: 8px 0; }
     #fitOut { margin-top: 10px; }
@@ -43,7 +39,6 @@
     #tableWrap { overflow-x: auto; }
     .disclaimer { border-left: 4px solid #8a5a00; background: #fff8e8; padding: 8px 10px; border-radius: 6px; }
     @media (max-width: 640px) {
-      .validation-row { grid-template-columns: 1fr; gap: 4px; }
       #trendChart { min-width: 620px; }
     }
   </style>
@@ -153,8 +148,6 @@
 
   <section class="card">
     <h2>Validation Inputs</h2>
-    <p class="muted">Enter measured water temps (°F) by date to compare against model results.</p>
-    <div id="validationInputs"></div>
     <div class="card" style="margin-top:8px;">
       <h3 style="margin-top:0;">Add Past Validation Input</h3>
       <label>Date <input id="manualValidationDate" type="date"></label>
@@ -163,7 +156,7 @@
       <label>Observed Water Clarity (NTU, optional) <input id="manualValidationClarity" type="number" step="1" min="0" placeholder="e.g. 22"></label>
       <button id="addValidationPoint">Add validation point</button>
       <button id="clearValidationPoints">Clear saved points</button>
-      <p class="muted">Saved points persist in your browser and are merged with quick inputs above.</p>
+      <p class="muted">Saved points persist in your browser for future model runs.</p>
       <div id="manualValidationList"></div>
     </div>
     <button id="evaluate">Evaluate fit</button>
