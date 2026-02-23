@@ -536,6 +536,35 @@ function exportTraceCsv(
 }
 
 const VALIDATION_STORE_KEY = 'fishcastv2.validationHistory';
+const FORM_STATE_STORE_KEY = 'fishcastv2.formState';
+
+function saveFormState() {
+  const formState = {};
+  Object.keys(DEFAULT_FORM_VALUES).forEach((id) => {
+    const el = byId(id);
+    if (!el) return;
+    formState[id] = el.type === 'checkbox' ? Boolean(el.checked) : el.value;
+  });
+  localStorage.setItem(FORM_STATE_STORE_KEY, JSON.stringify(formState));
+}
+
+function loadSavedFormState() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FORM_STATE_STORE_KEY) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function bindFormStatePersistence() {
+  Object.keys(DEFAULT_FORM_VALUES).forEach((id) => {
+    const el = byId(id);
+    if (!el) return;
+    const eventName = el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input';
+    el.addEventListener(eventName, saveFormState);
+  });
+}
 
 function loadSavedValidationPoints() {
   try {
@@ -827,6 +856,7 @@ function applyPreset(presetName) {
   const preset = PRESETS[presetName] || PRESETS.default;
   setFormValues({ ...DEFAULT_FORM_VALUES, ...preset });
   byId('presetSelect').value = presetName in PRESETS ? presetName : 'default';
+  saveFormState();
 }
 
 function serializeUiToQuery() {
@@ -860,6 +890,7 @@ function applyQueryState() {
     if (value !== null) updates[id] = value === 'true';
   });
   setFormValues(updates);
+  saveFormState();
 }
 
 function renderTrendChart(rows) {
@@ -997,7 +1028,9 @@ async function runModel() {
 
 setFieldHelpText();
 applyPreset('default');
+setFormValues(loadSavedFormState());
 applyQueryState();
+bindFormStatePersistence();
 
 byId('run').addEventListener('click', () => runModel().catch((e) => {
   byId('summary').innerHTML = `<p>Failed to run model: ${e.message}</p>`;
