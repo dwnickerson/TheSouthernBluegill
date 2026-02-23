@@ -38,7 +38,7 @@
       <label>Location Label <input id="label" type="text" value="Tupelo, Mississippi pond"></label>
       <label>Pond Area (acres) <input id="acres" type="number" value="4.9" step="0.1"></label>
       <label>Avg Depth (ft) <input id="depth" type="number" value="8" step="0.1"></label>
-      <label>Past Days <input id="pastDays" type="number" value="7" min="3" max="30"></label>
+      <label>Past Days (recommended 14-21) <input id="pastDays" type="number" value="14" min="14" max="21"></label>
       <label>Future Days <input id="futureDays" type="number" value="7" min="1" max="14"></label>
       <label>Starting Water Temp °F (optional) <input id="startWater" type="number" placeholder="auto from first past day"></label>
       <label>Observation Depth (ft) <input id="obsDepth" type="number" value="1.7" step="0.1" min="0"></label>
@@ -80,6 +80,8 @@
       <summary>Plain-English parameter guide</summary>
       <p><strong>Turbidity (NTU) and Visibility:</strong> 0 NTU means very clear water. Around 150-300+ NTU means muddy water with very low light penetration. Visibility is how far you can see into the pond (roughly Secchi-style). Higher visibility means clearer water; lower means murkier water.</p>
       <p><strong>Model Snapshot Time:</strong> FishCast now locks calculations to the same local hour (default 12:00 noon) so your model estimate compares to observations taken at that same time of day.</p>
+      <p><strong>Past Days (14-21):</strong> FishCast now uses a longer spin-up window by default so today's estimate better reflects pond thermal memory. Use 14 for normal conditions and 21 after major weather swings.</p>
+      <p><strong>Starting Water Temp °F (optional):</strong> This is the model's day-1 seed temperature for the <em>first past day</em> in the run window. Leave blank to auto-seed from that day's air temperature; set it manually when you know the pond was warmer/cooler than air at the beginning of the backfill period.</p>
       <p><strong>Wind Reduction Factor:</strong> 1.0 means full grid wind reaches the pond; 0.0 means all wind is blocked. Lower values reduce wind-driven cooling and evaporation.</p>
       <p><strong>Evaporation Coefficient:</strong> Scales latent heat loss from wind + dry air. Higher values make the pond cool faster in breezy dry weather.</p>
       <p><strong>Albedo / Reflectivity:</strong> Fraction of sunlight reflected. Higher albedo means less solar heat absorbed by water.</p>
@@ -116,6 +118,7 @@
   <section class="card">
     <h2>Data + Calculation Trace</h2>
     <p class="muted">Every row shows weather inputs and how each term changed the equilibrium and estimated water temperature.</p>
+    <button id="exportCsv">Export Data + Calculation Trace (CSV)</button>
     <div id="tableWrap"></div>
   </section>
 

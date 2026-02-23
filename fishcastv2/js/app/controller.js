@@ -261,7 +261,7 @@ function renderSummary({ label, rows, timezone, params, autoCalibrationResult, s
   byId('summary').innerHTML = `
     <h2>Summary</h2>
     <p><strong>${label}</strong> | Timezone: ${timezone}</p>
-    <p><strong>Estimated water temp at ${String(params.modelHour).padStart(2, '0')}:00:</strong> <span class="ok">${latest?.waterEstimate ?? '--'} °F</span> (range ${latest?.waterLow ?? '--'} to ${latest?.waterHigh ?? '--'} °F)</p>
+    <p><strong>Estimated water temp at ${String(params.modelHour).padStart(2, '0')}:00 (today):</strong> <span class="ok">${latest?.waterEstimate ?? '--'} °F</span> (range ${latest?.waterLow ?? '--'} to ${latest?.waterHigh ?? '--'} °F)</p>
     <p class="muted">Time lock: model is solved at ${String(params.modelHour).padStart(2, '0')}:00 local time. Observation time for validation is ${observedTime || '12:00'}.</p>
     <p class="muted">Rows in model: past=${past.length}, future/today=${future.length}. Layers=${params.layerCount}. Wind reduction=${params.windReductionFactor}. Evap coeff=${params.evaporationCoeff}.</p>
     <p class="muted">Extended terms enabled: turbidity ${params.turbidityNtu} NTU, visibility ${params.visibilityFt} ft, inflow ${params.inflowCfs} cfs at ${params.inflowTempF} °F, shading ${params.shadingPct}%.</p>
@@ -280,6 +280,50 @@ function renderTable(rows) {
   </tr>`).join('');
 
   byId('tableWrap').innerHTML = `<table><thead><tr>${header.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+
+function csvEscape(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (/[,\"\n]/.test(str)) return `\"${str.replace(/\"/g, '\"\"')}\"`;
+  return str;
+}
+
+function rowsToCsv(rows) {
+  if (!rows?.length) return '';
+  const columns = [
+    'date', 'source', 'tMin', 'tMean', 'tMax', 'windMean', 'effectiveWind', 'daylightFraction',
+    'precip', 'solar', 'cloud', 'airBlend', 'solarHeat', 'windCool', 'evapCool', 'longwaveNet',
+    'cloudCool', 'rainCool', 'flowTempPull', 'equilibrium', 'equilibriumWithSediment', 'alpha',
+    'mixedLayerAlpha', 'layerCount', 'waterEstimateBulk', 'waterLow', 'waterEstimate', 'waterHigh'
+  ];
+
+  const lines = [columns.join(',')];
+  rows.forEach((row) => {
+    lines.push(columns.map((column) => csvEscape(row[column])).join(','));
+  });
+
+  return lines.join('\n');
+}
+
+function exportTraceCsv(rows) {
+  if (!rows?.length) {
+    byId('fitOut').textContent = 'Run the model before exporting CSV.';
+    return;
+  }
+
+  const csv = rowsToCsv(rows);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fishcastv2-data-calculation-trace-${timestamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 const VALIDATION_STORE_KEY = 'fishcastv2.validationHistory';
@@ -463,7 +507,7 @@ function readUiParams() {
     mixAlpha: Number(byId('mixAlpha').value),
     layerCount: Number(byId('layerCount').value),
     uncertaintyBand: Number(byId('uncertaintyBand').value),
-    pastDays: Number(byId('pastDays').value),
+    pastDays: clamp(Number(byId('pastDays').value), 14, 21),
     futureDays: Number(byId('futureDays').value),
     startWaterTemp: Number(byId('startWater').value),
     autoCalibrate: byId('autoCalibrate').checked,
@@ -504,6 +548,7 @@ byId('run').addEventListener('click', () => runModel().catch((e) => {
   byId('summary').innerHTML = `<p>Failed to run model: ${e.message}</p>`;
 }));
 byId('evaluate').addEventListener('click', () => evaluateFit(window.__fishcastv2Rows || []));
+byId('exportCsv').addEventListener('click', () => exportTraceCsv(window.__fishcastv2Rows || []));
 
 runModel().catch(() => {});
 
