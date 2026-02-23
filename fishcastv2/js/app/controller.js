@@ -752,6 +752,13 @@ function evaluateFit(rows) {
 }
 
 function readUiParams() {
+  const parseOptionalField = (id) => {
+    const value = byId(id).value;
+    if (value === '' || value === null || value === undefined) return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
   return {
     lat: Number(byId('lat').value),
     lon: Number(byId('lon').value),
@@ -782,10 +789,34 @@ function readUiParams() {
     uncertaintyBand: Number(byId('uncertaintyBand').value),
     pastDays: clamp(Number(byId('pastDays').value), 14, 21),
     futureDays: Number(byId('futureDays').value),
-    startWaterTemp: Number(byId('startWater').value),
+    startWaterTemp: parseOptionalField('startWater'),
     autoCalibrate: byId('autoCalibrate').checked,
     runSensitivity: byId('runSensitivity').checked
   };
+}
+
+function uiParamsChangedSinceLastRun() {
+  const previous = window.__fishcastv2UiParams;
+  if (!previous) return false;
+  const current = readUiParams();
+
+  const compareKeys = [
+    'lat', 'lon', 'label', 'acres', 'depthFt', 'obsDepthFt', 'modelHour', 'observedTime',
+    'turbidityNtu', 'visibilityFt', 'inflowCfs', 'inflowTempF', 'outflowCfs',
+    'sedimentFactor', 'sedimentConductivity', 'sedimentDepthM', 'mixedLayerDepthFt',
+    'windReductionFactor', 'evaporationCoeff', 'albedo', 'longwaveFactor', 'shadingPct',
+    'fetchLengthFt', 'dailyAlpha', 'mixAlpha', 'layerCount', 'uncertaintyBand',
+    'pastDays', 'futureDays', 'startWaterTemp', 'autoCalibrate', 'runSensitivity'
+  ];
+
+  return compareKeys.some((key) => {
+    if (key === 'startWaterTemp') {
+      const previousValue = Number.isFinite(previous[key]) ? previous[key] : null;
+      const currentValue = Number.isFinite(current[key]) ? current[key] : null;
+      return previousValue !== currentValue;
+    }
+    return previous[key] !== current[key];
+  });
 }
 
 
@@ -992,13 +1023,23 @@ applyQueryState();
 byId('run').addEventListener('click', () => runModel().catch((e) => {
   byId('summary').innerHTML = `<p>Failed to run model: ${e.message}</p>`;
 }));
-byId('evaluate').addEventListener('click', () => evaluateFit(window.__fishcastv2Rows || []));
-byId('exportCsv').addEventListener('click', () => exportTraceCsv(
-  window.__fishcastv2Rows || [],
-  window.__fishcastv2Params || null,
-  window.__fishcastv2ObservedTime || '12:00',
-  window.__fishcastv2UiParams || null
-));
+byId('evaluate').addEventListener('click', async () => {
+  if (uiParamsChangedSinceLastRun()) {
+    await runModel();
+  }
+  evaluateFit(window.__fishcastv2Rows || []);
+});
+byId('exportCsv').addEventListener('click', async () => {
+  if (uiParamsChangedSinceLastRun()) {
+    await runModel();
+  }
+  exportTraceCsv(
+    window.__fishcastv2Rows || [],
+    window.__fishcastv2Params || null,
+    window.__fishcastv2ObservedTime || '12:00',
+    window.__fishcastv2UiParams || null
+  );
+});
 byId('resetDefaults').addEventListener('click', () => {
   applyPreset('default');
   byId('presetSelect').value = 'default';
