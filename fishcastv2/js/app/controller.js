@@ -1,5 +1,66 @@
 const byId = (id) => document.getElementById(id);
 
+const DEFAULT_FORM_VALUES = {
+  lat: '34.2576',
+  lon: '-88.7034',
+  label: 'Tupelo, Mississippi pond',
+  acres: '4.9',
+  depth: '8',
+  pastDays: '14',
+  futureDays: '7',
+  startWater: '',
+  obsDepth: '1.7',
+  modelHour: '12',
+  observedTime: '12:00',
+  turbidity: '18',
+  visibility: '3',
+  inflow: '0.2',
+  inflowTemp: '58',
+  outflow: '0.2',
+  sediment: '0.45',
+  sedimentConductivity: '1.2',
+  sedimentDepthM: '0.4',
+  mixedDepth: '4',
+  windReduction: '0.7',
+  evapCoeff: '1',
+  albedo: '0.08',
+  longwaveFactor: '1',
+  shading: '20',
+  fetchLength: '550',
+  dailyAlpha: '0.18',
+  mixAlpha: '0.2',
+  layerCount: '1',
+  uncertaintyBand: '2.5',
+  autoCalibrate: false,
+  runSensitivity: true
+};
+
+const PRESETS = {
+  default: {},
+  murkyTexasPond: {
+    label: 'Murky Texas pond', turbidity: '240', visibility: '0.8', depth: '6', shading: '10', windReduction: '0.6', evapCoeff: '1.1', mixedDepth: '3.2'
+  },
+  shallowClearPond: {
+    label: 'Shallow clear pond', turbidity: '8', visibility: '7.5', depth: '4.5', shading: '18', windReduction: '0.75', mixedDepth: '2.2', dailyAlpha: '0.24'
+  },
+  springFedPond: {
+    label: 'Spring-fed pond', turbidity: '12', visibility: '5.5', inflow: '1.4', outflow: '1.4', inflowTemp: '56', sediment: '0.5', depth: '9.5'
+  }
+};
+
+const FIELD_HELP = {
+  lat: 'Latitude in decimal degrees (-90 to 90).',
+  lon: 'Longitude in decimal degrees (-180 to 180).',
+  modelHour: 'Hour used for model snapshot and table outputs.',
+  observedTime: 'Local observation time used for validation matching.',
+  turbidity: 'Cloudiness of water. Higher values reduce light penetration.',
+  mixedDepth: 'Depth of actively mixed surface layer; shallower responds faster.',
+  windReduction: 'How much regional wind reaches this pond after sheltering.',
+  evapCoeff: 'Multiplier for evaporative cooling strength.',
+  dailyAlpha: 'How quickly daily estimate moves toward equilibrium.',
+  mixAlpha: 'How strongly upper/lower layers mix each day.'
+};
+
 function toISODate(d) {
   return d.toISOString().slice(0, 10);
 }
@@ -575,10 +636,19 @@ function renderFitReport(report) {
     ? `<p class="fit-warning">Skipped ${report.unmatched.length} point(s) with no matching model row: ${report.unmatched.map((r) => r.date).join(', ')}.</p>`
     : '';
 
+  const signedBias = round1(report.matched.reduce((sum, row) => sum + row.err, 0) / report.matched.length);
+  const recommendation = report.mae <= 2
+    ? 'Fit is strong. Keep current settings and continue collecting observations.'
+    : report.mae <= 4
+      ? 'Fit is moderate. Try small adjustments to wind reduction, shading, and mixed-layer depth.'
+      : 'Fit is weak. Recheck location, observation time, and consider running auto-calibration with more validation points.';
+
   byId('fitOut').innerHTML = `
     <div class="fit-report">
       <p><strong>Validation points used:</strong> ${report.matched.length} / ${report.matched.length + report.unmatched.length}</p>
       <p><strong>Mean absolute error (MAE):</strong> ${report.mae} °F</p>
+      <p><strong>Signed bias:</strong> ${signedBias} °F (${signedBias > 0 ? 'model tends cool' : signedBias < 0 ? 'model tends warm' : 'neutral bias'})</p>
+      <p><strong>Guidance:</strong> ${recommendation}</p>
       ${skipped}
       <details>
         <summary>Per-point details</summary>
@@ -696,6 +766,146 @@ function readUiParams() {
 }
 
 
+
+function setFieldHelpText() {
+  Object.entries(FIELD_HELP).forEach(([id, help]) => {
+    const el = byId(id);
+    if (!el) return;
+    el.title = help;
+    if (!el.getAttribute('aria-label')) {
+      el.setAttribute('aria-label', `${id}: ${help}`);
+    }
+  });
+}
+
+function setFormValues(values) {
+  Object.entries(values).forEach(([id, value]) => {
+    const el = byId(id);
+    if (!el) return;
+    if (el.type === 'checkbox') {
+      el.checked = Boolean(value);
+      return;
+    }
+    el.value = value;
+  });
+}
+
+function applyPreset(presetName) {
+  const preset = PRESETS[presetName] || PRESETS.default;
+  setFormValues({ ...DEFAULT_FORM_VALUES, ...preset });
+  byId('presetSelect').value = presetName in PRESETS ? presetName : 'default';
+}
+
+function serializeUiToQuery() {
+  const ui = readUiParams();
+  const params = new URLSearchParams();
+  Object.entries(ui).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === '') return;
+    params.set(key, String(value));
+  });
+  return params.toString();
+}
+
+function applyQueryState() {
+  const query = new URLSearchParams(window.location.search);
+  if (![...query.keys()].length) return;
+  const updates = {};
+  Object.keys(DEFAULT_FORM_VALUES).forEach((id) => {
+    const queryValue = query.get(id);
+    if (queryValue !== null) updates[id] = queryValue;
+  });
+  ['lat','lon','label','acres','depthFt','obsDepthFt','modelHour','observedTime','turbidityNtu','visibilityFt','inflowCfs','inflowTempF','outflowCfs','sedimentFactor','sedimentConductivity','sedimentDepthM','mixedLayerDepthFt','windReductionFactor','evaporationCoeff','albedo','longwaveFactor','shadingPct','fetchLengthFt','dailyAlpha','mixAlpha','layerCount','uncertaintyBand','pastDays','futureDays','startWaterTemp'].forEach((key) => {
+    const value = query.get(key);
+    if (value === null) return;
+    const map = {
+      depthFt: 'depth', obsDepthFt: 'obsDepth', turbidityNtu: 'turbidity', visibilityFt: 'visibility', inflowCfs: 'inflow', inflowTempF: 'inflowTemp', outflowCfs: 'outflow', sedimentFactor: 'sediment', mixedLayerDepthFt: 'mixedDepth', windReductionFactor: 'windReduction', evaporationCoeff: 'evapCoeff', shadingPct: 'shading', fetchLengthFt: 'fetchLength', startWaterTemp: 'startWater'
+    };
+    updates[map[key] || key] = value;
+  });
+  ['autoCalibrate','runSensitivity'].forEach((id) => {
+    const value = query.get(id);
+    if (value !== null) updates[id] = value === 'true';
+  });
+  setFormValues(updates);
+}
+
+function renderTrendChart(rows) {
+  const canvas = byId('trendChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const merged = mergeValidationIntoRows(rows, getAllValidationInputs()).filter((r) => Number.isFinite(r.waterEstimate));
+  if (!merged.length) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  const pad = { l: 55, r: 18, t: 16, b: 34 };
+  const w = canvas.width;
+  const h = canvas.height;
+  const xs = merged.map((_, i) => i);
+  const vals = merged.flatMap((r) => [r.waterEstimate, r.tMean, r.validationObserved]).filter(Number.isFinite);
+  const minY = Math.floor((Math.min(...vals) - 2) / 2) * 2;
+  const maxY = Math.ceil((Math.max(...vals) + 2) / 2) * 2;
+  const xScale = (x) => pad.l + (x / Math.max(1, xs.length - 1)) * (w - pad.l - pad.r);
+  const yScale = (y) => h - pad.b - ((y - minY) / Math.max(1, maxY - minY)) * (h - pad.t - pad.b);
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#cdd8e8';
+  ctx.lineWidth = 1;
+
+  for (let tick = minY; tick <= maxY; tick += 2) {
+    const y = yScale(tick);
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
+    ctx.fillStyle = '#445';
+    ctx.font = '12px Arial';
+    ctx.fillText(String(tick), 8, y + 4);
+  }
+
+  ctx.strokeStyle = '#445';
+  ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, h - pad.b); ctx.lineTo(w - pad.r, h - pad.b); ctx.stroke();
+
+  const drawSeries = (key, color, dashed = false) => {
+    ctx.save();
+    ctx.setLineDash(dashed ? [6, 4] : []);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    let started = false;
+    merged.forEach((r, i) => {
+      const yv = r[key];
+      if (!Number.isFinite(yv)) return;
+      const x = xScale(i);
+      const y = yScale(yv);
+      if (!started) { ctx.beginPath(); ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    });
+    if (started) ctx.stroke();
+    ctx.restore();
+  };
+
+  drawSeries('tMean', '#6b7280', true);
+  drawSeries('waterEstimate', '#0b61d8');
+  drawSeries('validationObserved', '#d97706');
+
+  const legend = [
+    ['Model water estimate', '#0b61d8'],
+    ['Air temp mean', '#6b7280'],
+    ['Observed water temp', '#d97706']
+  ];
+  legend.forEach(([name, color], i) => {
+    const x = pad.l + i * 210;
+    const y = h - 10;
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y - 8, 16, 3);
+    ctx.fillStyle = '#223';
+    ctx.font = '12px Arial';
+    ctx.fillText(name, x + 22, y);
+  });
+}
+
 function validateUiParams(ui) {
   if (!Number.isFinite(ui.lat) || ui.lat < -90 || ui.lat > 90) throw new Error('Latitude must be between -90 and 90.');
   if (!Number.isFinite(ui.lon) || ui.lon < -180 || ui.lon > 180) throw new Error('Longitude must be between -180 and 180.');
@@ -748,13 +958,37 @@ async function runModel() {
   renderSummary({ label: ui.label, rows, timezone: forecastData.timezone, params, autoCalibrationResult, sensitivityResult, observedTime: ui.observedTime });
   renderTable(rows, params, ui.observedTime || '12:00');
   renderValidationInputs(rows);
+  renderTrendChart(rows);
 }
+
+setFieldHelpText();
+applyPreset('default');
+applyQueryState();
 
 byId('run').addEventListener('click', () => runModel().catch((e) => {
   byId('summary').innerHTML = `<p>Failed to run model: ${e.message}</p>`;
 }));
 byId('evaluate').addEventListener('click', () => evaluateFit(window.__fishcastv2Rows || []));
 byId('exportCsv').addEventListener('click', () => exportTraceCsv(window.__fishcastv2Rows || [], window.__fishcastv2Params || null, window.__fishcastv2ObservedTime || '12:00'));
+byId('resetDefaults').addEventListener('click', () => {
+  applyPreset('default');
+  byId('presetSelect').value = 'default';
+  byId('shareStatus').textContent = 'Defaults restored.';
+});
+byId('applyPreset').addEventListener('click', () => {
+  applyPreset(byId('presetSelect').value || 'default');
+  byId('shareStatus').textContent = `Preset applied: ${byId('presetSelect').selectedOptions[0]?.textContent || 'default'}`;
+});
+byId('copyShareLink').addEventListener('click', async () => {
+  const base = `${window.location.origin}${window.location.pathname}`;
+  const link = `${base}?${serializeUiToQuery()}`;
+  try {
+    await navigator.clipboard.writeText(link);
+    byId('shareStatus').textContent = 'Share link copied.';
+  } catch {
+    byId('shareStatus').textContent = link;
+  }
+});
 
 runModel().catch(() => {});
 
@@ -778,13 +1012,19 @@ byId('addValidationPoint').addEventListener('click', () => {
   byId('manualValidationTemp').value = '';
   byId('manualValidationClarity').value = '';
   renderManualValidationList();
-  if ((window.__fishcastv2Rows || []).length) renderTable(window.__fishcastv2Rows || [], window.__fishcastv2Params || null, window.__fishcastv2ObservedTime || '12:00');
+  if ((window.__fishcastv2Rows || []).length) {
+    renderTable(window.__fishcastv2Rows || [], window.__fishcastv2Params || null, window.__fishcastv2ObservedTime || '12:00');
+    renderTrendChart(window.__fishcastv2Rows || []);
+  }
 });
 
 byId('clearValidationPoints').addEventListener('click', () => {
   saveValidationPoints([]);
   renderManualValidationList();
-  if ((window.__fishcastv2Rows || []).length) renderTable(window.__fishcastv2Rows || [], window.__fishcastv2Params || null, window.__fishcastv2ObservedTime || '12:00');
+  if ((window.__fishcastv2Rows || []).length) {
+    renderTable(window.__fishcastv2Rows || [], window.__fishcastv2Params || null, window.__fishcastv2ObservedTime || '12:00');
+    renderTrendChart(window.__fishcastv2Rows || []);
+  }
 });
 
 byId('observedTime').addEventListener('change', () => {
