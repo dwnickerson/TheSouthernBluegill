@@ -16,6 +16,12 @@ function finiteOrNull(v) {
   return Number.isFinite(v) ? v : null;
 }
 
+function normalizeIsoDate(value) {
+  if (typeof value !== 'string') return null;
+  const match = value.trim().match(/\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : null;
+}
+
 function firstFinite(...vals) {
   for (const v of vals) {
     if (Number.isFinite(v)) return v;
@@ -441,8 +447,13 @@ function loadSavedValidationPoints() {
     const parsed = JSON.parse(localStorage.getItem(VALIDATION_STORE_KEY) || '[]');
     return Array.isArray(parsed)
       ? parsed
-        .filter((r) => typeof r?.date === 'string' && Number.isFinite(Number(r?.observed)))
-        .map((r) => ({ date: r.date, observed: Number(r.observed), observedTime: r.observedTime || '12:00', clarityNtu: firstFinite(Number(r.clarityNtu), null) }))
+        .map((r) => ({
+          date: normalizeIsoDate(r?.date),
+          observed: Number(r?.observed),
+          observedTime: r?.observedTime || '12:00',
+          clarityNtu: firstFinite(Number(r?.clarityNtu), null)
+        }))
+        .filter((r) => typeof r.date === 'string' && Number.isFinite(r.observed))
       : [];
   } catch {
     return [];
@@ -486,13 +497,9 @@ function getValidationRows(rows) {
   return rows.filter((r) => r.source === 'past' || r.date === firstForecastDate);
 }
 
-function getValidationDateSet(rows) {
-  return new Set(getValidationRows(rows).map((r) => r.date));
-}
-
 function getAllValidationInputs() {
   const inlineInputs = [...document.querySelectorAll('#validationInputs input[data-date]')]
-    .map((el) => ({ date: el.dataset.date, observed: Number(el.value), observedTime: byId('observedTime')?.value || '12:00' }))
+    .map((el) => ({ date: normalizeIsoDate(el.dataset.date), observed: Number(el.value), observedTime: byId('observedTime')?.value || '12:00' }))
     .filter((r) => Number.isFinite(r.observed));
 
   const saved = loadSavedValidationPoints();
@@ -502,6 +509,63 @@ function getAllValidationInputs() {
   });
 
   return [...deduped.values()];
+}
+
+function buildFitReport(rows, observations) {
+  const rowByDate = new Map(rows.map((row) => [row.date, row]));
+  const matched = [];
+  const unmatched = [];
+
+  observations.forEach((observation) => {
+    const model = rowByDate.get(observation.date)?.waterEstimate;
+    if (!Number.isFinite(model)) {
+      unmatched.push(observation);
+      return;
+    }
+
+    matched.push({
+      ...observation,
+      model,
+      err: round1(observation.observed - model),
+      absErr: round1(Math.abs(observation.observed - model))
+    });
+  });
+
+  return {
+    matched,
+    unmatched,
+    mae: matched.length
+      ? round1(matched.reduce((sum, row) => sum + Math.abs(row.err), 0) / matched.length)
+      : null
+  };
+}
+
+function renderFitReport(report) {
+  if (!report.matched.length) {
+    byId('fitOut').innerHTML = '<p class="fit-empty">No matching model dates for the validation points entered.</p>';
+    return;
+  }
+
+  const details = report.matched
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((row) => `<li><strong>${row.date}</strong> ${row.observedTime || '12:00'} — observed <strong>${round1(row.observed)} °F</strong>, model ${round1(row.model)} °F, error <strong>${row.err} °F</strong> (|error| ${row.absErr} °F)</li>`)
+    .join('');
+
+  const skipped = report.unmatched.length
+    ? `<p class="fit-warning">Skipped ${report.unmatched.length} point(s) with no matching model row: ${report.unmatched.map((r) => r.date).join(', ')}.</p>`
+    : '';
+
+  byId('fitOut').innerHTML = `
+    <div class="fit-report">
+      <p><strong>Validation points used:</strong> ${report.matched.length} / ${report.matched.length + report.unmatched.length}</p>
+      <p><strong>Mean absolute error (MAE):</strong> ${report.mae} °F</p>
+      ${skipped}
+      <details>
+        <summary>Per-point details</summary>
+        <ul>${details}</ul>
+      </details>
+    </div>
+  `;
 }
 
 function computeMAE(rows, observations) {
@@ -566,25 +630,12 @@ function evaluateFit(rows) {
   const obs = getAllValidationInputs();
 
   if (!obs.length) {
-    byId('fitOut').textContent = 'No observations entered yet.';
+    byId('fitOut').innerHTML = '<p class="fit-empty">No observations entered yet.</p>';
     return;
   }
 
-  const allowedDates = getValidationDateSet(rows);
-  const joined = obs
-    .filter((o) => allowedDates.has(o.date))
-    .map((o) => {
-      const model = rows.find((r) => r.date === o.date)?.waterEstimate;
-      return { ...o, model, err: round1(o.observed - model) };
-    }).filter((r) => Number.isFinite(r.model));
-
-  if (!joined.length) {
-    byId('fitOut').textContent = 'No matching model dates for the validation points entered.';
-    return;
-  }
-
-  const mae = round1(joined.reduce((s, r) => s + Math.abs(r.err), 0) / joined.length);
-  byId('fitOut').textContent = `Validation points: ${joined.length} | Mean absolute error: ${mae} °F | Time-aware details: ${joined.map((r) => `${r.date} ${r.observedTime || '12:00'} err=${r.err}`).join(', ')}`;
+  const report = buildFitReport(rows, obs);
+  renderFitReport(report);
 }
 
 function readUiParams() {
@@ -664,7 +715,7 @@ byId('exportCsv').addEventListener('click', () => exportTraceCsv(window.__fishca
 runModel().catch(() => {});
 
 byId('addValidationPoint').addEventListener('click', () => {
-  const date = byId('manualValidationDate').value;
+  const date = normalizeIsoDate(byId('manualValidationDate').value);
   const observed = Number(byId('manualValidationTemp').value);
   const observedTime = byId('manualValidationTime').value || '12:00';
   const clarityNtu = Number(byId('manualValidationClarity').value);
