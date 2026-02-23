@@ -36,18 +36,40 @@
     .fit-report li { margin: 6px 0; }
     .fit-warning { color: #8a5a00; }
     .fit-empty { color: #555; margin: 4px 0; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 12px; }
+    .toolbar button { white-space: nowrap; }
+    .chart-wrap { overflow-x: auto; }
+    #trendChart { width: 100%; min-width: 780px; height: 300px; border: 1px solid #d2dbe8; border-radius: 8px; background: #fff; }
+    #tableWrap { overflow-x: auto; }
+    .disclaimer { border-left: 4px solid #8a5a00; background: #fff8e8; padding: 8px 10px; border-radius: 6px; }
     @media (max-width: 640px) {
       .validation-row { grid-template-columns: 1fr; gap: 4px; }
+      #trendChart { min-width: 620px; }
     }
   </style>
 </head>
 <body>
   <h1>FishCast v2 Reset — Tupelo, MS Pond Prototype</h1>
   <p class="muted">Simple model using <strong>past + present + future weather</strong> to estimate pond water temperature with tunable energy-balance controls.</p>
+  <p class="disclaimer"><strong>Prototype disclaimer:</strong> This is an educational planning model, not a safety-critical forecast. Typical field MAE can be around 2–5 °F and can be worse during rapid weather shifts (fronts, heatwaves, unusual inflows). Validate against local observations before making decisions.</p>
 
   <section class="card">
     <h2>Inputs</h2>
     <p class="muted">Use these grouped settings to set up pond conditions, timing, and model behavior. Start with defaults, then adjust only a few values at a time.</p>
+    <div class="toolbar">
+      <label>Preset
+        <select id="presetSelect">
+          <option value="default">Default Tupelo pond</option>
+          <option value="murkyTexasPond">Murky Texas pond</option>
+          <option value="shallowClearPond">Shallow clear pond</option>
+          <option value="springFedPond">Spring-fed pond</option>
+        </select>
+      </label>
+      <button id="applyPreset">Apply preset</button>
+      <button id="resetDefaults">Reset all defaults</button>
+      <button id="copyShareLink">Copy shareable link</button>
+      <span id="shareStatus" class="muted"></span>
+    </div>
     <div class="input-sections">
       <div class="input-section">
         <h3>Location & time setup</h3>
@@ -146,6 +168,14 @@
     </div>
     <button id="evaluate">Evaluate fit</button>
     <p id="fitOut"></p>
+  </section>
+
+  <section class="card">
+    <h2>Trend Chart</h2>
+    <p class="muted">Line chart of modeled water estimate vs daily mean air temperature and validation observations.</p>
+    <div class="chart-wrap">
+      <canvas id="trendChart" width="1100" height="320" aria-label="Water and air temperature trend chart"></canvas>
+    </div>
   </section>
 
   <section class="card" id="summary"></section>
