@@ -566,6 +566,74 @@ function bindFormStatePersistence() {
   });
 }
 
+function collectInputExportPayload() {
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    formState: loadSavedFormState(),
+    validationHistory: loadSavedValidationPoints()
+  };
+}
+
+function exportInputParameters() {
+  const payload = collectInputExportPayload();
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fishcastv2-input-parameters-${timestamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  byId('shareStatus').textContent = 'Inputs exported.';
+}
+
+function normalizeImportedFormState(rawState) {
+  if (!rawState || typeof rawState !== 'object') return null;
+  const normalized = {};
+  Object.entries(DEFAULT_FORM_VALUES).forEach(([id, defaultValue]) => {
+    if (!(id in rawState)) return;
+    const incoming = rawState[id];
+    normalized[id] = typeof defaultValue === 'boolean' ? Boolean(incoming) : String(incoming ?? '');
+  });
+  return normalized;
+}
+
+function normalizeImportedValidationHistory(rawHistory) {
+  if (!Array.isArray(rawHistory)) return [];
+  return rawHistory
+    .map((row) => ({
+      date: normalizeIsoDate(row?.date),
+      observed: Number(row?.observed),
+      observedTime: typeof row?.observedTime === 'string' && row.observedTime.includes(':') ? row.observedTime : '12:00',
+      clarityNtu: parseOptionalNumber(row?.clarityNtu)
+    }))
+    .filter((row) => row.date && Number.isFinite(row.observed));
+}
+
+async function importInputParametersFromText(jsonText) {
+  const payload = JSON.parse(jsonText);
+  const importedState = normalizeImportedFormState(payload?.formState ?? payload);
+  if (!importedState || !Object.keys(importedState).length) {
+    throw new Error('No supported input parameters found in file.');
+  }
+
+  setFormValues(importedState);
+  saveFormState();
+
+  const importedValidation = normalizeImportedValidationHistory(payload?.validationHistory);
+  if (Array.isArray(payload?.validationHistory)) {
+    saveValidationPoints(importedValidation);
+    renderManualValidationList();
+  }
+
+  byId('shareStatus').textContent = `Imported ${Object.keys(importedState).length} input fields${Array.isArray(payload?.validationHistory) ? ` and ${importedValidation.length} validation point(s)` : ''}.`;
+
+  await runModel();
+}
+
 function loadSavedValidationPoints() {
   try {
     const parsed = JSON.parse(localStorage.getItem(VALIDATION_STORE_KEY) || '[]');
@@ -1069,6 +1137,25 @@ byId('copyShareLink').addEventListener('click', async () => {
     byId('shareStatus').textContent = 'Share link copied.';
   } catch {
     byId('shareStatus').textContent = link;
+  }
+});
+byId('exportInputs').addEventListener('click', () => {
+  saveFormState();
+  exportInputParameters();
+});
+byId('importInputs').addEventListener('click', () => {
+  byId('importInputsFile').click();
+});
+byId('importInputsFile').addEventListener('change', async (event) => {
+  const file = event?.target?.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    await importInputParametersFromText(text);
+  } catch (error) {
+    byId('shareStatus').textContent = `Import failed: ${error.message}`;
+  } finally {
+    event.target.value = '';
   }
 });
 
