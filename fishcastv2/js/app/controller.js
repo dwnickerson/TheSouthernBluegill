@@ -22,6 +22,14 @@ function normalizeIsoDate(value) {
   return match ? match[0] : null;
 }
 
+function parseOptionalNumber(value) {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function firstFinite(...vals) {
   for (const v of vals) {
     if (Number.isFinite(v)) return v;
@@ -499,7 +507,11 @@ function getValidationRows(rows) {
 
 function getAllValidationInputs() {
   const inlineInputs = [...document.querySelectorAll('#validationInputs input[data-date]')]
-    .map((el) => ({ date: normalizeIsoDate(el.dataset.date), observed: Number(el.value), observedTime: byId('observedTime')?.value || '12:00' }))
+    .map((el) => ({
+      date: normalizeIsoDate(el.dataset.date),
+      observed: parseOptionalNumber(el.value),
+      observedTime: byId('observedTime')?.value || '12:00'
+    }))
     .filter((r) => Number.isFinite(r.observed));
 
   const saved = loadSavedValidationPoints();
