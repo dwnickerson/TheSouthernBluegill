@@ -353,9 +353,14 @@ function renderSummary({ label, rows, timezone, params, autoCalibrationResult, s
   `;
 }
 
-function renderTable(rows, params = window.__fishcastv2Params || null, observedTime = window.__fishcastv2ObservedTime || '12:00') {
+function renderTable(
+  rows,
+  params = window.__fishcastv2Params || null,
+  observedTime = window.__fishcastv2ObservedTime || '12:00',
+  uiParams = window.__fishcastv2UiParams || null
+) {
   const rowsWithValidation = mergeValidationIntoRows(rows, getAllValidationInputs());
-  const rowsWithTraceInputs = mergeTraceInputsIntoRows(rowsWithValidation, params, observedTime);
+  const rowsWithTraceInputs = mergeTraceInputsIntoRows(rowsWithValidation, params, observedTime, uiParams);
   const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'WindEff', 'DayFrac', 'Precip', 'Solar', 'Cloud', 'AirBlend', 'Solar+', 'Wind-', 'Evap-', 'Longwave-', 'Cloud-', 'Rain-', 'FlowΔ', 'Equilibrium', 'Eq+Sed', 'Alpha', 'MixAlpha', 'Layers', 'WaterBulk', 'WaterLow', 'WaterEst', 'WaterHigh', 'ValidationObs', 'ValidationTime', 'ValidationErr', 'ValidationClarity', 'InputAcres', 'InputDepthFt', 'InputObsDepthFt', 'InputModelHour', 'InputObservedTime', 'InputTurbidityNtu', 'InputVisibilityFt', 'InputInflowCfs', 'InputInflowTempF', 'InputOutflowCfs', 'InputShadingPct', 'InputFetchLengthFt', 'InputWindReduction', 'InputEvapCoeff', 'InputAlbedo', 'InputLongwaveFactor', 'InputMixedLayerDepthFt', 'InputSedimentFactor', 'InputSedimentConductivity', 'InputSedimentDepthM', 'InputDailyAlpha', 'InputMixAlpha', 'InputLayerCount', 'InputUncertaintyBand'];
   const body = rowsWithTraceInputs.map((r) => `<tr>
     <td>${r.date}</td><td>${r.source}</td><td>${r.tMin}</td><td>${r.tMean}</td><td>${r.tMax}</td>
@@ -377,10 +382,15 @@ function csvEscape(value) {
   return str;
 }
 
-function rowsToCsv(rows, params = window.__fishcastv2Params || null, observedTime = window.__fishcastv2ObservedTime || '12:00') {
+function rowsToCsv(
+  rows,
+  params = window.__fishcastv2Params || null,
+  observedTime = window.__fishcastv2ObservedTime || '12:00',
+  uiParams = window.__fishcastv2UiParams || null
+) {
   if (!rows?.length) return '';
   const rowsWithValidation = mergeValidationIntoRows(rows, getAllValidationInputs());
-  const rowsWithTraceInputs = mergeTraceInputsIntoRows(rowsWithValidation, params, observedTime);
+  const rowsWithTraceInputs = mergeTraceInputsIntoRows(rowsWithValidation, params, observedTime, uiParams);
   const columns = [
     'date', 'source', 'tMin', 'tMean', 'tMax', 'windMean', 'effectiveWind', 'daylightFraction',
     'precip', 'solar', 'cloud', 'airBlend', 'solarHeat', 'windCool', 'evapCool', 'longwaveNet',
@@ -467,44 +477,52 @@ function mergeValidationIntoRows(rows, validationPoints) {
   return [...mergedRows, ...unmatchedValidationRows];
 }
 
-function mergeTraceInputsIntoRows(rows, params, observedTime) {
+function mergeTraceInputsIntoRows(rows, params, observedTime, uiParams) {
   if (!params) return rows;
+
+  const rawOrRounded = (rawValue, normalizedValue) => (Number.isFinite(rawValue) ? rawValue : round1(normalizedValue));
+
   return rows.map((row) => ({
     ...row,
-    inputAcres: round1(params.acres),
-    inputDepthFt: round1(params.depthFt),
-    inputObsDepthFt: round1(params.obsDepthFt),
+    inputAcres: rawOrRounded(uiParams?.acres, params.acres),
+    inputDepthFt: rawOrRounded(uiParams?.depthFt, params.depthFt),
+    inputObsDepthFt: rawOrRounded(uiParams?.obsDepthFt, params.obsDepthFt),
     inputModelHour: params.modelHour,
     inputObservedTime: observedTime || '12:00',
-    inputTurbidityNtu: round1(params.turbidityNtu),
-    inputVisibilityFt: round1(params.visibilityFt),
-    inputInflowCfs: round1(params.inflowCfs),
-    inputInflowTempF: round1(params.inflowTempF),
-    inputOutflowCfs: round1(params.outflowCfs),
-    inputShadingPct: round1(params.shadingPct),
-    inputFetchLengthFt: round1(params.fetchLengthFt),
-    inputWindReduction: round1(params.windReductionFactor),
-    inputEvapCoeff: round1(params.evaporationCoeff),
-    inputAlbedo: round1(params.albedo),
-    inputLongwaveFactor: round1(params.longwaveFactor),
-    inputMixedLayerDepthFt: round1(params.mixedLayerDepthFt),
-    inputSedimentFactor: round1(params.sedimentFactor),
-    inputSedimentConductivity: round1(params.sedimentConductivity),
-    inputSedimentDepthM: round1(params.sedimentDepthM),
-    inputDailyAlpha: round1(params.dailyAlpha),
-    inputMixAlpha: round1(params.mixAlpha),
+    inputTurbidityNtu: rawOrRounded(uiParams?.turbidityNtu, params.turbidityNtu),
+    inputVisibilityFt: rawOrRounded(uiParams?.visibilityFt, params.visibilityFt),
+    inputInflowCfs: rawOrRounded(uiParams?.inflowCfs, params.inflowCfs),
+    inputInflowTempF: rawOrRounded(uiParams?.inflowTempF, params.inflowTempF),
+    inputOutflowCfs: rawOrRounded(uiParams?.outflowCfs, params.outflowCfs),
+    inputShadingPct: rawOrRounded(uiParams?.shadingPct, params.shadingPct),
+    inputFetchLengthFt: rawOrRounded(uiParams?.fetchLengthFt, params.fetchLengthFt),
+    inputWindReduction: rawOrRounded(uiParams?.windReductionFactor, params.windReductionFactor),
+    inputEvapCoeff: rawOrRounded(uiParams?.evaporationCoeff, params.evaporationCoeff),
+    inputAlbedo: rawOrRounded(uiParams?.albedo, params.albedo),
+    inputLongwaveFactor: rawOrRounded(uiParams?.longwaveFactor, params.longwaveFactor),
+    inputMixedLayerDepthFt: rawOrRounded(uiParams?.mixedLayerDepthFt, params.mixedLayerDepthFt),
+    inputSedimentFactor: rawOrRounded(uiParams?.sedimentFactor, params.sedimentFactor),
+    inputSedimentConductivity: rawOrRounded(uiParams?.sedimentConductivity, params.sedimentConductivity),
+    inputSedimentDepthM: rawOrRounded(uiParams?.sedimentDepthM, params.sedimentDepthM),
+    inputDailyAlpha: rawOrRounded(uiParams?.dailyAlpha, params.dailyAlpha),
+    inputMixAlpha: rawOrRounded(uiParams?.mixAlpha, params.mixAlpha),
     inputLayerCount: params.layerCount,
-    inputUncertaintyBand: round1(params.uncertaintyBand)
+    inputUncertaintyBand: rawOrRounded(uiParams?.uncertaintyBand, params.uncertaintyBand)
   }));
 }
 
-function exportTraceCsv(rows, params = window.__fishcastv2Params || null, observedTime = window.__fishcastv2ObservedTime || '12:00') {
+function exportTraceCsv(
+  rows,
+  params = window.__fishcastv2Params || null,
+  observedTime = window.__fishcastv2ObservedTime || '12:00',
+  uiParams = window.__fishcastv2UiParams || null
+) {
   if (!rows?.length) {
     byId('fitOut').textContent = 'Run the model before exporting CSV.';
     return;
   }
 
-  const csv = rowsToCsv(rows, params, observedTime);
+  const csv = rowsToCsv(rows, params, observedTime, uiParams);
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -716,7 +734,12 @@ function runSensitivity(baseParams) {
 }
 
 function evaluateFit(rows) {
-  renderTable(rows, window.__fishcastv2Params || null, window.__fishcastv2ObservedTime || '12:00');
+  renderTable(
+    rows,
+    window.__fishcastv2Params || null,
+    window.__fishcastv2ObservedTime || '12:00',
+    window.__fishcastv2UiParams || null
+  );
   const obs = getAllValidationInputs();
 
   if (!obs.length) {
@@ -954,9 +977,10 @@ async function runModel() {
 
   window.__fishcastv2Rows = rows;
   window.__fishcastv2Params = params;
+  window.__fishcastv2UiParams = ui;
   window.__fishcastv2ObservedTime = ui.observedTime || '12:00';
   renderSummary({ label: ui.label, rows, timezone: forecastData.timezone, params, autoCalibrationResult, sensitivityResult, observedTime: ui.observedTime });
-  renderTable(rows, params, ui.observedTime || '12:00');
+  renderTable(rows, params, ui.observedTime || '12:00', ui);
   renderValidationInputs(rows);
   renderTrendChart(rows);
 }
@@ -969,7 +993,12 @@ byId('run').addEventListener('click', () => runModel().catch((e) => {
   byId('summary').innerHTML = `<p>Failed to run model: ${e.message}</p>`;
 }));
 byId('evaluate').addEventListener('click', () => evaluateFit(window.__fishcastv2Rows || []));
-byId('exportCsv').addEventListener('click', () => exportTraceCsv(window.__fishcastv2Rows || [], window.__fishcastv2Params || null, window.__fishcastv2ObservedTime || '12:00'));
+byId('exportCsv').addEventListener('click', () => exportTraceCsv(
+  window.__fishcastv2Rows || [],
+  window.__fishcastv2Params || null,
+  window.__fishcastv2ObservedTime || '12:00',
+  window.__fishcastv2UiParams || null
+));
 byId('resetDefaults').addEventListener('click', () => {
   applyPreset('default');
   byId('presetSelect').value = 'default';
@@ -1013,7 +1042,12 @@ byId('addValidationPoint').addEventListener('click', () => {
   byId('manualValidationClarity').value = '';
   renderManualValidationList();
   if ((window.__fishcastv2Rows || []).length) {
-    renderTable(window.__fishcastv2Rows || [], window.__fishcastv2Params || null, window.__fishcastv2ObservedTime || '12:00');
+    renderTable(
+      window.__fishcastv2Rows || [],
+      window.__fishcastv2Params || null,
+      window.__fishcastv2ObservedTime || '12:00',
+      window.__fishcastv2UiParams || null
+    );
     renderTrendChart(window.__fishcastv2Rows || []);
   }
 });
@@ -1022,7 +1056,12 @@ byId('clearValidationPoints').addEventListener('click', () => {
   saveValidationPoints([]);
   renderManualValidationList();
   if ((window.__fishcastv2Rows || []).length) {
-    renderTable(window.__fishcastv2Rows || [], window.__fishcastv2Params || null, window.__fishcastv2ObservedTime || '12:00');
+    renderTable(
+      window.__fishcastv2Rows || [],
+      window.__fishcastv2Params || null,
+      window.__fishcastv2ObservedTime || '12:00',
+      window.__fishcastv2UiParams || null
+    );
     renderTrendChart(window.__fishcastv2Rows || []);
   }
 });
