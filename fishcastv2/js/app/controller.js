@@ -711,6 +711,70 @@ function renderValidationInputs() {
   renderManualValidationList();
 }
 
+function parseValidationCsvLine(line) {
+  const values = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      values.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  values.push(current.trim());
+  return values;
+}
+
+function parseValidationCsv(csvText) {
+  const text = String(csvText || '').replace(/^\ufeff/, '');
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length);
+
+  if (!lines.length) {
+    throw new Error('CSV file is empty.');
+  }
+
+  const headerValues = parseValidationCsvLine(lines[0]).map((header) => header.toLowerCase().trim());
+  const expectedHeaders = ['date', 'observedtemp', 'observedtime', 'clarityntu'];
+  const missingHeaders = expectedHeaders.filter((header) => !headerValues.includes(header));
+  if (missingHeaders.length) {
+    throw new Error(`Missing required CSV header(s): ${missingHeaders.join(', ')}`);
+  }
+
+  const getCol = (name) => headerValues.indexOf(name);
+  const dateCol = getCol('date');
+  const observedCol = getCol('observedtemp');
+  const observedTimeCol = getCol('observedtime');
+  const clarityCol = getCol('clarityntu');
+
+  return lines.slice(1).map((line, i) => ({
+    rowNumber: i + 2,
+    values: parseValidationCsvLine(line),
+    dateCol,
+    observedCol,
+    observedTimeCol,
+    clarityCol
+  }));
+}
+
 function getAllValidationInputs() {
   const saved = loadSavedValidationPoints();
   const deduped = new Map();
@@ -1224,6 +1288,85 @@ byId('addValidationPoint').addEventListener('click', () => {
       window.__fishcastv2UiParams || null
     );
     renderTrendChart(window.__fishcastv2Rows || []);
+  }
+});
+
+
+byId('importValidationBtn').addEventListener('click', () => {
+  byId('importValidationCsv').click();
+});
+
+byId('importValidationCsv').addEventListener('change', async (event) => {
+  const fileInput = event?.target;
+  const file = fileInput?.files?.[0];
+  if (!file) return;
+
+  try {
+    const csvText = await file.text();
+    const parsedRows = parseValidationCsv(csvText);
+    const existingPoints = loadSavedValidationPoints();
+    const seenDates = new Set(existingPoints.map((point) => point.date));
+    const newPoints = [];
+    const errors = [];
+
+    parsedRows.forEach(({ rowNumber, values, dateCol, observedCol, observedTimeCol, clarityCol }) => {
+      const rawDate = values[dateCol] || '';
+      const rawObserved = values[observedCol] || '';
+      const rawObservedTime = values[observedTimeCol] || '';
+      const rawClarity = values[clarityCol] || '';
+
+      const date = normalizeIsoDate(rawDate);
+      const observed = Number(rawObserved);
+      const observedTime = String(rawObservedTime).trim() || '12:00';
+      const clarityNtu = rawClarity === '' ? null : finiteOrNull(Number(rawClarity));
+
+      if (!date) {
+        const message = `Row ${rowNumber}: invalid date "${rawDate}"`;
+        console.error('[Validation CSV import]', message);
+        errors.push(message);
+        return;
+      }
+      if (!Number.isFinite(observed)) {
+        const message = `Row ${rowNumber}: invalid observedTemp "${rawObserved}"`;
+        console.error('[Validation CSV import]', message);
+        errors.push(message);
+        return;
+      }
+      if (seenDates.has(date)) {
+        const message = `Row ${rowNumber}: duplicate date ${date} skipped`;
+        console.error('[Validation CSV import]', message);
+        errors.push(message);
+        return;
+      }
+
+      seenDates.add(date);
+      newPoints.push({ date, observed, observedTime, clarityNtu });
+    });
+
+    if (!newPoints.length) {
+      alert(`No valid points imported.${errors.length ? ` Errors: ${errors.join('; ')}` : ''}`);
+      return;
+    }
+
+    saveValidationPoints([...existingPoints, ...newPoints]);
+    renderManualValidationList();
+    if ((window.__fishcastv2Rows || []).length) {
+      renderTable(
+        window.__fishcastv2Rows || [],
+        window.__fishcastv2Params || null,
+        window.__fishcastv2ObservedTime || '12:00',
+        window.__fishcastv2UiParams || null
+      );
+      renderTrendChart(window.__fishcastv2Rows || []);
+      // await runModel(); // Optional refresh after import.
+    }
+
+    alert(`Imported ${newPoints.length} new points.${errors.length ? ` Skipped ${errors.length} row(s): ${errors.join('; ')}` : ''}`);
+  } catch (error) {
+    console.error('[Validation CSV import] Failed to import CSV', error);
+    alert(`Validation CSV import failed: ${error.message}`);
+  } finally {
+    if (fileInput) fileInput.value = '';
   }
 });
 

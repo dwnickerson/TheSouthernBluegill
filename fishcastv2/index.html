@@ -159,6 +159,9 @@
       <label>Observed Water Clarity (NTU, optional) <input id="manualValidationClarity" type="number" step="1" min="0" placeholder="e.g. 22"></label>
       <button id="addValidationPoint">Add validation point</button>
       <button id="clearValidationPoints">Clear saved points</button>
+      <button id="importValidationBtn">Import Validation CSV...</button>
+      <input type="file" id="importValidationCsv" accept=".csv" style="display:none;">
+      <p class="muted">CSV format: date (YYYY-MM-DD),observedTemp (°F),observedTime (HH:MM optional),clarityNtu (optional). One row per point. Header row required.</p>
       <p class="muted">Saved points persist in your browser for future model runs.</p>
       <div id="manualValidationList"></div>
     </div>
