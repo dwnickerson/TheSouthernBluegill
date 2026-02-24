@@ -209,7 +209,7 @@ function buildSeries(forecastData, archiveData, params, pastDays) {
     const tMax = finiteOrNull(dailyFuture.temperature_2m_max[i]);
     const tMin = finiteOrNull(dailyFuture.temperature_2m_min[i]);
     const tMean = finiteOrNull(dailyFuture.temperature_2m_mean[i]);
-    const windMean = finiteOrNull(dailyFuture.windspeed_10m_mean[i]);
+    const windMean = finiteOrNull(dailyFuture.temperature_2m_mean[i]);
     const precip = finiteOrNull(dailyFuture.precipitation_sum[i]);
     const solar = finiteOrNull(dailyFuture.shortwave_radiation_sum[i]);
     const cloud = finiteOrNull(dailyFuture.cloudcover_mean[i]);
@@ -247,7 +247,6 @@ function buildSeries(forecastData, archiveData, params, pastDays) {
   return series;
 }
 
-// Updated computeModel with new improvements
 function computeModel(series, params, observedTime) {
   const rows = [];
   const depthFactor = params.mixedLayerDepthFt / params.depthFt;
@@ -301,9 +300,8 @@ function computeModel(series, params, observedTime) {
 
     const rainCool = day.precip > 0 ? 0.5 * day.precip : 0;
 
-    // New: Enhanced advection / flowTempPull with mixing
     const flowTurnover = params.inflow / (params.acres * 2.29568e-5 * params.depthFt * 3630); // Rough daily fraction
-    const flowTempPull = flowTurnover * (params.inflowTemp - prevEstimate);
+    let flowTempPull = flowTurnover * (params.inflowTemp - prevEstimate);
     if (day.precip > 0.05) {
       // Rain-induced mixing: increase turnover
       const rainVolume = day.precip * params.acres * 3630 / 12 / params.depthFt; // Fraction
@@ -387,6 +385,185 @@ function computeModel(series, params, observedTime) {
   return rows;
 }
 
-// ... (rest of the code remains the same, including UI and other functions)
+function toModelParams(ui) {
+  return {
+    lat: Number(ui.lat) || 34.2576,
+    lon: Number(ui.lon) || -88.7034,
+    acres: clamp(Number(ui.acres) || 4.9, 0.1, 500),
+    depthFt: clamp(Number(ui.depth) || 8, 1, 50),
+    pastDays: clamp(Number(ui.pastDays) || 14, 1, 60),
+    futureDays: clamp(Number(ui.futureDays) || 7, 0, 30),
+    startWater: parseOptionalNumber(ui.startWater),
+    obsDepthFt: clamp(Number(ui.obsDepth) || 1.7, 0.1, 50),
+    modelHour: clamp(Number(ui.modelHour) || 12, 0, 23),
+    turbidity: clamp(Number(ui.turbidity) || 18, 0, 500),
+    visibility: clamp(Number(ui.visibility) || 3, 0.1, 20),
+    inflow: clamp(Number(ui.inflow) || 0.2, 0, 100),
+    inflowTemp: clamp(Number(ui.inflowTemp) || 58, 32, 120),
+    outflow: clamp(Number(ui.outflow) || 0.2, 0, 100),
+    sediment: clamp(Number(ui.sediment) || 0.45, 0, 1),
+    sedimentConductivity: clamp(Number(ui.sedimentConductivity) || 1.2, 0, 3),
+    sedimentDepthM: clamp(Number(ui.sedimentDepthM) || 0.4, 0, 2),
+    mixedLayerDepthFt: clamp(Number(ui.mixedDepth) || 4, 1, 20),
+    windReduction: clamp(Number(ui.windReduction) || 0.7, 0.1, 1),
+    evapCoeff: clamp(Number(ui.evapCoeff) || 1, 0.5, 1.5),
+    albedo: clamp(Number(ui.albedo) || 0.08, 0, 1),
+    longwaveFactor: clamp(Number(ui.longwaveFactor) || 1, 0.5, 1.5),
+    shading: clamp(Number(ui.shading) || 20, 0, 100),
+    fetchLength: clamp(Number(ui.fetchLength) || 550, 10, 5000),
+    dailyAlpha: clamp(Number(ui.dailyAlpha) || 0.18, 0.01, 0.5),
+    mixAlpha: clamp(Number(ui.mixAlpha) || 0.2, 0.01, 0.5),
+    layerCount: clamp(Number(ui.layerCount) || 1, 1, 3),
+    uncertaintyBand: clamp(Number(ui.uncertaintyBand) || 2.5, 0, 5)
+  };
+}
 
+async function fetchData(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Failed to fetch weather data');
+  return res.json();
+}
+
+async function runModel() {
+  const ui = {};
+  for (const key in DEFAULT_FORM_VALUES) {
+    ui[key] = byId(key)?.value || DEFAULT_FORM_VALUES[key];
+  }
+
+  const params = toModelParams(ui);
+  const urls = buildUrls(params);
+
+  const [forecastData, archiveData] = await Promise.all([
+    fetchData(urls.forecast),
+                                                        fetchData(urls.archive)
+  ]);
+
+  const series = buildSeries(forecastData, archiveData, params, params.pastDays);
+
+  let rows = computeModel(series, params, ui.observedTime);
+
+  if (ui.autoCalibrate) {
+    const calibration = autoCalibrate(rows, params, ui.observedTime);
+    params = calibration.bestParams;
+    rows = computeModel(series, params, ui.observedTime);
+  }
+
+  let sensitivityResult = null;
+  if (ui.runSensitivity) {
+    sensitivityResult = runSensitivity(rows, params, ui.observedTime);
+  }
+
+  window.__fishcastv2Rows = rows;
+  window.__fishcastv2Params = params;
+  window.__fishcastv2ObservedTime = ui.observedTime || '12:00';
+  window.__fishcastv2UiParams = ui;
+
+  renderSummary({ label: ui.label, rows, timezone: forecastData.timezone, params, autoCalibrationResult: ui.autoCalibrate ? calibration : null, sensitivityResult, observedTime: ui.observedTime });
+  renderTable(rows, params, ui.observedTime || '12:00', ui);
+  renderTrendChart(rows);
+}
+
+byId('run').addEventListener('click', () => runModel().catch((e) => {
+  byId('summary').innerHTML = `<p>Failed to run model: ${e.message}</p>`;
+}));
+
+byId('evaluate').addEventListener('click', () => evaluateFit(window.__fishcastv2Rows || []));
+
+byId('exportCsv').addEventListener('click', () => exportTraceCsv(window.__fishcastv2Rows || [], window.__fishcastv2Params || null, window.__fishcastv2ObservedTime || '12:00'));
+
+runModel().catch(() => {});
+
+byId('addValidationPoint').addEventListener('click', () => {
+  const date = normalizeIsoDate(byId('manualValidationDate').value);
+  const observed = Number(byId('manualValidationTemp').value);
+  const observedTime = byId('manualValidationTime').value || '12:00';
+  const clarityNtu = Number(byId('manualValidationClarity').value);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  if (!date || !Number.isFinite(observed)) {
+    byId('fitOut').textContent = 'Enter a valid date and observed temperature before adding.';
+    return;
+  }
+  if (date > todayIso) {
+    byId('fitOut').textContent = 'Validation points must be today or earlier.';
+    return;
+  }
+  const points = loadSavedValidationPoints().filter((p) => p.date !== date);
+  points.push({ date, observed, observedTime, clarityNtu: Number.isFinite(clarityNtu) ? clarityNtu : null });
+  saveValidationPoints(points);
+  byId('manualValidationTemp').value = '';
+  byId('manualValidationClarity').value = '';
+  renderManualValidationList();
+  if ((window.__fishcastv2Rows || []).length) {
+    renderTable(
+      window.__fishcastv2Rows || [],
+      window.__fishcastv2Params || null,
+      window.__fishcastv2ObservedTime || '12:00',
+      window.__fishcastv2UiParams || null
+    );
+    renderTrendChart(window.__fishcastv2Rows || []);
+  }
+});
+
+byId('clearValidationPoints').addEventListener('click', () => {
+  saveValidationPoints([]);
+  renderManualValidationList();
+  if ((window.__fishcastv2Rows || []).length) {
+    renderTable(
+      window.__fishcastv2Rows || [],
+      window.__fishcastv2Params || null,
+      window.__fishcastv2ObservedTime || '12:00',
+      window.__fishcastv2UiParams || null
+    );
+    renderTrendChart(window.__fishcastv2Rows || []);
+  }
+});
+
+byId('observedTime').addEventListener('change', () => {
+  const hr = parseTimeToHour(byId('observedTime').value);
+  byId('modelHour').value = String(hr);
+});
+
+// Stub functions for missing parts (add your actual implementations)
+function autoCalibrate(rows, params, observedTime) {
+  // Implement auto-calibration logic here
+  return { bestParams: params }; // Placeholder
+}
+
+function runSensitivity(rows, params, observedTime) {
+  // Implement sensitivity analysis here
+  return null; // Placeholder
+}
+
+function renderSummary(options) {
+  // Implement rendering summary here
+}
+
+function renderTable(rows, params, observedTime, ui) {
+  // Implement table rendering here
+}
+
+function renderTrendChart(rows) {
+  // Implement chart rendering here (e.g., using Chart.js)
+}
+
+function evaluateFit(rows) {
+  // Implement fit evaluation here
+}
+
+function exportTraceCsv(rows, params, observedTime) {
+  // Implement CSV export here
+}
+
+function loadSavedValidationPoints() {
+  // Implement localStorage load here
+  return [];
+}
+
+function saveValidationPoints(points) {
+  // Implement localStorage save here
+}
+
+function renderManualValidationList() {
+  // Implement list rendering here
+}
 </DOCUMENT>
