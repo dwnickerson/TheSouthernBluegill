@@ -1,3 +1,5 @@
+import { computeLongwaveLoss } from './model-physics.mjs';
+
 const byId = (id) => document.getElementById(id);
 
 const DEFAULT_FORM_VALUES = {
@@ -274,8 +276,13 @@ function computeModel(rows, rawParams) {
     const effectiveWind = windMph * windExposure;
     const windCool = effectiveWind * 0.08 * depthFluxScale;
 
-    const longwaveNet = (0.05 + firstFinite(r.cloud, 0) * 0.002) * longwaveFactor * depthFluxScale;
-    const cloudCool = firstFinite(r.cloud, 0) * 0.01 * depthFluxScale;
+    const {
+      cloudFrac,
+      longwaveClear,
+      longwaveLoss,
+      longwaveCloudAdjustment
+    } = computeLongwaveLoss(firstFinite(r.cloud, 0), longwaveFactor, depthFluxScale);
+    const cloudCool = 0;
     const rainCool = firstFinite(r.precip, 0) * 0.8 * depthFluxScale;
 
     const daytimeWeight = 0.35 + 0.45 * daylightFraction;
@@ -306,7 +313,7 @@ function computeModel(rows, rawParams) {
 
     const bottomFlux = sedimentConductivity * (sedimentTemp - water) / Math.max(sedimentDepthM, 0.05) * 0.001;
 
-    const equilibriumRaw = airBlend + solarHeat - windCool - evapCoolNew - cloudCool - rainCool - longwaveNet + flowTempPull + bottomFlux;
+    const equilibriumRaw = airBlend + solarHeat - windCool - evapCoolNew - rainCool - longwaveLoss + flowTempPull + bottomFlux;
     const equilibrium = clamp(equilibriumRaw, FREEZING_F_FRESH_WATER, 100);
 
     const prevSurface = layers[0];
@@ -346,7 +353,11 @@ function computeModel(rows, rawParams) {
       humidityMean: round1(relativeHumidity),
       evapCool: round1(evapCoolNew),
       evapCoolNew: round1(evapCoolNew),
-      longwaveNet: round1(longwaveNet),
+      cloudFrac: round1(cloudFrac),
+      longwaveClear: round1(longwaveClear),
+      longwaveLoss: round1(longwaveLoss),
+      longwaveCloudAdjustment: round1(longwaveCloudAdjustment),
+      longwaveNet: round1(longwaveLoss),
       daylightFraction: round1(daylightFraction),
       effectiveWind: round1(effectiveWind),
       windCool: round1(windCool),
@@ -401,11 +412,11 @@ function renderTable(
 ) {
   const rowsWithValidation = mergeValidationIntoRows(rows, getAllValidationInputs());
   const rowsWithTraceInputs = mergeTraceInputsIntoRows(rowsWithValidation, params, observedTime, uiParams);
-  const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'WindEff', 'DayFrac', 'Precip', 'Solar', 'Cloud', 'AirBlend', 'Solar+', 'Wind-', 'Evap-', 'Longwave-', 'Cloud-', 'Rain-', 'InflowΔ', 'RainΔ', 'FlowΔ', 'Equilibrium', 'Eq+Sed', 'Alpha', 'MixAlpha', 'Layers', 'WaterBulk', 'WaterLow', 'WaterEst', 'WaterHigh', 'ValidationObs', 'ValidationTime', 'ValidationErr', 'ValidationClarity', 'InputAcres', 'InputDepthFt', 'InputObsDepthFt', 'InputModelHour', 'InputObservedTime', 'InputTurbidityNtu', 'InputVisibilityFt', 'InputInflowCfs', 'InputInflowTempF', 'InputOutflowCfs', 'InputShadingPct', 'InputFetchLengthFt', 'InputWindReduction', 'InputEvapCoeff', 'InputAlbedo', 'InputLongwaveFactor', 'InputMixedLayerDepthFt', 'InputSedimentFactor', 'InputSedimentConductivity', 'InputSedimentDepthM', 'InputDailyAlpha', 'InputMixAlpha', 'InputLayerCount', 'InputUncertaintyBand'];
+  const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'WindEff', 'DayFrac', 'Precip', 'Solar', 'Cloud', 'CloudFrac', 'AirBlend', 'Solar+', 'Wind-', 'Evap-', 'LongwaveClear', 'LongwaveCloudΔ', 'LongwaveLoss', 'Longwave-(Legacy)', 'Cloud-(Legacy)', 'Rain-', 'InflowΔ', 'RainΔ', 'FlowΔ', 'Equilibrium', 'Eq+Sed', 'Alpha', 'MixAlpha', 'Layers', 'WaterBulk', 'WaterLow', 'WaterEst', 'WaterHigh', 'ValidationObs', 'ValidationTime', 'ValidationErr', 'ValidationClarity', 'InputAcres', 'InputDepthFt', 'InputObsDepthFt', 'InputModelHour', 'InputObservedTime', 'InputTurbidityNtu', 'InputVisibilityFt', 'InputInflowCfs', 'InputInflowTempF', 'InputOutflowCfs', 'InputShadingPct', 'InputFetchLengthFt', 'InputWindReduction', 'InputEvapCoeff', 'InputAlbedo', 'InputLongwaveFactor', 'InputMixedLayerDepthFt', 'InputSedimentFactor', 'InputSedimentConductivity', 'InputSedimentDepthM', 'InputDailyAlpha', 'InputMixAlpha', 'InputLayerCount', 'InputUncertaintyBand'];
   const body = rowsWithTraceInputs.map((r) => `<tr>
     <td>${r.date}</td><td>${r.source}</td><td>${r.tMin}</td><td>${r.tMean}</td><td>${r.tMax}</td>
     <td>${r.windMean}</td><td>${r.effectiveWind}</td><td>${r.daylightFraction}</td><td>${r.precip}</td><td>${r.solar}</td><td>${r.cloud}</td>
-    <td>${r.airBlend}</td><td>${r.solarHeat}</td><td>${r.windCool}</td><td>${r.evapCool}</td><td>${r.longwaveNet}</td><td>${r.cloudCool}</td><td>${r.rainCool}</td><td>${r.inflowTempPull}</td><td>${r.rainTempPull}</td><td>${r.flowTempPull}</td>
+    <td>${r.cloudFrac}</td><td>${r.airBlend}</td><td>${r.solarHeat}</td><td>${r.windCool}</td><td>${r.evapCool}</td><td>${r.longwaveClear}</td><td>${r.longwaveCloudAdjustment}</td><td>${r.longwaveLoss}</td><td>${r.longwaveNet}</td><td>${r.cloudCool}</td><td>${r.rainCool}</td><td>${r.inflowTempPull}</td><td>${r.rainTempPull}</td><td>${r.flowTempPull}</td>
     <td>${r.equilibrium}</td><td>${r.equilibriumWithSediment}</td><td>${r.alpha}</td><td>${r.mixedLayerAlpha}</td><td>${r.layerCount}</td><td>${r.waterEstimateBulk}</td><td>${r.waterLow}</td><td><strong>${r.waterEstimate}</strong></td><td>${r.waterHigh}</td>
     <td>${r.validationObserved ?? ''}</td><td>${r.validationObservedTime ?? ''}</td><td>${r.validationError ?? ''}</td><td>${r.validationClarityNtu ?? ''}</td>
     <td>${r.inputAcres ?? ''}</td><td>${r.inputDepthFt ?? ''}</td><td>${r.inputObsDepthFt ?? ''}</td><td>${r.inputModelHour ?? ''}</td><td>${r.inputObservedTime ?? ''}</td><td>${r.inputTurbidityNtu ?? ''}</td><td>${r.inputVisibilityFt ?? ''}</td><td>${r.inputInflowCfs ?? ''}</td><td>${r.inputInflowTempF ?? ''}</td><td>${r.inputOutflowCfs ?? ''}</td><td>${r.inputShadingPct ?? ''}</td><td>${r.inputFetchLengthFt ?? ''}</td><td>${r.inputWindReduction ?? ''}</td><td>${r.inputEvapCoeff ?? ''}</td><td>${r.inputAlbedo ?? ''}</td><td>${r.inputLongwaveFactor ?? ''}</td><td>${r.inputMixedLayerDepthFt ?? ''}</td><td>${r.inputSedimentFactor ?? ''}</td><td>${r.inputSedimentConductivity ?? ''}</td><td>${r.inputSedimentDepthM ?? ''}</td><td>${r.inputDailyAlpha ?? ''}</td><td>${r.inputMixAlpha ?? ''}</td><td>${r.inputLayerCount ?? ''}</td><td>${r.inputUncertaintyBand ?? ''}</td>
@@ -433,7 +444,7 @@ function rowsToCsv(
   const rowsWithTraceInputs = mergeTraceInputsIntoRows(rowsWithValidation, params, observedTime, uiParams);
   const columns = [
     'date', 'source', 'tMin', 'tMean', 'tMax', 'humidityMean', 'windMean', 'effectiveWind', 'daylightFraction',
-    'precip', 'solar', 'cloud', 'airBlend', 'solarHeat', 'windCool', 'evapCool', 'evapCoolNew', 'longwaveNet',
+    'precip', 'solar', 'cloud', 'cloudFrac', 'airBlend', 'solarHeat', 'windCool', 'evapCool', 'evapCoolNew', 'longwaveClear', 'longwaveCloudAdjustment', 'longwaveLoss', 'longwaveNet',
     'cloudCool', 'rainCool', 'bottomFlux', 'inflowTempPull', 'rainTempPull', 'flowTempPull', 'equilibrium', 'equilibriumWithSediment', 'alpha',
     'mixedLayerAlpha', 'layerCount', 'waterEstimateBulk', 'waterLow', 'waterEstimate', 'waterHigh',
     'validationObserved', 'validationObservedTime', 'validationError', 'validationClarityNtu',
@@ -491,11 +502,15 @@ function mergeValidationIntoRows(rows, validationPoints) {
       precip: null,
       solar: null,
       cloud: null,
+      cloudFrac: null,
       airBlend: null,
       solarHeat: null,
       windCool: null,
       evapCool: null,
       evapCoolNew: null,
+      longwaveClear: null,
+      longwaveCloudAdjustment: null,
+      longwaveLoss: null,
       longwaveNet: null,
       cloudCool: null,
       rainCool: null,
