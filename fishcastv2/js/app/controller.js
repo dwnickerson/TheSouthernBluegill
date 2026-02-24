@@ -1,5 +1,6 @@
 const byId = (id) => document.getElementById(id);
 
+// Defaults (your pond settings)
 const DEFAULT_FORM_VALUES = {
   lat: '34.2576',
   lon: '-88.7034',
@@ -17,49 +18,28 @@ const DEFAULT_FORM_VALUES = {
   inflow: '0.2',
   inflowTemp: '58',
   outflow: '0.2',
-  sediment: '0.45',
-  sedimentConductivity: '1.2',
+  sediment: '0',
+  sedimentConductivity: '0',
   sedimentDepthM: '0.4',
-  mixedDepth: '4',
+  mixedDepth: '1.5',
   windReduction: '0.7',
   evapCoeff: '1',
-  albedo: '0.08',
+  albedo: '0.05',
   longwaveFactor: '1',
-  shading: '20',
+  shading: '0',
   fetchLength: '550',
-  dailyAlpha: '0.18',
-  mixAlpha: '0.2',
-  layerCount: '1',
+  dailyAlpha: '0.5',
+  mixAlpha: '0.3',
+  layerCount: '2',
   uncertaintyBand: '2.5',
   autoCalibrate: false,
-  runSensitivity: true
+  runSensitivity: false
 };
 
-const PRESETS = {
-  default: {},
-    murkyTexasPond: {
-      label: 'Murky Texas pond', turbidity: '240', visibility: '0.8', depth: '6', shading: '10', windReduction: '0.6', evapCoeff: '1.1', mixedDepth: '3.2'
-    },
-    shallowClearPond: {
-      label: 'Shallow clear pond', turbidity: '8', visibility: '7.5', depth: '4.5', shading: '18', windReduction: '0.75', mixedDepth: '2.2', dailyAlpha: '0.24'
-    },
-    springFedPond: {
-      label: 'Spring-fed pond', turbidity: '12', visibility: '5.5', inflow: '1.4', outflow: '1.4', inflowTemp: '56', sediment: '0.5', depth: '9.5'
-    }
-};
-
-const FIELD_HELP = {
-  lat: 'Latitude in decimal degrees (-90 to 90).',
-  lon: 'Longitude in decimal degrees (-180 to 180).',
-  modelHour: 'Hour used for model snapshot and table outputs.',
-  observedTime: 'Local observation time used for validation matching.',
-  turbidity: 'Cloudiness of water. Higher values reduce light penetration.',
-  mixedDepth: 'Depth of actively mixed surface layer; shallower responds faster.',
-  windReduction: 'How much regional wind reaches this pond after sheltering.',
-  evapCoeff: 'Multiplier for evaporative cooling strength.',
-  dailyAlpha: 'How quickly daily estimate moves toward equilibrium.',
-  mixAlpha: 'How strongly upper/lower layers mix each day.'
-};
+// Saturation vapor pressure (Tetens)
+function satVaporPress(T) {
+  return 6.11 * Math.pow(10, (7.5 * T) / (237.3 + T));
+}
 
 function toISODate(d) {
   return d.toISOString().slice(0, 10);
@@ -77,38 +57,6 @@ function finiteOrNull(v) {
   return Number.isFinite(v) ? v : null;
 }
 
-function normalizeIsoDate(value) {
-  if (typeof value !== 'string') return null;
-  const match = value.trim().match(/\d{4}-\d{2}-\d{2}/);
-  return match ? match[0] : null;
-}
-
-function parseOptionalNumber(value) {
-  if (value === null || value === undefined) return null;
-  const normalized = String(value).trim();
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function firstFinite(...vals) {
-  for (const v of vals) {
-    if (Number.isFinite(v)) return v;
-  }
-  return null;
-}
-
-function parseTimeToHour(timeValue) {
-  if (!timeValue || !timeValue.includes(':')) return 12;
-  const [hours] = timeValue.split(':');
-  return clamp(Number(hours), 0, 23);
-}
-
-// Saturation vapor pressure (Tetens formula, hPa)
-function satVaporPress(T) {
-  return 6.11 * Math.pow(10, (7.5 * T) / (237.3 + T));
-}
-
 function buildUrls({ lat, lon, pastDays, futureDays }) {
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 3600 * 1000);
@@ -116,66 +64,214 @@ function buildUrls({ lat, lon, pastDays, futureDays }) {
   const futureEnd = new Date(now.getTime() + futureDays * 24 * 3600 * 1000);
 
   const varsDaily = [
-    'temperature_2m_max',
-    'temperature_2m_min',
-    'temperature_2m_mean',
-    'precipitation_sum',
-    'windspeed_10m_mean',
-    'shortwave_radiation_sum',
-    'cloudcover_mean',
-    'relative_humidity_2m_mean'
+    'temperature_2m_max', 'temperature_2m_min', 'temperature_2m_mean',
+    'precipitation_sum', 'windspeed_10m_mean', 'shortwave_radiation_sum',
+    'cloudcover_mean', 'relative_humidity_2m_mean'
   ].join(',');
 
   const varsCurrent = ['temperature_2m', 'windspeed_10m', 'cloudcover', 'relative_humidity_2m'].join(',');
 
   const forecast = new URL('https://api.open-meteo.com/v1/forecast');
   forecast.search = new URLSearchParams({
-    latitude: String(lat),
-                                        longitude: String(lon),
-                                        daily: varsDaily,
-                                        current: varsCurrent,
-                                        timezone: 'auto',
-                                        temperature_unit: 'fahrenheit',
-                                        wind_speed_unit: 'mph',
+    latitude: String(lat), longitude: String(lon),
+                                        daily: varsDaily, current: varsCurrent, timezone: 'auto',
+                                        temperature_unit: 'fahrenheit', wind_speed_unit: 'mph',
                                         precipitation_unit: 'inch',
-                                        start_date: toISODate(now),
-                                        end_date: toISODate(futureEnd)
+                                        start_date: toISODate(now), end_date: toISODate(futureEnd)
   }).toString();
 
   const archive = new URL('https://archive-api.open-meteo.com/v1/archive');
   archive.search = new URLSearchParams({
-    latitude: String(lat),
-                                       longitude: String(lon),
-                                       daily: varsDaily,
-                                       timezone: 'auto',
-                                       temperature_unit: 'fahrenheit',
-                                       wind_speed_unit: 'mph',
+    latitude: String(lat), longitude: String(lon),
+                                       daily: varsDaily, timezone: 'auto',
+                                       temperature_unit: 'fahrenheit', wind_speed_unit: 'mph',
                                        precipitation_unit: 'inch',
-                                       start_date: toISODate(pastStart),
-                                       end_date: toISODate(yesterday)
+                                       start_date: toISODate(pastStart), end_date: toISODate(yesterday)
   }).toString();
 
   return { forecast: forecast.toString(), archive: archive.toString() };
 }
 
-// ... (the rest of your original functions: buildSeries, computeModel, toModelParams, fetchData, runModel, event listeners, etc.)
+async function fetchData(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
 
-// IMPORTANT: Make sure to keep ALL your original rendering, validation, export, chart, etc. functions below here.
-// The improvements are only in:
-// - buildUrls (added humidity)
-// - buildSeries (added humidityMean)
-// - computeModel (added dynamic depth, turbidity, better evap, rain mixing, bottom flux)
-// Do NOT delete or overwrite those other parts!
+async function runModel() {
+  try {
+    const ui = {};
+    for (const key in DEFAULT_FORM_VALUES) {
+      ui[key] = byId(key)?.value ?? DEFAULT_FORM_VALUES[key];
+    }
 
-// Example stub if you don't have them yet (replace with your real code):
-function renderSummary(options) { console.log('Summary:', options); }
-function renderTable(rows, params, time, ui) { console.log('Table:', rows.length, 'rows'); }
-function renderTrendChart(rows) { console.log('Chart updated'); }
-function evaluateFit(rows) { console.log('Fit evaluated'); }
-function exportTraceCsv(rows, params, time) { console.log('CSV exported'); }
-function loadSavedValidationPoints() { return []; }
-function saveValidationPoints(points) { }
-function renderManualValidationList() { }
+    const params = {
+      lat: Number(ui.lat),
+      lon: Number(ui.lon),
+      acres: Number(ui.acres),
+      depthFt: Number(ui.depth),
+      mixedLayerDepthFt: Number(ui.mixedDepth),
+      pastDays: Number(ui.pastDays),
+      futureDays: Number(ui.futureDays),
+      startWater: Number(ui.startWater) || 50,
+      obsDepthFt: Number(ui.obsDepth),
+      turbidity: Number(ui.turbidity),
+      inflow: Number(ui.inflow),
+      inflowTemp: Number(ui.inflowTemp),
+      sediment: Number(ui.sediment),
+      sedimentConductivity: Number(ui.sedimentConductivity),
+      sedimentDepthM: Number(ui.sedimentDepthM),
+      windReduction: Number(ui.windReduction),
+      evapCoeff: Number(ui.evapCoeff),
+      albedo: Number(ui.albedo),
+      longwaveFactor: Number(ui.longwaveFactor),
+      shading: Number(ui.shading),
+      fetchLength: Number(ui.fetchLength),
+      dailyAlpha: Number(ui.dailyAlpha),
+      mixAlpha: Number(ui.mixAlpha),
+      layerCount: Number(ui.layerCount),
+      uncertaintyBand: Number(ui.uncertaintyBand)
+    };
 
-// Start the app
-runModel().catch(() => {});
+    const urls = buildUrls(params);
+    const [forecastData, archiveData] = await Promise.all([
+      fetchData(urls.forecast),
+                                                          fetchData(urls.archive)
+    ]);
+
+    // Simple series build (minimal version)
+    const series = [];
+    const dailyPast = archiveData.daily || {};
+    for (let i = 0; i < (dailyPast.time?.length || 0); i++) {
+      series.push({
+        date: dailyPast.time[i],
+        source: 'past',
+        tMin: finiteOrNull(dailyPast.temperature_2m_min[i]),
+                  tMean: finiteOrNull(dailyPast.temperature_2m_mean[i]),
+                  tMax: finiteOrNull(dailyPast.temperature_2m_max[i]),
+                  windMean: finiteOrNull(dailyPast.windspeed_10m_mean[i]),
+                  precip: finiteOrNull(dailyPast.precipitation_sum[i]),
+                  solar: finiteOrNull(dailyPast.shortwave_radiation_sum[i]),
+                  cloud: finiteOrNull(dailyPast.cloudcover_mean[i]),
+                  humidityMean: finiteOrNull(dailyPast.relative_humidity_2m_mean[i])
+      });
+    }
+
+    // Add future (simplified)
+    const dailyFuture = forecastData.daily || {};
+    for (let i = 0; i < (dailyFuture.time?.length || 0); i++) {
+      series.push({
+        date: dailyFuture.time[i],
+        source: 'future_or_today',
+        tMin: finiteOrNull(dailyFuture.temperature_2m_min[i]),
+                  tMean: finiteOrNull(dailyFuture.temperature_2m_mean[i]),
+                  tMax: finiteOrNull(dailyFuture.temperature_2m_max[i]),
+                  windMean: finiteOrNull(dailyFuture.windspeed_10m_mean[i]),
+                  precip: finiteOrNull(dailyFuture.precipitation_sum[i]),
+                  solar: finiteOrNull(dailyFuture.shortwave_radiation_sum[i]),
+                  cloud: finiteOrNull(dailyFuture.cloudcover_mean[i]),
+                  humidityMean: finiteOrNull(dailyFuture.relative_humidity_2m_mean[i])
+      });
+    }
+
+    const rows = computeModel(series, params, ui.observedTime || '12:00');
+
+    console.log('Model ran successfully. Rows:', rows.length);
+    console.log('Last day estimate:', rows[rows.length-1]);
+
+    // Placeholder for UI update
+    if (byId('summary')) {
+      byId('summary').innerHTML = `<p>Model ran: ${rows.length} days. Latest estimate: ${round1(rows[rows.length-1].waterEstimate)} °F</p>`;
+    }
+
+  } catch (e) {
+    console.error('Model error:', e);
+    if (byId('summary')) {
+      byId('summary').innerHTML = `<p style="color:red">Error: ${e.message}</p>`;
+    }
+  }
+}
+
+// The improved computeModel function
+function computeModel(series, params, observedTime) {
+  const rows = [];
+  let prevEstimate = params.startWater || 50;
+  let prevSedimentTemp = prevEstimate;
+
+  for (const day of series) {
+    const daylightFraction = 0.5; // Simplified for minimal version
+    const effectiveWind = day.windMean * params.windReduction;
+
+    let dynamicMixedDepthFt = params.mixedLayerDepthFt + 0.3 * day.windMean * Math.sqrt(params.fetchLength / 328.08);
+    dynamicMixedDepthFt = clamp(dynamicMixedDepthFt, 1, params.depthFt);
+
+    let currentTurbidity = params.turbidity;
+    if (day.precip > 0.1) {
+      currentTurbidity += 10 * day.precip;
+      currentTurbidity = clamp(currentTurbidity, params.turbidity, 500);
+    }
+    const dynamicClarityFactor = Math.exp(-0.015 * currentTurbidity);
+
+    const airBlend = 0.6 * day.tMean + 0.4 * day.tMax;
+
+    const absorbedSolar = day.solar * daylightFraction * (1 - params.shading / 100) * (1 - params.albedo) * dynamicClarityFactor;
+    const solarHeat = absorbedSolar * 0.002;
+
+    const windCool = params.evapCoeff * 0.001 * effectiveWind;
+
+    const es = satVaporPress(prevEstimate);
+    const ea = satVaporPress(airBlend) * ((day.humidityMean || 70) / 100);
+    const evapCool = params.evapCoeff * 0.0006 * effectiveWind * (es - ea) * daylightFraction;
+
+    const longwaveNet = params.longwaveFactor * 0.03 * (airBlend - prevEstimate);
+    const cloudCool = 0.02 * (day.cloud || 0) / 100 * daylightFraction;
+    const rainCool = day.precip > 0 ? 0.5 * day.precip : 0;
+
+    const flowTurnover = params.inflow / (params.acres * 2.29568e-5 * params.depthFt * 3630);
+    let flowTempPull = flowTurnover * (params.inflowTemp - prevEstimate);
+    if (day.precip > 0.05) {
+      const rainVolume = day.precip * params.acres * 3630 / 12 / params.depthFt;
+      const rainTempPull = rainVolume * (day.tMean - prevEstimate);
+      flowTempPull += rainTempPull;
+    }
+
+    const bottomFlux = params.sedimentConductivity * (prevSedimentTemp - prevEstimate) / params.sedimentDepthM * 0.001;
+
+    let equilibrium = airBlend + solarHeat - windCool - evapCool - longwaveNet - cloudCool - rainCool + flowTempPull + bottomFlux;
+    equilibrium = clamp(equilibrium, 32, 120);
+
+    let equilibriumWithSediment = equilibrium;
+    if (params.sediment > 0) {
+      const sedimentLag = 0.5 * params.sediment * (prevSedimentTemp || airBlend);
+      equilibriumWithSediment = equilibrium * (1 - params.sediment) + sedimentLag;
+      prevSedimentTemp = 0.9 * prevSedimentTemp + 0.1 * equilibrium;
+    }
+
+    const alpha = clamp(params.dailyAlpha * (params.mixedLayerDepthFt / params.depthFt), 0.02, 0.5);
+    let waterEstimate = prevEstimate + alpha * (equilibriumWithSediment - prevEstimate);
+    waterEstimate = clamp(waterEstimate, 32, 120);
+
+    prevEstimate = waterEstimate;
+    prevSedimentTemp = prevSedimentTemp || prevEstimate;
+
+    rows.push({
+      date: day.date,
+      source: day.source,
+      tMean: round1(day.tMean),
+              solarHeat: round1(solarHeat),
+              evapCool: round1(evapCool),
+              flowTempPull: round1(flowTempPull),
+              bottomFlux: round1(bottomFlux),
+              equilibrium: round1(equilibrium),
+              waterEstimate: round1(waterEstimate)
+    });
+  }
+
+  return rows;
+}
+
+// Basic run trigger
+byId('run')?.addEventListener('click', runModel);
+
+// Auto-run on load
+runModel();
