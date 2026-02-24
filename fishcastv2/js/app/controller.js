@@ -288,15 +288,21 @@ function computeModel(rows, rawParams) {
     const ea = satVaporPress(airBlend) * (relativeHumidity / 100);
     const evapCoolNew = evaporationCoeff * 0.0006 * effectiveWind * Math.max(es - ea, 0) * daylightFraction * depthFluxScale;
 
-    let flowTempPull = inflowCfs > 0
-      ? clamp((inflowTempF - water) * clamp(inflowCfs / Math.max(acres * depthFt, 0.5), 0, 0.25), -6, 6)
-      : netFlowCfs * 1.1;
-
-    if (firstFinite(r.precip, 0) > 0.05) {
-      const rainVolume = (firstFinite(r.precip, 0) * acres * 3630) / 12 / Math.max(depthFt, 0.2);
-      const rainTempPull = rainVolume * (tMean - water);
-      flowTempPull += clamp(rainTempPull, -4, 4);
+    let inflowTempPull = 0;
+    if (inflowCfs > 0) {
+      const mix = clamp(inflowCfs / Math.max(acres * depthFt, 0.5), 0, 0.25);
+      inflowTempPull = clamp((inflowTempF - water) * mix, -6, 6);
     }
+
+    let rainTempPull = 0;
+    const precipIn = firstFinite(r.precip, 0);
+    if (precipIn > 0.05) {
+      const rainFrac = clamp((precipIn / 12) / Math.max(depthFt, 0.2), 0, 0.15);
+      const rainTempF = tMean;
+      rainTempPull = clamp(rainFrac * (rainTempF - water), -1.5, 1.5);
+    }
+
+    const flowTempPull = clamp(inflowTempPull + rainTempPull, -6, 6);
 
     const bottomFlux = sedimentConductivity * (sedimentTemp - water) / Math.max(sedimentDepthM, 0.05) * 0.001;
 
@@ -356,6 +362,8 @@ function computeModel(rows, rawParams) {
       netFlowCfs: round1(netFlowCfs),
       sedimentFactor: round1(sedimentFactor),
       bottomFlux: round1(bottomFlux),
+      inflowTempPull: round1(inflowTempPull),
+      rainTempPull: round1(rainTempPull),
       flowTempPull: round1(flowTempPull),
       equilibriumWithSediment: round1(equilibriumWithSediment),
       waterEstimateBulk: round1(water),
@@ -393,11 +401,11 @@ function renderTable(
 ) {
   const rowsWithValidation = mergeValidationIntoRows(rows, getAllValidationInputs());
   const rowsWithTraceInputs = mergeTraceInputsIntoRows(rowsWithValidation, params, observedTime, uiParams);
-  const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'WindEff', 'DayFrac', 'Precip', 'Solar', 'Cloud', 'AirBlend', 'Solar+', 'Wind-', 'Evap-', 'Longwave-', 'Cloud-', 'Rain-', 'FlowΔ', 'Equilibrium', 'Eq+Sed', 'Alpha', 'MixAlpha', 'Layers', 'WaterBulk', 'WaterLow', 'WaterEst', 'WaterHigh', 'ValidationObs', 'ValidationTime', 'ValidationErr', 'ValidationClarity', 'InputAcres', 'InputDepthFt', 'InputObsDepthFt', 'InputModelHour', 'InputObservedTime', 'InputTurbidityNtu', 'InputVisibilityFt', 'InputInflowCfs', 'InputInflowTempF', 'InputOutflowCfs', 'InputShadingPct', 'InputFetchLengthFt', 'InputWindReduction', 'InputEvapCoeff', 'InputAlbedo', 'InputLongwaveFactor', 'InputMixedLayerDepthFt', 'InputSedimentFactor', 'InputSedimentConductivity', 'InputSedimentDepthM', 'InputDailyAlpha', 'InputMixAlpha', 'InputLayerCount', 'InputUncertaintyBand'];
+  const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'WindEff', 'DayFrac', 'Precip', 'Solar', 'Cloud', 'AirBlend', 'Solar+', 'Wind-', 'Evap-', 'Longwave-', 'Cloud-', 'Rain-', 'InflowΔ', 'RainΔ', 'FlowΔ', 'Equilibrium', 'Eq+Sed', 'Alpha', 'MixAlpha', 'Layers', 'WaterBulk', 'WaterLow', 'WaterEst', 'WaterHigh', 'ValidationObs', 'ValidationTime', 'ValidationErr', 'ValidationClarity', 'InputAcres', 'InputDepthFt', 'InputObsDepthFt', 'InputModelHour', 'InputObservedTime', 'InputTurbidityNtu', 'InputVisibilityFt', 'InputInflowCfs', 'InputInflowTempF', 'InputOutflowCfs', 'InputShadingPct', 'InputFetchLengthFt', 'InputWindReduction', 'InputEvapCoeff', 'InputAlbedo', 'InputLongwaveFactor', 'InputMixedLayerDepthFt', 'InputSedimentFactor', 'InputSedimentConductivity', 'InputSedimentDepthM', 'InputDailyAlpha', 'InputMixAlpha', 'InputLayerCount', 'InputUncertaintyBand'];
   const body = rowsWithTraceInputs.map((r) => `<tr>
     <td>${r.date}</td><td>${r.source}</td><td>${r.tMin}</td><td>${r.tMean}</td><td>${r.tMax}</td>
     <td>${r.windMean}</td><td>${r.effectiveWind}</td><td>${r.daylightFraction}</td><td>${r.precip}</td><td>${r.solar}</td><td>${r.cloud}</td>
-    <td>${r.airBlend}</td><td>${r.solarHeat}</td><td>${r.windCool}</td><td>${r.evapCool}</td><td>${r.longwaveNet}</td><td>${r.cloudCool}</td><td>${r.rainCool}</td><td>${r.flowTempPull}</td>
+    <td>${r.airBlend}</td><td>${r.solarHeat}</td><td>${r.windCool}</td><td>${r.evapCool}</td><td>${r.longwaveNet}</td><td>${r.cloudCool}</td><td>${r.rainCool}</td><td>${r.inflowTempPull}</td><td>${r.rainTempPull}</td><td>${r.flowTempPull}</td>
     <td>${r.equilibrium}</td><td>${r.equilibriumWithSediment}</td><td>${r.alpha}</td><td>${r.mixedLayerAlpha}</td><td>${r.layerCount}</td><td>${r.waterEstimateBulk}</td><td>${r.waterLow}</td><td><strong>${r.waterEstimate}</strong></td><td>${r.waterHigh}</td>
     <td>${r.validationObserved ?? ''}</td><td>${r.validationObservedTime ?? ''}</td><td>${r.validationError ?? ''}</td><td>${r.validationClarityNtu ?? ''}</td>
     <td>${r.inputAcres ?? ''}</td><td>${r.inputDepthFt ?? ''}</td><td>${r.inputObsDepthFt ?? ''}</td><td>${r.inputModelHour ?? ''}</td><td>${r.inputObservedTime ?? ''}</td><td>${r.inputTurbidityNtu ?? ''}</td><td>${r.inputVisibilityFt ?? ''}</td><td>${r.inputInflowCfs ?? ''}</td><td>${r.inputInflowTempF ?? ''}</td><td>${r.inputOutflowCfs ?? ''}</td><td>${r.inputShadingPct ?? ''}</td><td>${r.inputFetchLengthFt ?? ''}</td><td>${r.inputWindReduction ?? ''}</td><td>${r.inputEvapCoeff ?? ''}</td><td>${r.inputAlbedo ?? ''}</td><td>${r.inputLongwaveFactor ?? ''}</td><td>${r.inputMixedLayerDepthFt ?? ''}</td><td>${r.inputSedimentFactor ?? ''}</td><td>${r.inputSedimentConductivity ?? ''}</td><td>${r.inputSedimentDepthM ?? ''}</td><td>${r.inputDailyAlpha ?? ''}</td><td>${r.inputMixAlpha ?? ''}</td><td>${r.inputLayerCount ?? ''}</td><td>${r.inputUncertaintyBand ?? ''}</td>
@@ -426,7 +434,7 @@ function rowsToCsv(
   const columns = [
     'date', 'source', 'tMin', 'tMean', 'tMax', 'humidityMean', 'windMean', 'effectiveWind', 'daylightFraction',
     'precip', 'solar', 'cloud', 'airBlend', 'solarHeat', 'windCool', 'evapCool', 'evapCoolNew', 'longwaveNet',
-    'cloudCool', 'rainCool', 'bottomFlux', 'flowTempPull', 'equilibrium', 'equilibriumWithSediment', 'alpha',
+    'cloudCool', 'rainCool', 'bottomFlux', 'inflowTempPull', 'rainTempPull', 'flowTempPull', 'equilibrium', 'equilibriumWithSediment', 'alpha',
     'mixedLayerAlpha', 'layerCount', 'waterEstimateBulk', 'waterLow', 'waterEstimate', 'waterHigh',
     'validationObserved', 'validationObservedTime', 'validationError', 'validationClarityNtu',
     'inputAcres', 'inputDepthFt', 'inputObsDepthFt', 'inputModelHour', 'inputObservedTime',
@@ -492,6 +500,8 @@ function mergeValidationIntoRows(rows, validationPoints) {
       cloudCool: null,
       rainCool: null,
       bottomFlux: null,
+      inflowTempPull: null,
+      rainTempPull: null,
       flowTempPull: null,
       equilibrium: null,
       equilibriumWithSediment: null,
