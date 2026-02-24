@@ -73,6 +73,11 @@ function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
 }
 
+function satVaporPress(tempF) {
+  const tempC = (tempF - 32) * (5 / 9);
+  return 6.112 * Math.exp((17.67 * tempC) / (tempC + 243.5));
+}
+
 function finiteOrNull(v) {
   return Number.isFinite(v) ? v : null;
 }
@@ -114,13 +119,14 @@ function buildUrls({ lat, lon, pastDays, futureDays }) {
     'temperature_2m_max',
     'temperature_2m_min',
     'temperature_2m_mean',
+    'relative_humidity_2m_mean',
     'precipitation_sum',
     'windspeed_10m_mean',
     'shortwave_radiation_sum',
     'cloudcover_mean'
   ].join(',');
 
-  const varsCurrent = ['temperature_2m', 'windspeed_10m', 'cloudcover'].join(',');
+  const varsCurrent = ['temperature_2m', 'relative_humidity_2m', 'windspeed_10m', 'cloudcover'].join(',');
 
   const forecast = new URL('https://api.open-meteo.com/v1/forecast');
   forecast.search = new URLSearchParams({
@@ -159,6 +165,7 @@ function buildSeries(archive, forecast) {
     const tMeanRaw = finiteOrNull(payload.daily.temperature_2m_mean[i]);
     const tMeanFallback = (Number.isFinite(tMax) && Number.isFinite(tMin)) ? (tMax + tMin) / 2 : null;
     const windRaw = finiteOrNull(payload.daily.windspeed_10m_mean[i]);
+    const humidityRaw = finiteOrNull(payload.daily.relative_humidity_2m_mean[i]);
     const precipRaw = finiteOrNull(payload.daily.precipitation_sum[i]);
     const solarRaw = finiteOrNull(payload.daily.shortwave_radiation_sum[i]);
     const cloudRaw = finiteOrNull(payload.daily.cloudcover_mean[i]);
@@ -169,6 +176,7 @@ function buildSeries(archive, forecast) {
       tMax,
       tMin,
       tMean: firstFinite(tMeanRaw, tMeanFallback),
+      humidityMean: clamp(firstFinite(humidityRaw, payload.current?.relative_humidity_2m, 65), 0, 100),
       precip: firstFinite(precipRaw, 0),
       windMean: firstFinite(windRaw, 0),
       solar: firstFinite(solarRaw, 0),
@@ -234,6 +242,7 @@ function computeModel(rows, rawParams) {
   const initialAir = firstFinite(initialRow.tMean, initialRow.tMax, initialRow.tMin, 55);
   let water = Number.isFinite(startWaterTemp) ? startWaterTemp : initialAir;
   water = clamp(water, FREEZING_F_FRESH_WATER, 100);
+  let sedimentTemp = water;
 
   const layers = Array.from({ length: layerCount }, () => water);
 
@@ -245,18 +254,25 @@ function computeModel(rows, rawParams) {
     const baseDaylightFraction = clamp(solar / MAX_DAILY_SOLAR_MJ_M2, 0.12, 1);
     const hourWeight = Math.max(0.2, Math.sin(((modelHour + 1) / 24) * Math.PI));
     const daylightFraction = clamp(baseDaylightFraction * hourWeight, 0.08, 1);
-    const effectiveMixedDepthFt = Math.max(mixedLayerDepthFt, 0.2);
+    let dynamicMixedDepthFt = mixedLayerDepthFt + 0.3 * firstFinite(r.windMean, 0) * Math.sqrt(fetchLengthFt / 328.08);
+    dynamicMixedDepthFt = clamp(dynamicMixedDepthFt, 1, depthFt);
+    const effectiveMixedDepthFt = Math.max(dynamicMixedDepthFt, 0.2);
     const depthFluxScale = clamp(REFERENCE_MIXED_DEPTH_FT / effectiveMixedDepthFt, 0.35, 2.5);
     const shadeFactor = 1 - shadingPct / 100;
+    let currentTurbidity = turbidityNtu;
+    if (firstFinite(r.precip, 0) > 0.1) {
+      currentTurbidity += 10 * firstFinite(r.precip, 0);
+      currentTurbidity = clamp(currentTurbidity, turbidityNtu, 500);
+    }
+    const dynamicClarityFactor = Math.exp(-0.015 * currentTurbidity);
     const absorbedSolar = solar * (1 - albedo) * shadeFactor;
-    const solarHeat = absorbedSolar * 0.02 * clarityFactor * depthFluxScale;
+    const solarHeat = absorbedSolar * 0.02 * clamp(clarityFactor * dynamicClarityFactor, 0.08, 1.2) * depthFluxScale;
 
     const windMph = firstFinite(r.windMean, 0);
     const fetchFactor = clamp(0.75 + fetchLengthFt / 1500, 0.6, 2);
     const windExposure = (0.4 + 0.6 * daylightFraction) * windReductionFactor * fetchFactor;
     const effectiveWind = windMph * windExposure;
     const windCool = effectiveWind * 0.08 * depthFluxScale;
-    const evapCool = effectiveWind * evaporationCoeff * (1 - clamp(firstFinite(r.cloud, 0) / 150, 0, 0.6)) * 0.07 * depthFluxScale;
 
     const longwaveNet = (0.05 + firstFinite(r.cloud, 0) * 0.002) * longwaveFactor * depthFluxScale;
     const cloudCool = firstFinite(r.cloud, 0) * 0.01 * depthFluxScale;
@@ -267,18 +283,31 @@ function computeModel(rows, rawParams) {
     const dayAir = 0.4 * tMean + 0.6 * tMax;
     const nightAir = 0.7 * tMean + 0.3 * tMin;
     const airBlend = daytimeWeight * dayAir + overnightWeight * nightAir;
+    const relativeHumidity = clamp(firstFinite(r.humidityMean, 65), 0, 100);
+    const es = satVaporPress(water);
+    const ea = satVaporPress(airBlend) * (relativeHumidity / 100);
+    const evapCoolNew = evaporationCoeff * 0.0006 * effectiveWind * Math.max(es - ea, 0) * daylightFraction * depthFluxScale;
 
-    const flowTempPull = inflowCfs > 0
+    let flowTempPull = inflowCfs > 0
       ? clamp((inflowTempF - water) * clamp(inflowCfs / Math.max(acres * depthFt, 0.5), 0, 0.25), -6, 6)
       : netFlowCfs * 1.1;
 
-    const equilibriumRaw = airBlend + solarHeat - windCool - evapCool - cloudCool - rainCool - longwaveNet + flowTempPull;
+    if (firstFinite(r.precip, 0) > 0.05) {
+      const rainVolume = (firstFinite(r.precip, 0) * acres * 3630) / 12 / Math.max(depthFt, 0.2);
+      const rainTempPull = rainVolume * (tMean - water);
+      flowTempPull += clamp(rainTempPull, -4, 4);
+    }
+
+    const bottomFlux = sedimentConductivity * (sedimentTemp - water) / Math.max(sedimentDepthM, 0.05) * 0.001;
+
+    const equilibriumRaw = airBlend + solarHeat - windCool - evapCoolNew - cloudCool - rainCool - longwaveNet + flowTempPull + bottomFlux;
     const equilibrium = clamp(equilibriumRaw, FREEZING_F_FRESH_WATER, 100);
 
     const prevSurface = layers[0];
     const sedimentBlend = clamp(sedimentFactor, 0, 1);
     const sedimentExchange = sedimentBlend * sedimentConductivity * sedimentDepthM * 0.08;
     const sedimentLag = (0.1 + 0.25 * sedimentBlend) * prevSurface + (0.9 - 0.25 * sedimentBlend) * equilibrium + sedimentExchange;
+    sedimentTemp = clamp(0.92 * sedimentTemp + 0.08 * sedimentLag, FREEZING_F_FRESH_WATER, 100);
     const equilibriumWithSediment = clamp(
       equilibrium + sedimentBlend * (sedimentLag - equilibrium),
       FREEZING_F_FRESH_WATER,
@@ -308,7 +337,9 @@ function computeModel(rows, rawParams) {
       tMax: round1(tMax),
       tMin: round1(tMin),
       solarHeat: round1(solarHeat),
-      evapCool: round1(evapCool),
+      humidityMean: round1(relativeHumidity),
+      evapCool: round1(evapCoolNew),
+      evapCoolNew: round1(evapCoolNew),
       longwaveNet: round1(longwaveNet),
       daylightFraction: round1(daylightFraction),
       effectiveWind: round1(effectiveWind),
@@ -319,11 +350,12 @@ function computeModel(rows, rawParams) {
       equilibrium: round1(equilibrium),
       alpha: round1(alpha),
       mixedLayerAlpha: round1(mixedLayerAlpha),
-      mixedLayerDepthFt: round1(mixedLayerDepthFt),
-      clarityFactor: round1(clarityFactor),
+      mixedLayerDepthFt: round1(dynamicMixedDepthFt),
+      clarityFactor: round1(dynamicClarityFactor),
       flowTurnover: round1(flowTurnover),
       netFlowCfs: round1(netFlowCfs),
       sedimentFactor: round1(sedimentFactor),
+      bottomFlux: round1(bottomFlux),
       flowTempPull: round1(flowTempPull),
       equilibriumWithSediment: round1(equilibriumWithSediment),
       waterEstimateBulk: round1(water),
@@ -392,9 +424,9 @@ function rowsToCsv(
   const rowsWithValidation = mergeValidationIntoRows(rows, getAllValidationInputs());
   const rowsWithTraceInputs = mergeTraceInputsIntoRows(rowsWithValidation, params, observedTime, uiParams);
   const columns = [
-    'date', 'source', 'tMin', 'tMean', 'tMax', 'windMean', 'effectiveWind', 'daylightFraction',
-    'precip', 'solar', 'cloud', 'airBlend', 'solarHeat', 'windCool', 'evapCool', 'longwaveNet',
-    'cloudCool', 'rainCool', 'flowTempPull', 'equilibrium', 'equilibriumWithSediment', 'alpha',
+    'date', 'source', 'tMin', 'tMean', 'tMax', 'humidityMean', 'windMean', 'effectiveWind', 'daylightFraction',
+    'precip', 'solar', 'cloud', 'airBlend', 'solarHeat', 'windCool', 'evapCool', 'evapCoolNew', 'longwaveNet',
+    'cloudCool', 'rainCool', 'bottomFlux', 'flowTempPull', 'equilibrium', 'equilibriumWithSediment', 'alpha',
     'mixedLayerAlpha', 'layerCount', 'waterEstimateBulk', 'waterLow', 'waterEstimate', 'waterHigh',
     'validationObserved', 'validationObservedTime', 'validationError', 'validationClarityNtu',
     'inputAcres', 'inputDepthFt', 'inputObsDepthFt', 'inputModelHour', 'inputObservedTime',
@@ -444,6 +476,7 @@ function mergeValidationIntoRows(rows, validationPoints) {
       tMin: null,
       tMean: null,
       tMax: null,
+      humidityMean: null,
       windMean: null,
       effectiveWind: null,
       daylightFraction: null,
@@ -454,9 +487,11 @@ function mergeValidationIntoRows(rows, validationPoints) {
       solarHeat: null,
       windCool: null,
       evapCool: null,
+      evapCoolNew: null,
       longwaveNet: null,
       cloudCool: null,
       rainCool: null,
+      bottomFlux: null,
       flowTempPull: null,
       equilibrium: null,
       equilibriumWithSediment: null,
