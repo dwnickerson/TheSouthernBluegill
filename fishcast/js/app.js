@@ -48,7 +48,7 @@ function init() {
     initSpeciesMemory();
    
     // Register service worker
-    registerServiceWorker();
+   // registerServiceWorker(); //isbaled to stop issues
    
     debugLog('FishCast ready');
 }
