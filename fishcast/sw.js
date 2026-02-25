@@ -1,6 +1,6 @@
-// FishCast Service Worker - Updated for reliable updates (v5)
+// FishCast Service Worker - Fixed for reliable updates (v5+)
 
-const CACHE_VERSION = '5';  // ← Increment this on every deploy (e.g., '6', '5.1')
+const CACHE_VERSION = '5';  // CHANGE THIS NUMBER on every deploy (e.g. '6', '5.1')
 const CACHE_NAME = `fishcast-v${CACHE_VERSION}`;
 
 const APP_PATH = '/fishcast/';
@@ -60,70 +60,72 @@ const urlsToCache = [
   `${APP_PATH}icon-512.png`
 ];
 
-// Install event - precache core app shell with fresh fetches (bypass cache)
+// Install: precache with forced network fetches (bypasses old cache)
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
       return Promise.all(
         urlsToCache.map(url => {
-          return fetch(url, { cache: 'reload' })  // Force fresh from network
+          return fetch(url, { cache: 'reload' })
             .then(response => {
               if (!response.ok) {
-                throw new Error(`Failed to fetch ${url}: ${response.status}`);
+                logSW('install-fetch-warning', url, 'status:', response.status);
               }
               return cache.put(url, response);
             })
             .catch(err => {
               logSW('install-fetch-failed', url, err);
-              // Continue installing even if one asset fails (don't break whole SW)
+              // Don't fail install if one asset is missing
             });
         })
       );
     })
     .then(() => {
-      logSW('install-complete', 'Precached assets');
-      return self.skipWaiting();  // Activate immediately
+      logSW('install-success', 'Precached with fresh fetches');
+      return self.skipWaiting();
     })
-    .catch(err => {
-      logSW('install-failed', err);
-    })
+    .catch(err => logSW('install-error', err))
   );
 });
 
-// Activate event - clean old caches + claim clients immediately
+// Activate: cleanup + immediate control
 self.addEventListener('activate', event => {
   event.waitUntil(
     Promise.all([
-      // Delete old caches
-      caches.keys().then(cacheNames => {
+      caches.keys().then(keys => {
         return Promise.all(
-          cacheNames.map(cacheName => {
-            if (cacheName !== CACHE_NAME) {
-              logSW('deleting-old-cache', cacheName);
-              return caches.delete(cacheName);
+          keys.map(key => {
+            if (key !== CACHE_NAME) {
+              logSW('deleting-old-cache', key);
+              return caches.delete(key);
             }
             return Promise.resolve();
           })
         );
       }),
-      // Claim all open clients so new SW controls pages right away
-      self.clients.claim()
+      self.clients.claim()  // Take control of all pages right away
     ])
-    .then(() => {
-      logSW('activate-complete', 'New version active');
-    })
+    .then(() => logSW('activate-success', 'New version active'))
   );
 });
 
-// Fetch event
+// Handle messages from client (e.g. force skip waiting)
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    logSW('message-skip-waiting');
+    self.skipWaiting();
+  }
+});
+
+// Fetch handling (your original logic preserved)
 self.addEventListener('fetch', event => {
   const request = event?.request;
   if (!request || request.method !== 'GET') return;
 
   const safeResponse = handleFetch(request).catch(error => {
-    logSW('fetch.respondWith.unhandled', request?.url, error);
+    logSW('fetch-unhandled-error', request?.url, error);
     if (request.mode === 'navigate') {
-      return caches.match(`${APP_PATH}index.html`).then(appShell => appShell || offlineResponse());
+      return caches.match(`${APP_PATH}index.html`).then(s => s || offlineResponse());
     }
     return new Response(null, { status: 204 });
   });
@@ -137,32 +139,21 @@ async function handleFetch(request) {
 
     const url = new URL(request.url);
 
-    // Block invalid /null requests
     if (url.pathname.includes('/null') || url.pathname.endsWith('/null') || url.href.includes('/null?')) {
-      logSWOnce('null-path', 'Blocked invalid /null request', url.href);
+      logSWOnce('null-path', 'Blocked invalid /null', url.href);
       return new Response(null, { status: 204 });
     }
 
-    // Cross-origin: network only
     if (url.origin !== self.location.origin) {
-      logSW('bypass-cross-origin', url.href);
-      try {
-        return await fetch(request);
-      } catch (error) {
-        logSW('cross-origin-fetch-failed', url.href, error);
-        return offlineResponse();
-      }
+      logSW('cross-origin-bypass', url.href);
+      try { return await fetch(request); } catch { return offlineResponse(); }
     }
 
-    // APIs: network-first, fallback to cache if offline
     if (SW_API_HOSTS.has(url.hostname)) {
       logSW('network-only-api', url.href);
-      try {
-        return await fetch(request);
-      } catch (error) {
-        logSW('network-only-api-failed', url.href, error);
-        const fallback = await caches.match(request);
-        return fallback || offlineResponse();
+      try { return await fetch(request); } catch {
+        const fb = await caches.match(request);
+        return fb || offlineResponse();
       }
     }
 
@@ -171,77 +162,53 @@ async function handleFetch(request) {
       url.pathname.startsWith(`${APP_PATH}styles/`) ||
       url.pathname === `${APP_PATH}index.html`;
 
-    // Non-app-shell: cache-first
     if (!isAppCodeAsset) {
-      const cachedResponse = await caches.match(request);
-      if (cachedResponse) {
-        logSW('cache-hit', url.href);
-        return cachedResponse;
+      const cached = await caches.match(request);
+      if (cached) {
+        logSW('cache-hit-non-asset', url.href);
+        return cached;
       }
     }
 
-    // App shell: network-first → update cache → fallback to cache
     if (isAppCodeAsset) {
       try {
-        const networkFresh = await fetch(request);
-        if (networkFresh?.status === 200) {
-          const clone = networkFresh.clone();
-          caches.open(CACHE_NAME)
-            .then(cache => cache.put(request, clone))
-            .catch(err => logSW('cache-put-failed', url.href, err));
+        const fresh = await fetch(request);
+        if (fresh?.status === 200) {
+          const clone = fresh.clone();
+          caches.open(CACHE_NAME).then(c => c.put(request, clone)).catch(err => logSW('put-fail', url.href, err));
         }
-        logSW('network-first-app-asset', url.href);
-        return networkFresh;
-      } catch (error) {
-        logSW('network-first-app-asset-failed', url.href, error);
-        const cachedFallback = await caches.match(request);
-        if (cachedFallback) return cachedFallback;
+        logSW('network-first-asset', url.href);
+        return fresh;
+      } catch (err) {
+        logSW('network-first-fail', url.href, err);
+        const fb = await caches.match(request);
+        if (fb) return fb;
       }
     }
 
-    // General fallback: network → cache → offline
     try {
-      const networkResponse = await fetch(request);
-      if (!networkResponse) {
-        logSW('empty-network-response', url.href);
-        return offlineResponse();
+      const resp = await fetch(request);
+      if (resp?.status === 200) {
+        const clone = resp.clone();
+        caches.open(CACHE_NAME).then(c => c.put(request, clone)).catch(err => logSW('put-fail', url.href, err));
       }
-
-      if (networkResponse.status === 200) {
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME)
-          .then(cache => cache.put(request, responseToCache))
-          .catch(err => logSW('cache-put-failed', url.href, err));
-      }
-
-      logSW('network-ok', url.href);
-      return networkResponse;
-    } catch (error) {
-      logSW('network-failed', url.href, error);
-
+      logSW('network-success', url.href);
+      return resp;
+    } catch (err) {
+      logSW('network-fail', url.href, err);
       if (request.mode === 'navigate') {
-        const appShell = await caches.match(`${APP_PATH}index.html`);
-        if (appShell) {
-          logSW('fallback-app-shell', url.href);
-          return appShell;
-        }
+        const shell = await caches.match(`${APP_PATH}index.html`);
+        if (shell) return shell;
       }
-
-      const cachedFallback = await caches.match(request);
-      if (cachedFallback) {
-        logSW('fallback-cache', url.href);
-        return cachedFallback;
-      }
-
-      return request.mode === 'navigate'
-        ? offlineResponse()
-        : new Response(null, { status: 204 });
+      const fb = await caches.match(request);
+      if (fb) return fb;
+      return request.mode === 'navigate' ? offlineResponse() : new Response(null, { status: 204 });
     }
-  } catch (error) {
-    logSW('fetch-handler-error', request?.url, error);
+  } catch (err) {
+    logSW('handle-fetch-error', request?.url, err);
     if (request?.mode === 'navigate') {
-      const appShell = await caches.match(`${APP_PATH}index.html`);
-      return appShell || offlineResponse();
+      const shell = await caches.match(`${APP_PATH}index.html`);
+      return shell || offlineResponse();
     }
     return new Response(null, { status: 204 });
   }
