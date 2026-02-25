@@ -288,7 +288,7 @@ function setupEventListeners() {
 // Service worker registration
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/fishcast/sw.js')
+        navigator.serviceWorker.register('/fishcast/sw.js?v=4.0.0')
             .then(() => debugLog('Service Worker registered'))
             .catch(err => debugLog('Service Worker registration failed:', err));
     }
