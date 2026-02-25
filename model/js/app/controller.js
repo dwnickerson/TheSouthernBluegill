@@ -1,4 +1,6 @@
-import { computeLongwaveLoss } from './model-physics.mjs';
+import { buildSeries, buildUrls } from './weather-data.mjs';
+import { computeModel, toModelParams } from './mode1-core.mjs';
+import { buildTraceRows, mergeValidationIntoRows, rowsToCsv } from './trace-export.mjs';
 
 const byId = (id) => document.getElementById(id);
 
@@ -75,21 +77,12 @@ const FIELD_HELP = {
   seedStartWaterFromFirstObservation: 'When enabled, uses earliest saved observation to seed day-1 water if start temp is blank.'
 };
 
-function toISODate(d) {
-  return d.toISOString().slice(0, 10);
-}
-
 function round1(n) {
   return Number.isFinite(n) ? Math.round(n * 10) / 10 : null;
 }
 
 function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
-}
-
-function satVaporPress(tempF) {
-  const tempC = (tempF - 32) * (5 / 9);
-  return 6.112 * Math.exp((17.67 * tempC) / (tempC + 243.5));
 }
 
 function finiteOrNull(v) {
@@ -123,302 +116,6 @@ function parseTimeToHour(timeValue) {
   return clamp(Number(hours), 0, 23);
 }
 
-function buildUrls({ lat, lon, pastDays, futureDays }) {
-  const now = new Date();
-  const yesterday = new Date(now.getTime() - 24 * 3600 * 1000);
-  const pastStart = new Date(yesterday.getTime() - (pastDays - 1) * 24 * 3600 * 1000);
-  const futureEnd = new Date(now.getTime() + futureDays * 24 * 3600 * 1000);
-
-  const varsDaily = [
-    'temperature_2m_max',
-    'temperature_2m_min',
-    'temperature_2m_mean',
-    'relative_humidity_2m_mean',
-    'precipitation_sum',
-    'windspeed_10m_mean',
-    'shortwave_radiation_sum',
-    'cloudcover_mean'
-  ].join(',');
-
-  const varsCurrent = ['temperature_2m', 'relative_humidity_2m', 'windspeed_10m', 'cloudcover'].join(',');
-
-  const forecast = new URL('https://api.open-meteo.com/v1/forecast');
-  forecast.search = new URLSearchParams({
-    latitude: String(lat),
-    longitude: String(lon),
-    daily: varsDaily,
-    current: varsCurrent,
-    timezone: 'auto',
-    temperature_unit: 'fahrenheit',
-    wind_speed_unit: 'mph',
-    precipitation_unit: 'inch',
-    start_date: toISODate(now),
-    end_date: toISODate(futureEnd)
-  }).toString();
-
-  const archive = new URL('https://archive-api.open-meteo.com/v1/archive');
-  archive.search = new URLSearchParams({
-    latitude: String(lat),
-    longitude: String(lon),
-    daily: varsDaily,
-    timezone: 'auto',
-    temperature_unit: 'fahrenheit',
-    wind_speed_unit: 'mph',
-    precipitation_unit: 'inch',
-    start_date: toISODate(pastStart),
-    end_date: toISODate(yesterday)
-  }).toString();
-
-  return { forecast: forecast.toString(), archive: archive.toString() };
-}
-
-function buildSeries(archive, forecast) {
-  const mapDaily = (payload, source) => payload.daily.time.map((date, i) => {
-    const tMax = finiteOrNull(payload.daily.temperature_2m_max[i]);
-    const tMin = finiteOrNull(payload.daily.temperature_2m_min[i]);
-    const tMeanRaw = finiteOrNull(payload.daily.temperature_2m_mean[i]);
-    const tMeanFallback = (Number.isFinite(tMax) && Number.isFinite(tMin)) ? (tMax + tMin) / 2 : null;
-    const windRaw = finiteOrNull(payload.daily.windspeed_10m_mean[i]);
-    const humidityRaw = finiteOrNull(payload.daily.relative_humidity_2m_mean[i]);
-    const precipRaw = finiteOrNull(payload.daily.precipitation_sum[i]);
-    const solarRaw = finiteOrNull(payload.daily.shortwave_radiation_sum[i]);
-    const cloudRaw = finiteOrNull(payload.daily.cloudcover_mean[i]);
-
-    return {
-      date,
-      source,
-      tMax,
-      tMin,
-      tMean: firstFinite(tMeanRaw, tMeanFallback),
-      humidityMean: clamp(firstFinite(humidityRaw, payload.current?.relative_humidity_2m, 65), 0, 100),
-      precip: firstFinite(precipRaw, 0),
-      windMean: firstFinite(windRaw, 0),
-      solar: firstFinite(solarRaw, 0),
-      cloud: clamp(firstFinite(cloudRaw, 0), 0, 100)
-    };
-  });
-
-  return [...mapDaily(archive, 'past'), ...mapDaily(forecast, 'future_or_today')];
-}
-
-function toModelParams(raw) {
-  return {
-    acres: raw.acres,
-    depthFt: raw.depthFt,
-    startWaterTemp: raw.startWaterTemp,
-    obsDepthFt: raw.obsDepthFt,
-    modelHour: clamp(firstFinite(raw.modelHour, 12), 0, 23),
-    turbidityNtu: clamp(firstFinite(raw.turbidityNtu, 18), 0, 500),
-    visibilityFt: clamp(firstFinite(raw.visibilityFt, 3), 0.1, 12),
-    inflowCfs: clamp(firstFinite(raw.inflowCfs, 0), 0, 50),
-    outflowCfs: clamp(firstFinite(raw.outflowCfs, 0), 0, 50),
-    inflowTempF: clamp(firstFinite(raw.inflowTempF, 58), 32, 100),
-    sedimentFactor: clamp(firstFinite(raw.sedimentFactor, 0.45), 0, 1),
-    sedimentConductivity: clamp(firstFinite(raw.sedimentConductivity, 1.2), 0.2, 3),
-    sedimentDepthM: clamp(firstFinite(raw.sedimentDepthM, 0.4), 0.05, 2),
-    mixedLayerDepthFt: clamp(firstFinite(raw.mixedLayerDepthFt, raw.depthFt * 0.5, 1), 0.2, Math.max(raw.depthFt, 0.2)),
-    windReductionFactor: clamp(firstFinite(raw.windReductionFactor, 0.7), 0, 1),
-    evaporationCoeff: clamp(firstFinite(raw.evaporationCoeff, 1), 0.5, 1.5),
-    albedo: clamp(firstFinite(raw.albedo, 0.08), 0, 1),
-    longwaveFactor: clamp(firstFinite(raw.longwaveFactor, 1), 0.5, 1.5),
-    solarGainFactor: clamp(firstFinite(raw.solarGainFactor, 1.0), 0.7, 1.3),
-    windCouplingFactor: clamp(firstFinite(raw.windCouplingFactor, 1.0), 0.6, 1.4),
-    rainCoolingCoeff: clamp(firstFinite(raw.rainCoolingCoeff, 0.8), 0.3, 1.2),
-    skyViewFactor: clamp(firstFinite(raw.skyViewFactor, 1.0), 0.4, 1.0),
-    sedimentExchangeCoeff: clamp(firstFinite(raw.sedimentExchangeCoeff, 0.08), 0.0, 0.2),
-    seedStartWaterFromFirstObservation: Boolean(raw.seedStartWaterFromFirstObservation),
-    shadingPct: clamp(firstFinite(raw.shadingPct, 20), 0, 100),
-    fetchLengthFt: clamp(firstFinite(raw.fetchLengthFt, 550), 20, 4000),
-    dailyAlpha: clamp(firstFinite(raw.dailyAlpha, 0.18), 0.01, 0.5),
-    mixAlpha: clamp(firstFinite(raw.mixAlpha, 0.2), 0.01, 0.5),
-    layerCount: clamp(Math.round(firstFinite(raw.layerCount, 1)), 1, 3),
-    uncertaintyBand: clamp(firstFinite(raw.uncertaintyBand, 2.5), 0, 10)
-  };
-}
-
-function computeModel(rows, rawParams) {
-  const params = toModelParams(rawParams);
-  const {
-    acres, depthFt, startWaterTemp, obsDepthFt, modelHour, turbidityNtu, visibilityFt, inflowCfs, outflowCfs, inflowTempF,
-    sedimentFactor, sedimentConductivity, sedimentDepthM, mixedLayerDepthFt, windReductionFactor, evaporationCoeff,
-    albedo, longwaveFactor, solarGainFactor, windCouplingFactor, rainCoolingCoeff, skyViewFactor, sedimentExchangeCoeff,
-    seedStartWaterFromFirstObservation, shadingPct, fetchLengthFt, dailyAlpha, mixAlpha, layerCount, uncertaintyBand
-  } = params;
-
-  const areaFactor = 1 / (1 + acres / 12);
-  const depthFactor = 1 / (1 + depthFt / 6);
-  const observationDepthFt = clamp(firstFinite(obsDepthFt, 0), 0, Math.max(depthFt, 0.1));
-  const depthRatio = clamp(depthFt > 0 ? observationDepthFt / depthFt : 0, 0, 1);
-  const depthWarmBias = clamp(2.4 * (0.5 - depthRatio), -1.2, 1.8);
-  const mixedLayerRatio = clamp(depthFt > 0 ? mixedLayerDepthFt / depthFt : 1, 0.1, 1);
-  const mixedLayerAlphaBoost = clamp(1 / Math.sqrt(mixedLayerRatio), 0.9, 2.2);
-  const clarityFactor = clamp((1.05 - turbidityNtu / 260) * (0.86 + visibilityFt / 10), 0.2, 1.2);
-  const netFlowCfs = inflowCfs - outflowCfs;
-  const flowTurnover = clamp(Math.abs(netFlowCfs) / Math.max(acres * depthFt, 0.5), 0, 0.4);
-  const FREEZING_F_FRESH_WATER = 32;
-  const MAX_DAILY_SOLAR_MJ_M2 = 35;
-  const REFERENCE_MIXED_DEPTH_FT = 4;
-
-  const initialRow = rows[0] || {};
-  const initialAir = firstFinite(initialRow.tMean, initialRow.tMax, initialRow.tMin, 55);
-  let seededStartWater = startWaterTemp;
-  if (!Number.isFinite(seededStartWater) && seedStartWaterFromFirstObservation) {
-    const earliestValidation = getAllValidationInputs()
-      .slice()
-      .sort((a, b) => a.date.localeCompare(b.date))[0];
-    if (earliestValidation && Number.isFinite(earliestValidation.observed)) {
-      seededStartWater = earliestValidation.observed;
-    }
-  }
-  let water = Number.isFinite(seededStartWater) ? seededStartWater : initialAir;
-  water = clamp(water, FREEZING_F_FRESH_WATER, 100);
-  let sedimentTemp = water;
-
-  const layers = Array.from({ length: layerCount }, () => water);
-
-  return rows.map((r) => {
-    const tMean = firstFinite(r.tMean, r.tMax, r.tMin, water);
-    const tMax = firstFinite(r.tMax, tMean);
-    const tMin = firstFinite(r.tMin, tMean);
-    const solar = firstFinite(r.solar, 0);
-    const baseDaylightFraction = clamp(solar / MAX_DAILY_SOLAR_MJ_M2, 0.12, 1);
-    const hourWeight = Math.max(0.2, Math.sin(((modelHour + 1) / 24) * Math.PI));
-    const daylightFraction = clamp(baseDaylightFraction * hourWeight, 0.08, 1);
-    let dynamicMixedDepthFt = mixedLayerDepthFt + 0.3 * firstFinite(r.windMean, 0) * Math.sqrt(fetchLengthFt / 328.08);
-    dynamicMixedDepthFt = clamp(dynamicMixedDepthFt, 1, depthFt);
-    const effectiveMixedDepthFt = Math.max(dynamicMixedDepthFt, 0.2);
-    const depthFluxScale = clamp(REFERENCE_MIXED_DEPTH_FT / effectiveMixedDepthFt, 0.35, 2.5);
-    const shadeFactor = 1 - shadingPct / 100;
-    let currentTurbidity = turbidityNtu;
-    if (firstFinite(r.precip, 0) > 0.1) {
-      currentTurbidity += 10 * firstFinite(r.precip, 0);
-      currentTurbidity = clamp(currentTurbidity, turbidityNtu, 500);
-    }
-    const dynamicClarityFactor = Math.exp(-0.015 * currentTurbidity);
-    const absorbedSolar = solar * (1 - albedo) * shadeFactor;
-    let solarHeat = absorbedSolar * 0.02 * clamp(clarityFactor * dynamicClarityFactor, 0.08, 1.2) * depthFluxScale;
-    solarHeat *= solarGainFactor;
-
-    const windMph = firstFinite(r.windMean, 0);
-    const fetchFactor = clamp(0.75 + fetchLengthFt / 1500, 0.6, 2);
-    const windExposure = (0.4 + 0.6 * daylightFraction) * windReductionFactor * fetchFactor;
-    const effectiveWind = windMph * windExposure;
-    const coupledWind = effectiveWind * windCouplingFactor;
-    const windCool = coupledWind * 0.08 * depthFluxScale;
-
-    const {
-      cloudFrac,
-      longwaveClear,
-      longwaveLoss: baseLongwaveLoss,
-      longwaveCloudAdjustment
-    } = computeLongwaveLoss(firstFinite(r.cloud, 0), longwaveFactor, depthFluxScale);
-    const longwaveLoss = baseLongwaveLoss * skyViewFactor;
-    const cloudCool = 0;
-    const rainCool = firstFinite(r.precip, 0) * 0.8 * depthFluxScale * rainCoolingCoeff;
-
-    const daytimeWeight = 0.35 + 0.45 * daylightFraction;
-    const overnightWeight = 1 - daytimeWeight;
-    const dayAir = 0.4 * tMean + 0.6 * tMax;
-    const nightAir = 0.7 * tMean + 0.3 * tMin;
-    const airBlend = daytimeWeight * dayAir + overnightWeight * nightAir;
-    const relativeHumidity = clamp(firstFinite(r.humidityMean, 65), 0, 100);
-    const es = satVaporPress(water);
-    const ea = satVaporPress(airBlend) * (relativeHumidity / 100);
-    const evapCoolNew = evaporationCoeff * 0.0006 * coupledWind * Math.max(es - ea, 0) * daylightFraction * depthFluxScale;
-
-    let inflowTempPull = 0;
-    if (inflowCfs > 0) {
-      const mix = clamp(inflowCfs / Math.max(acres * depthFt, 0.5), 0, 0.25);
-      inflowTempPull = clamp((inflowTempF - water) * mix, -6, 6);
-    }
-
-    let rainTempPull = 0;
-    const precipIn = firstFinite(r.precip, 0);
-    if (precipIn > 0.05) {
-      const rainFrac = clamp((precipIn / 12) / Math.max(depthFt, 0.2), 0, 0.15);
-      const rainTempF = tMean;
-      rainTempPull = clamp(rainFrac * (rainTempF - water), -1.5, 1.5);
-    }
-
-    const flowTempPull = clamp(inflowTempPull + rainTempPull, -6, 6);
-
-    const bottomFlux = sedimentConductivity * (sedimentTemp - water) / Math.max(sedimentDepthM, 0.05) * 0.001;
-
-    const equilibriumRaw = airBlend + solarHeat - windCool - evapCoolNew - rainCool - longwaveLoss + flowTempPull + bottomFlux;
-    const equilibrium = clamp(equilibriumRaw, FREEZING_F_FRESH_WATER, 100);
-
-    const prevSurface = layers[0];
-    const sedimentBlend = clamp(sedimentFactor, 0, 1);
-    const sedimentExchange = sedimentBlend * sedimentConductivity * sedimentDepthM * sedimentExchangeCoeff;
-    const sedimentLag = (0.1 + 0.25 * sedimentBlend) * prevSurface + (0.9 - 0.25 * sedimentBlend) * equilibrium + sedimentExchange;
-    sedimentTemp = clamp(0.92 * sedimentTemp + 0.08 * sedimentLag, FREEZING_F_FRESH_WATER, 100);
-    const equilibriumWithSediment = clamp(
-      equilibrium + sedimentBlend * (sedimentLag - equilibrium),
-      FREEZING_F_FRESH_WATER,
-      100
-    );
-
-    const alpha = clamp(dailyAlpha * areaFactor * depthFactor, 0.01, 0.5);
-    const mixedLayerAlpha = clamp(mixAlpha * mixedLayerAlphaBoost * (1 + 0.35 * flowTurnover), 0.01, 0.65);
-
-    layers[0] = clamp(prevSurface + alpha * (equilibriumWithSediment - prevSurface), FREEZING_F_FRESH_WATER, 100);
-    for (let i = 1; i < layers.length; i += 1) {
-      const prevLayer = layers[i];
-      const parent = layers[i - 1];
-      const blend = mixedLayerAlpha / (i + 1);
-      layers[i] = clamp(prevLayer + blend * (parent - prevLayer), FREEZING_F_FRESH_WATER, 100);
-    }
-
-    water = layers.reduce((sum, l) => sum + l, 0) / layers.length;
-
-    const waterEstimate = clamp(water + depthWarmBias, FREEZING_F_FRESH_WATER, 100);
-    const waterLow = clamp(waterEstimate - uncertaintyBand, FREEZING_F_FRESH_WATER, 100);
-    const waterHigh = clamp(waterEstimate + uncertaintyBand, FREEZING_F_FRESH_WATER, 100);
-
-    return {
-      ...r,
-      tMean: round1(tMean),
-      tMax: round1(tMax),
-      tMin: round1(tMin),
-      solarHeat: round1(solarHeat),
-      humidityMean: round1(relativeHumidity),
-      evapCool: round1(evapCoolNew),
-      evapCoolNew: round1(evapCoolNew),
-      cloudFrac: round1(cloudFrac),
-      longwaveClear: round1(longwaveClear),
-      longwaveLoss: round1(longwaveLoss),
-      longwaveCloudAdjustment: round1(longwaveCloudAdjustment),
-      longwaveNet: round1(longwaveLoss),
-      daylightFraction: round1(daylightFraction),
-      effectiveWind: round1(effectiveWind),
-      windCool: round1(windCool),
-      cloudCool: round1(cloudCool),
-      rainCool: round1(rainCool),
-      airBlend: round1(airBlend),
-      equilibrium: round1(equilibrium),
-      alpha: round1(alpha),
-      mixedLayerAlpha: round1(mixedLayerAlpha),
-      mixedLayerDepthFt: round1(dynamicMixedDepthFt),
-      clarityFactor: round1(dynamicClarityFactor),
-      flowTurnover: round1(flowTurnover),
-      netFlowCfs: round1(netFlowCfs),
-      sedimentFactor: round1(sedimentFactor),
-      bottomFlux: round1(bottomFlux),
-      inflowTempPull: round1(inflowTempPull),
-      rainTempPull: round1(rainTempPull),
-      flowTempPull: round1(flowTempPull),
-      equilibriumWithSediment: round1(equilibriumWithSediment),
-      waterEstimateBulk: round1(water),
-      depthWarmBias: round1(depthWarmBias),
-      waterEstimate: round1(waterEstimate),
-      waterLow: round1(waterLow),
-      waterHigh: round1(waterHigh),
-      modelHour,
-      layerCount
-    };
-  });
-}
-
 function renderSummary({ label, rows, timezone, params, autoCalibrationResult, sensitivityResult, observedTime }) {
   const past = rows.filter((r) => r.source === 'past');
   const future = rows.filter((r) => r.source === 'future_or_today');
@@ -441,8 +138,12 @@ function renderTable(
   observedTime = window.__fishcastv2ObservedTime || '12:00',
   uiParams = window.__fishcastv2UiParams || null
 ) {
-  const rowsWithValidation = mergeValidationIntoRows(rows, getAllValidationInputs());
-  const rowsWithTraceInputs = mergeTraceInputsIntoRows(rowsWithValidation, params, observedTime, uiParams);
+  const rowsWithTraceInputs = buildTraceRows(rows, {
+    params,
+    observedTime,
+    uiParams,
+    validationPoints: getAllValidationInputs()
+  });
   const header = ['Date', 'Src', 'Tmin', 'Tmean', 'Tmax', 'Wind', 'WindEff', 'DayFrac', 'Precip', 'Solar', 'Cloud', 'CloudFrac', 'AirBlend', 'Solar+', 'Wind-', 'Evap-', 'LongwaveClear', 'LongwaveCloudΔ', 'LongwaveLoss', 'Longwave-(Legacy)', 'Cloud-(Legacy)', 'Rain-', 'InflowΔ', 'RainΔ', 'FlowΔ', 'Equilibrium', 'Eq+Sed', 'Alpha', 'MixAlpha', 'Layers', 'WaterBulk', 'WaterLow', 'WaterEst', 'WaterHigh', 'ValidationObs', 'ValidationTime', 'ValidationErr', 'ValidationClarity', 'InputAcres', 'InputDepthFt', 'InputObsDepthFt', 'InputModelHour', 'InputObservedTime', 'InputTurbidityNtu', 'InputVisibilityFt', 'InputInflowCfs', 'InputInflowTempF', 'InputOutflowCfs', 'InputShadingPct', 'InputFetchLengthFt', 'InputWindReduction', 'InputEvapCoeff', 'InputAlbedo', 'InputLongwaveFactor', 'InputSolarGainFactor', 'InputWindCouplingFactor', 'InputRainCoolingCoeff', 'InputSkyViewFactor', 'InputSedimentExchangeCoeff', 'InputSeedStartWaterFromFirstObservation', 'InputMixedLayerDepthFt', 'InputSedimentFactor', 'InputSedimentConductivity', 'InputSedimentDepthM', 'InputDailyAlpha', 'InputMixAlpha', 'InputLayerCount', 'InputUncertaintyBand'];
   const body = rowsWithTraceInputs.map((r) => `<tr>
     <td>${r.date}</td><td>${r.source}</td><td>${r.tMin}</td><td>${r.tMean}</td><td>${r.tMax}</td>
@@ -457,157 +158,6 @@ function renderTable(
 }
 
 
-function csvEscape(value) {
-  if (value === null || value === undefined) return '';
-  const str = String(value);
-  if (/[,\"\n]/.test(str)) return `\"${str.replace(/\"/g, '\"\"')}\"`;
-  return str;
-}
-
-function rowsToCsv(
-  rows,
-  params = window.__fishcastv2Params || null,
-  observedTime = window.__fishcastv2ObservedTime || '12:00',
-  uiParams = window.__fishcastv2UiParams || null
-) {
-  if (!rows?.length) return '';
-  const rowsWithValidation = mergeValidationIntoRows(rows, getAllValidationInputs());
-  const rowsWithTraceInputs = mergeTraceInputsIntoRows(rowsWithValidation, params, observedTime, uiParams);
-  const columns = [
-    'date', 'source', 'tMin', 'tMean', 'tMax', 'humidityMean', 'windMean', 'effectiveWind', 'daylightFraction',
-    'precip', 'solar', 'cloud', 'cloudFrac', 'airBlend', 'solarHeat', 'windCool', 'evapCool', 'evapCoolNew', 'longwaveClear', 'longwaveCloudAdjustment', 'longwaveLoss', 'longwaveNet',
-    'cloudCool', 'rainCool', 'bottomFlux', 'inflowTempPull', 'rainTempPull', 'flowTempPull', 'equilibrium', 'equilibriumWithSediment', 'alpha',
-    'mixedLayerAlpha', 'layerCount', 'waterEstimateBulk', 'waterLow', 'waterEstimate', 'waterHigh',
-    'validationObserved', 'validationObservedTime', 'validationError', 'validationClarityNtu',
-    'inputAcres', 'inputDepthFt', 'inputObsDepthFt', 'inputModelHour', 'inputObservedTime',
-    'inputTurbidityNtu', 'inputVisibilityFt', 'inputInflowCfs', 'inputInflowTempF', 'inputOutflowCfs',
-    'inputShadingPct', 'inputFetchLengthFt', 'inputWindReduction', 'inputEvapCoeff', 'inputAlbedo',
-    'inputLongwaveFactor', 'inputSolarGainFactor', 'inputWindCouplingFactor', 'inputRainCoolingCoeff', 'inputSkyViewFactor', 'inputSedimentExchangeCoeff', 'inputSeedStartWaterFromFirstObservation', 'inputMixedLayerDepthFt', 'inputSedimentFactor', 'inputSedimentConductivity', 'inputSedimentDepthM',
-    'inputDailyAlpha', 'inputMixAlpha', 'inputLayerCount', 'inputUncertaintyBand'
-  ];
-
-  const lines = [columns.join(',')];
-  rowsWithTraceInputs.forEach((row) => {
-    lines.push(columns.map((column) => csvEscape(row[column])).join(','));
-  });
-
-  return lines.join('\n');
-}
-
-function mergeValidationIntoRows(rows, validationPoints) {
-  const validationByDate = new Map(validationPoints.map((point) => [point.date, point]));
-  const mergedRows = rows.map((row) => {
-    const validation = validationByDate.get(row.date);
-    if (!validation) {
-      return {
-        ...row,
-        validationObserved: null,
-        validationObservedTime: null,
-        validationError: null,
-        validationClarityNtu: null
-      };
-    }
-
-    return {
-      ...row,
-      validationObserved: round1(validation.observed),
-      validationObservedTime: validation.observedTime || '12:00',
-      validationError: round1(validation.observed - row.waterEstimate),
-      validationClarityNtu: Number.isFinite(validation.clarityNtu) ? round1(validation.clarityNtu) : null
-    };
-  });
-
-  const rowDates = new Set(rows.map((row) => row.date));
-  const unmatchedValidationRows = validationPoints
-    .filter((point) => !rowDates.has(point.date))
-    .map((point) => ({
-      date: point.date,
-      source: 'validation_only',
-      tMin: null,
-      tMean: null,
-      tMax: null,
-      humidityMean: null,
-      windMean: null,
-      effectiveWind: null,
-      daylightFraction: null,
-      precip: null,
-      solar: null,
-      cloud: null,
-      cloudFrac: null,
-      airBlend: null,
-      solarHeat: null,
-      windCool: null,
-      evapCool: null,
-      evapCoolNew: null,
-      longwaveClear: null,
-      longwaveCloudAdjustment: null,
-      longwaveLoss: null,
-      longwaveNet: null,
-      cloudCool: null,
-      rainCool: null,
-      bottomFlux: null,
-      inflowTempPull: null,
-      rainTempPull: null,
-      flowTempPull: null,
-      equilibrium: null,
-      equilibriumWithSediment: null,
-      alpha: null,
-      mixedLayerAlpha: null,
-      layerCount: null,
-      waterEstimateBulk: null,
-      waterLow: null,
-      waterEstimate: null,
-      waterHigh: null,
-      validationObserved: round1(point.observed),
-      validationObservedTime: point.observedTime || '12:00',
-      validationError: null,
-      validationClarityNtu: Number.isFinite(point.clarityNtu) ? round1(point.clarityNtu) : null
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  return [...mergedRows, ...unmatchedValidationRows];
-}
-
-function mergeTraceInputsIntoRows(rows, params, observedTime, uiParams) {
-  if (!params) return rows;
-
-  const rawOrRounded = (rawValue, normalizedValue) => (Number.isFinite(rawValue) ? rawValue : round1(normalizedValue));
-
-  return rows.map((row) => ({
-    ...row,
-    inputAcres: rawOrRounded(uiParams?.acres, params.acres),
-    inputDepthFt: rawOrRounded(uiParams?.depthFt, params.depthFt),
-    inputObsDepthFt: rawOrRounded(uiParams?.obsDepthFt, params.obsDepthFt),
-    inputModelHour: params.modelHour,
-    inputObservedTime: observedTime || '12:00',
-    inputTurbidityNtu: rawOrRounded(uiParams?.turbidityNtu, params.turbidityNtu),
-    inputVisibilityFt: rawOrRounded(uiParams?.visibilityFt, params.visibilityFt),
-    inputInflowCfs: rawOrRounded(uiParams?.inflowCfs, params.inflowCfs),
-    inputInflowTempF: rawOrRounded(uiParams?.inflowTempF, params.inflowTempF),
-    inputOutflowCfs: rawOrRounded(uiParams?.outflowCfs, params.outflowCfs),
-    inputShadingPct: rawOrRounded(uiParams?.shadingPct, params.shadingPct),
-    inputFetchLengthFt: rawOrRounded(uiParams?.fetchLengthFt, params.fetchLengthFt),
-    inputWindReduction: rawOrRounded(uiParams?.windReductionFactor, params.windReductionFactor),
-    inputEvapCoeff: rawOrRounded(uiParams?.evaporationCoeff, params.evaporationCoeff),
-    inputAlbedo: rawOrRounded(uiParams?.albedo, params.albedo),
-    inputLongwaveFactor: rawOrRounded(uiParams?.longwaveFactor, params.longwaveFactor),
-    inputSolarGainFactor: rawOrRounded(uiParams?.solarGainFactor, params.solarGainFactor),
-    inputWindCouplingFactor: rawOrRounded(uiParams?.windCouplingFactor, params.windCouplingFactor),
-    inputRainCoolingCoeff: rawOrRounded(uiParams?.rainCoolingCoeff, params.rainCoolingCoeff),
-    inputSkyViewFactor: rawOrRounded(uiParams?.skyViewFactor, params.skyViewFactor),
-    inputSedimentExchangeCoeff: rawOrRounded(uiParams?.sedimentExchangeCoeff, params.sedimentExchangeCoeff),
-    inputSeedStartWaterFromFirstObservation: Boolean(uiParams?.seedStartWaterFromFirstObservation ?? params.seedStartWaterFromFirstObservation),
-    inputMixedLayerDepthFt: rawOrRounded(uiParams?.mixedLayerDepthFt, params.mixedLayerDepthFt),
-    inputSedimentFactor: rawOrRounded(uiParams?.sedimentFactor, params.sedimentFactor),
-    inputSedimentConductivity: rawOrRounded(uiParams?.sedimentConductivity, params.sedimentConductivity),
-    inputSedimentDepthM: rawOrRounded(uiParams?.sedimentDepthM, params.sedimentDepthM),
-    inputDailyAlpha: rawOrRounded(uiParams?.dailyAlpha, params.dailyAlpha),
-    inputMixAlpha: rawOrRounded(uiParams?.mixAlpha, params.mixAlpha),
-    inputLayerCount: params.layerCount,
-    inputUncertaintyBand: rawOrRounded(uiParams?.uncertaintyBand, params.uncertaintyBand)
-  }));
-}
-
 function exportTraceCsv(
   rows,
   params = window.__fishcastv2Params || null,
@@ -619,7 +169,12 @@ function exportTraceCsv(
     return;
   }
 
-  const csv = rowsToCsv(rows, params, observedTime, uiParams);
+  const csv = rowsToCsv(rows, {
+    params,
+    observedTime,
+    uiParams,
+    validationPoints: getAllValidationInputs()
+  });
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -631,6 +186,7 @@ function exportTraceCsv(
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
 
 const VALIDATION_STORE_KEY = 'fishcastv2.validationHistory';
 const FORM_STATE_STORE_KEY = 'fishcastv2.formState';
@@ -938,7 +494,7 @@ function autoCalibrate(baseRows, baseParams, observations) {
     candidateSediment.forEach((sedimentFactor) => {
       candidateMixDepth.forEach((mixedLayerDepthFt) => {
         const candidateParams = { ...baseParams, turbidityNtu, sedimentFactor, mixedLayerDepthFt };
-        const candidateRows = computeModel(window.__fishcastRawRows || [], candidateParams);
+        const candidateRows = computeModel(window.__fishcastRawRows || [], candidateParams, { getValidationInputs: getAllValidationInputs });
         const mae = computeMAE(candidateRows, observations);
         if (Number.isFinite(mae) && (!Number.isFinite(best.mae) || mae < best.mae)) {
           best = { mae, params: candidateParams, rows: candidateRows };
@@ -954,13 +510,13 @@ function runSensitivity(baseParams) {
   const rows = window.__fishcastRawRows || [];
   if (!rows.length) return null;
 
-  const center = computeModel(rows, baseParams);
-  const windLow = computeModel(rows, { ...baseParams, windReductionFactor: clamp(baseParams.windReductionFactor - 0.15, 0, 1) });
-  const windHigh = computeModel(rows, { ...baseParams, windReductionFactor: clamp(baseParams.windReductionFactor + 0.15, 0, 1) });
-  const evapLow = computeModel(rows, { ...baseParams, evaporationCoeff: clamp(baseParams.evaporationCoeff - 0.2, 0.5, 1.5) });
-  const evapHigh = computeModel(rows, { ...baseParams, evaporationCoeff: clamp(baseParams.evaporationCoeff + 0.2, 0.5, 1.5) });
-  const shadeLow = computeModel(rows, { ...baseParams, shadingPct: clamp(baseParams.shadingPct - 15, 0, 100) });
-  const shadeHigh = computeModel(rows, { ...baseParams, shadingPct: clamp(baseParams.shadingPct + 15, 0, 100) });
+  const center = computeModel(rows, baseParams, { getValidationInputs: getAllValidationInputs });
+  const windLow = computeModel(rows, { ...baseParams, windReductionFactor: clamp(baseParams.windReductionFactor - 0.15, 0, 1) }, { getValidationInputs: getAllValidationInputs });
+  const windHigh = computeModel(rows, { ...baseParams, windReductionFactor: clamp(baseParams.windReductionFactor + 0.15, 0, 1) }, { getValidationInputs: getAllValidationInputs });
+  const evapLow = computeModel(rows, { ...baseParams, evaporationCoeff: clamp(baseParams.evaporationCoeff - 0.2, 0.5, 1.5) }, { getValidationInputs: getAllValidationInputs });
+  const evapHigh = computeModel(rows, { ...baseParams, evaporationCoeff: clamp(baseParams.evaporationCoeff + 0.2, 0.5, 1.5) }, { getValidationInputs: getAllValidationInputs });
+  const shadeLow = computeModel(rows, { ...baseParams, shadingPct: clamp(baseParams.shadingPct - 15, 0, 100) }, { getValidationInputs: getAllValidationInputs });
+  const shadeHigh = computeModel(rows, { ...baseParams, shadingPct: clamp(baseParams.shadingPct + 15, 0, 100) }, { getValidationInputs: getAllValidationInputs });
 
   const idx = center.length - 1;
   return {
@@ -1237,7 +793,7 @@ async function runModel() {
   window.__fishcastRawRows = buildSeries(archiveData, forecastData);
 
   let params = toModelParams(ui);
-  let rows = computeModel(window.__fishcastRawRows, params);
+  let rows = computeModel(window.__fishcastRawRows, params, { getValidationInputs: getAllValidationInputs });
 
   const observations = getAllValidationInputs();
   let autoCalibrationResult = null;
