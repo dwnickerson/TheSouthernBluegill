@@ -1,5 +1,5 @@
 // FishCast Service Worker
-const CACHE_NAME = 'fishcast-v7';
+const CACHE_NAME = 'fishcast-v4';
 const APP_PATH = '/fishcast/';
 const DEBUG_SW = false;
 const DEV_SW = DEBUG_SW || (typeof self !== 'undefined' && /localhost|127\.0\.0\.1/.test(self.location.hostname));
