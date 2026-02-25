@@ -13,7 +13,7 @@
     <link rel="icon" type="image/png" sizes="512x512" href="/fishcast/icon-512.png">
     <link rel="apple-touch-icon" sizes="192x192" href="/fishcast/icon-192.png">
     <title>FishCast - Smart Fishing Forecasts</title>
-    <link rel="stylesheet" href="styles/main.css?v=4.0.0">
+    <link rel="stylesheet" href="styles/main.css?v=5.0.0">  <!-- bumped version -->
 </head>
 <body>
     <div class="container">
@@ -99,8 +99,68 @@
         </footer>
     </div>
 
-    <script type="module" src="js/app.js?v=4.0.0"></script>
+    <!-- Update notification (optional - style as needed in main.css) -->
+    <div id="updateBanner" style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #4caf50; color: white; padding: 12px 24px; border-radius: 8px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+        New version available! <button id="updateBtn" style="margin-left: 12px; background: white; color: #4caf50; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Update Now</button>
+    </div>
+
+    <script type="module" src="js/app.js?v=5.0.0"></script>  <!-- bumped version -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+    <!-- Service Worker registration + update handling -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        const SW_VERSION = '5.0.0';  // Sync this with your SW CACHE_VERSION and asset ?v=
+
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register(`/fishcast/sw.js?v=${SW_VERSION}`, { scope: '/fishcast/' })
+            .then(registration => {
+              console.log('Service Worker registered with version:', SW_VERSION);
+
+              // Force check for updates on every load
+              registration.update();
+
+              // Auto-reload when new SW takes control (prevents old assets after activation)
+              navigator.serviceWorker.addEventListener('controllerchange', () => {
+                console.log('New Service Worker activated - reloading for fresh assets');
+                window.location.reload();
+              });
+
+              // Optional: Detect waiting SW and show update prompt
+              if (registration.waiting) {
+                showUpdatePrompt(registration);
+              }
+
+              registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                if (newWorker) {
+                  newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      showUpdatePrompt(registration);
+                    }
+                  });
+                }
+              });
+            })
+            .catch(err => console.error('Service Worker registration failed:', err));
+        });
+
+        function showUpdatePrompt(registration) {
+          const banner = document.getElementById('updateBanner');
+          const updateBtn = document.getElementById('updateBtn');
+
+          banner.style.display = 'block';
+
+          updateBtn.onclick = () => {
+            if (registration.waiting) {
+              // Tell waiting SW to activate immediately
+              registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+            banner.style.display = 'none';
+          };
+        }
+      }
+    </script>
 </body>
 </html>
