@@ -47,60 +47,250 @@ function init() {
     // Initialize species memory feature
     initSpeciesMemory();
    
-    // Register service worker with update handling
+    // Register service worker
     registerServiceWorker();
    
     debugLog('FishCast ready');
 }
 
-// ... (keep loadDefaults, initSpeciesMemory, generateForecast, useCurrentLocation, setupEventListeners unchanged)
 
-// Service worker registration with forced updates + auto-reload
+// Load default form values
+function loadDefaults() {
+    const defaultLocation = storage.getDefaultLocation();
+    const defaultSpecies = storage.getDefaultSpecies();
+    const defaultWaterBody = storage.getDefaultWaterBody();
+    const defaultForecastDays = storage.getDefaultForecastDays();
+   
+    if (defaultLocation) {
+        document.getElementById('location').value = defaultLocation;
+    }
+    if (defaultSpecies) {
+        document.getElementById('species').value = defaultSpecies;
+    }
+    if (defaultWaterBody) {
+        document.getElementById('waterType').value = defaultWaterBody;
+    }
+    if (defaultForecastDays) {
+        document.getElementById('days').value = defaultForecastDays;
+    }
+}
+
+// Initialize species memory feature
+function initSpeciesMemory() {
+    const speciesSelect = document.getElementById('species');
+    
+    // Remember last selected species
+    const lastSpecies = storage.getLastSelectedSpecies();
+    if (lastSpecies && speciesSelect) {
+        // Check if the species still exists in the dropdown
+        const option = speciesSelect.querySelector(`option[value="${lastSpecies}"]`);
+        if (option) {
+            speciesSelect.value = lastSpecies;
+            debugLog(`Restored last species: ${lastSpecies}`);
+        }
+    }
+    
+    // Save species when changed
+    if (speciesSelect) {
+        speciesSelect.addEventListener('change', (e) => {
+            const selectedSpecies = e.target.value;
+            if (selectedSpecies) {
+                storage.setLastSelectedSpecies(selectedSpecies);
+                debugLog(`Saved species preference: ${selectedSpecies}`);
+            }
+        });
+    }
+}
+
+// Main forecast generation
+async function generateForecast(event) {
+    event.preventDefault();
+   
+    const location = document.getElementById('location').value;
+    const speciesKey = document.getElementById('species').value;
+    const waterType = document.getElementById('waterType').value;
+    const days = parseInt(document.getElementById('days').value);
+   
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Generating...';
+   
+    showLoading();
+   
+    try {
+        const runNow = new Date();
+
+        // Get location coordinates
+        const coords = await getLocation(location);
+        if (coords.stale) {
+            showNotification(`Using cached location data. ${coords.staleReason || ''}`.trim(), 'warning');
+        }
+
+        // Fetch weather data
+        const weather = await getWeather(coords.lat, coords.lon, days);
+        if (weather.stale) {
+            showNotification(`Using cached weather data. ${weather.staleReason || ''}`.trim(), 'warning');
+        }
+       
+        const waterContext = normalizeWaterTempContext({
+            coords,
+            waterType,
+            timezone: weather?.forecast?.timezone || weather?.meta?.timezone || 'UTC',
+            weatherPayload: {
+                historical: weather.historical,
+                forecast: weather.forecast,
+                meta: { ...weather.meta, source: 'LIVE' }
+            },
+            nowOverride: runNow
+        });
+
+        // Estimate water temperature
+        const waterTemp = await estimateWaterTemp(
+            coords,
+            waterType,
+            new Date(waterContext.anchorDateISOZ),
+            waterContext.payload,
+            { context: waterContext }
+        );
+
+        const waterTempsEvolution = projectWaterTemps(
+            waterTemp,
+            weather.forecast,
+            waterType,
+            coords.lat,
+            {
+                anchorDate: runNow,
+                tempUnit: weather?.meta?.units?.temp || 'F',
+                precipUnit: weather?.meta?.units?.precip || 'in',
+                historicalDaily: weather?.historical?.daily || {},
+                context: waterContext,
+                debug: localStorage.getItem('fishcast_debug_water_temp') === 'true'
+            }
+        );
+        // Keep "today" aligned with the same projection stream used by extended cards.
+        // When a future day rolls into "today", this avoids an abrupt model swap where
+        // yesterday's day+1 card and today's view disagree on period temperatures.
+        const projectedTodayWaterTemp = Number.isFinite(waterTempsEvolution?.[0])
+            ? waterTempsEvolution[0]
+            : null;
+        const todayWaterTemp = projectedTodayWaterTemp ?? waterTemp;
+
+        const waterTempView = buildWaterTempView({
+            dailySurfaceTemp: todayWaterTemp,
+            waterType,
+            context: waterContext
+        });
+
+        // Render the forecast
+        renderForecast({
+            coords,
+            waterTemp: todayWaterTemp,
+            waterTempView,
+            waterContext,
+            waterTempsEvolution,
+            weather,
+            speciesKey,
+            waterType,
+            days,
+            runNow
+        });
+       
+    } catch (error) {
+        console.error('Error generating forecast:', error);
+        showError(error.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Generate Forecast';
+    }
+}
+
+// Geolocation
+async function useCurrentLocation() {
+    const btn = document.getElementById('geolocateBtn');
+    btn.textContent = '…';
+    btn.disabled = true;
+   
+    if (!navigator.geolocation) {
+        showNotification('Geolocation not supported by your browser', 'error');
+        btn.textContent = '◎';
+        btn.disabled = false;
+        return;
+    }
+   
+    navigator.geolocation.getCurrentPosition(
+        async (position) => {
+            try {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+               
+                // Reverse geocode to get city name
+                const response = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+                    { headers: { 'User-Agent': 'FishCast/2.0' } }
+                );
+                const data = await response.json();
+               
+                const city = data.address.city || data.address.town || data.address.village;
+                const state = data.address.state;
+               
+                if (city && state) {
+                    document.getElementById('location').value = `${city}, ${state}`;
+                    showNotification('Location detected!', 'success');
+                } else {
+                    document.getElementById('location').value = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                }
+               
+            } catch (error) {
+                showNotification('Could not determine location name', 'error');
+            } finally {
+                btn.textContent = '◎';
+                btn.disabled = false;
+            }
+        },
+        (error) => {
+            showNotification('Could not get location: ' + error.message, 'error');
+            btn.textContent = '◎';
+            btn.disabled = false;
+        }
+    );
+}
+
+// Setup all event listeners
+function setupEventListeners() {
+    // Forecast form
+    document.getElementById('forecastForm')?.addEventListener('submit', generateForecast);
+   
+    // Geolocation
+    document.getElementById('geolocateBtn')?.addEventListener('click', useCurrentLocation);
+
+    // Save current location to favorites
+    document.getElementById('saveLocationBtn')?.addEventListener('click', () => saveFavorite());
+   
+    // Settings links
+    document.getElementById('settingsLink')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        openSettings();
+    });
+   
+    document.getElementById('aboutLink')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        openAbout();
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        closeSettings();
+        closeAbout();
+    });
+}
+
+
+// Service worker registration
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
-        const SW_VERSION = '5.0.0';  // ← SYNC THIS with your SW CACHE_VERSION and asset ?v= in HTML
-
-        navigator.serviceWorker.register(`/fishcast/sw.js?v=${SW_VERSION}`, {
-            scope: '/fishcast/',
-            updateViaCache: 'none'  // ← Forces browser to ALWAYS fetch fresh sw.js (bypasses HTTP cache)
-        })
-        .then(registration => {
-            debugLog(`Service Worker registered (v${SW_VERSION})`);
-
-            // Force immediate update check (helps detect changes faster)
-            registration.update();
-
-            // Auto-reload page when new SW takes control (fixes "stuck after activation")
-            let refreshing = false;
-            navigator.serviceWorker.addEventListener('controllerchange', () => {
-                if (refreshing) return;
-                refreshing = true;
-                debugLog('New SW controller detected - reloading for fresh assets');
-                window.location.reload();
-            });
-
-            // Optional: Detect waiting SW and auto-activate (or prompt)
-            if (registration.waiting) {
-                debugLog('Waiting SW found - sending SKIP_WAITING');
-                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-            }
-
-            // Listen for future waiting states
-            registration.addEventListener('updatefound', () => {
-                const newWorker = registration.installing;
-                if (newWorker) {
-                    newWorker.addEventListener('statechange', () => {
-                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            debugLog('New SW installed & waiting - activating');
-                            newWorker.postMessage({ type: 'SKIP_WAITING' });
-                        }
-                    });
-                }
-            });
-        })
-        .catch(err => debugLog('Service Worker registration failed:', err));
-    } else {
-        debugLog('Service Worker not supported in this browser');
+        navigator.serviceWorker.register('/fishcast/sw.js?v=4.0.0')
+            .then(() => debugLog('Service Worker registered'))
+            .catch(err => debugLog('Service Worker registration failed:', err));
     }
 }
 
