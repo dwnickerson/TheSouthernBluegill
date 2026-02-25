@@ -1,14 +1,19 @@
-// FishCast Service Worker
-const CACHE_NAME = 'fishcast-v4';
+// FishCast Service Worker - Updated for reliable updates (v5)
+
+const CACHE_VERSION = '5';  // ← Increment this on every deploy (e.g., '6', '5.1')
+const CACHE_NAME = `fishcast-v${CACHE_VERSION}`;
+
 const APP_PATH = '/fishcast/';
 const DEBUG_SW = false;
 const DEV_SW = DEBUG_SW || (typeof self !== 'undefined' && /localhost|127\.0\.0\.1/.test(self.location.hostname));
+
 const SW_API_HOSTS = new Set([
   'api.open-meteo.com',
   'archive-api.open-meteo.com',
   'nominatim.openstreetmap.org',
   'script.google.com'
 ]);
+
 const swDebugKeys = new Set();
 
 function logSW(...args) {
@@ -18,10 +23,7 @@ function logSW(...args) {
 }
 
 function logSWOnce(key, ...args) {
-  if (!DEV_SW || swDebugKeys.has(key)) {
-    return;
-  }
-
+  if (!DEV_SW || swDebugKeys.has(key)) return;
   swDebugKeys.add(key);
   console.warn('[FishCast SW]', ...args);
 }
@@ -58,40 +60,70 @@ const urlsToCache = [
   `${APP_PATH}icon-512.png`
 ];
 
-// Install event - cache core app shell
+// Install event - precache core app shell with fresh fetches (bypass cache)
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(cache => {
+      return Promise.all(
+        urlsToCache.map(url => {
+          return fetch(url, { cache: 'reload' })  // Force fresh from network
+            .then(response => {
+              if (!response.ok) {
+                throw new Error(`Failed to fetch ${url}: ${response.status}`);
+              }
+              return cache.put(url, response);
+            })
+            .catch(err => {
+              logSW('install-fetch-failed', url, err);
+              // Continue installing even if one asset fails (don't break whole SW)
+            });
+        })
+      );
+    })
+    .then(() => {
+      logSW('install-complete', 'Precached assets');
+      return self.skipWaiting();  // Activate immediately
+    })
+    .catch(err => {
+      logSW('install-failed', err);
+    })
   );
 });
 
-// Activate event - clean up old caches
+// Activate event - clean old caches + claim clients immediately
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(cacheNames => Promise.all(
-      cacheNames.map(cacheName => {
-        if (cacheName !== CACHE_NAME) {
-          return caches.delete(cacheName);
-        }
-        return Promise.resolve();
-      })
-    )).then(() => self.clients.claim())
+    Promise.all([
+      // Delete old caches
+      caches.keys().then(cacheNames => {
+        return Promise.all(
+          cacheNames.map(cacheName => {
+            if (cacheName !== CACHE_NAME) {
+              logSW('deleting-old-cache', cacheName);
+              return caches.delete(cacheName);
+            }
+            return Promise.resolve();
+          })
+        );
+      }),
+      // Claim all open clients so new SW controls pages right away
+      self.clients.claim()
+    ])
+    .then(() => {
+      logSW('activate-complete', 'New version active');
+    })
   );
 });
 
-// Fetch event - app shell offline first, API network only
+// Fetch event
 self.addEventListener('fetch', event => {
   const request = event?.request;
-  if (!request || request.method !== 'GET') {
-    return;
-  }
+  if (!request || request.method !== 'GET') return;
 
-  const safeResponse = handleFetch(request).catch((error) => {
+  const safeResponse = handleFetch(request).catch(error => {
     logSW('fetch.respondWith.unhandled', request?.url, error);
     if (request.mode === 'navigate') {
-      return caches.match(`${APP_PATH}index.html`).then((appShell) => appShell || offlineResponse());
+      return caches.match(`${APP_PATH}index.html`).then(appShell => appShell || offlineResponse());
     }
     return new Response(null, { status: 204 });
   });
@@ -101,17 +133,17 @@ self.addEventListener('fetch', event => {
 
 async function handleFetch(request) {
   try {
-    if (!request || !request.url) {
-      return new Response(null, { status: 204 });
-    }
+    if (!request?.url) return new Response(null, { status: 204 });
 
     const url = new URL(request.url);
 
+    // Block invalid /null requests
     if (url.pathname.includes('/null') || url.pathname.endsWith('/null') || url.href.includes('/null?')) {
       logSWOnce('null-path', 'Blocked invalid /null request', url.href);
       return new Response(null, { status: 204 });
     }
 
+    // Cross-origin: network only
     if (url.origin !== self.location.origin) {
       logSW('bypass-cross-origin', url.href);
       try {
@@ -122,7 +154,7 @@ async function handleFetch(request) {
       }
     }
 
-    // Keep selected APIs network-only so we don't serve stale forecast data.
+    // APIs: network-first, fallback to cache if offline
     if (SW_API_HOSTS.has(url.hostname)) {
       logSW('network-only-api', url.href);
       try {
@@ -134,13 +166,12 @@ async function handleFetch(request) {
       }
     }
 
-    // App shell code/assets should prefer network so field-model updates are
-    // visible immediately after deploys instead of being pinned by cache-first.
     const isAppCodeAsset =
       url.pathname.startsWith(`${APP_PATH}js/`) ||
       url.pathname.startsWith(`${APP_PATH}styles/`) ||
       url.pathname === `${APP_PATH}index.html`;
 
+    // Non-app-shell: cache-first
     if (!isAppCodeAsset) {
       const cachedResponse = await caches.match(request);
       if (cachedResponse) {
@@ -149,6 +180,7 @@ async function handleFetch(request) {
       }
     }
 
+    // App shell: network-first → update cache → fallback to cache
     if (isAppCodeAsset) {
       try {
         const networkFresh = await fetch(request);
@@ -156,7 +188,7 @@ async function handleFetch(request) {
           const clone = networkFresh.clone();
           caches.open(CACHE_NAME)
             .then(cache => cache.put(request, clone))
-            .catch(error => logSW('cache-put-failed', url.href, error));
+            .catch(err => logSW('cache-put-failed', url.href, err));
         }
         logSW('network-first-app-asset', url.href);
         return networkFresh;
@@ -167,6 +199,7 @@ async function handleFetch(request) {
       }
     }
 
+    // General fallback: network → cache → offline
     try {
       const networkResponse = await fetch(request);
       if (!networkResponse) {
@@ -178,13 +211,14 @@ async function handleFetch(request) {
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME)
           .then(cache => cache.put(request, responseToCache))
-          .catch(error => logSW('cache-put-failed', url.href, error));
+          .catch(err => logSW('cache-put-failed', url.href, err));
       }
 
       logSW('network-ok', url.href);
       return networkResponse;
     } catch (error) {
       logSW('network-failed', url.href, error);
+
       if (request.mode === 'navigate') {
         const appShell = await caches.match(`${APP_PATH}index.html`);
         if (appShell) {
