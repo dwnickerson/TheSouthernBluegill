@@ -958,3 +958,40 @@ footer a { color: var(--text-secondary); text-decoration: none; }
         scroll-behavior: auto !important;
     }
 }
+/* Fix select dropdown readability - higher contrast */
+select,
+select option {
+    background-color: #2d3748;          /* Darker but solid gray - better than translucent dark */
+    color: #f3f4f6;                     /* Bright near-white text */
+    border: 1px solid #4b5563;
+}
+
+/* Focused/hovered/selected options */
+select:focus,
+select option:checked,
+select option:hover,
+select option:active {
+    background-color: #4b5563;          /* Lighter highlight for visibility */
+    color: #ffffff;
+}
+
+/* Ensure options don't go fully black/invisible */
+select option {
+    background: #2d3748 !important;     /* Override browser defaults */
+    color: #f3f4f6 !important;
+}
+
+/* Optional: Make background slightly lighter in light themes */
+[data-theme="sba"] select,
+[data-theme="sba"] select option,
+[data-theme="light"] select,
+[data-theme="light"] select option {
+    background-color: #e5e7eb;          /* Light gray bg */
+    color: #111827;                     /* Dark text */
+}
+
+[data-theme="sba"] select:focus,
+[data-theme="sba"] select option:hover {
+    background-color: #d1d5db;
+    color: #000000;
+}
