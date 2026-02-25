@@ -76,7 +76,10 @@ Then open:
 ## Files
 
 - `index.html` — UI and control surface.
-- `js/app/controller.js` — data fetch, orchestration, simulation, UI rendering, persistence.
+- `js/app/controller.js` — coordinator for UI/state wiring, fetch lifecycle, rendering, and persistence.
+- `js/app/weather-data.mjs` — Open-Meteo URL construction and weather-series shaping helpers.
+- `js/app/mode1-core.mjs` — parameter normalization and thermal simulation core (mode-1 model loop).
+- `js/app/trace-export.mjs` — validation merge and CSV trace-shaping helpers.
 - `js/app/model-physics.mjs` — longwave/cloud physics helper(s).
 - `tests/cloud-longwave-regression.test.mjs` — regression coverage for cloud-longwave behavior.
 - `tests/generate-cloud-trace.mjs` — helper script for cloud-trace generation.
