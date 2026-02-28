@@ -3,6 +3,13 @@ function hasTimezoneSuffix(value) {
 }
 
 function toIsoUtc(value) {
+    if (value instanceof Date) {
+        return Number.isFinite(value.getTime()) ? value.toISOString() : null;
+    }
+    if (typeof value === 'number') {
+        const fromEpoch = new Date(value);
+        return Number.isFinite(fromEpoch.getTime()) ? fromEpoch.toISOString() : null;
+    }
     if (typeof value !== 'string') return null;
     const trimmed = value.trim();
     if (!trimmed) return null;
