@@ -2,46 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <link rel="stylesheet" href="/site.css">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Water Temperature Estimation Prototype</title>
-  <style>
-    :root { color-scheme: light dark; }
-    body { font-family: Arial, sans-serif; margin: 16px; background: #f4f7fb; color: #111; }
-    .card { background: #fff; border: 1px solid #d2dbe8; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
-    table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    th, td { border: 1px solid #d2dbe8; padding: 6px; text-align: right; }
-    th:first-child, td:first-child { text-align: left; }
-    input, select, button { padding: 6px; margin: 2px; }
-    .muted { color: #555; font-size: 13px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
-    .input-sections { display: grid; gap: 14px; }
-    .input-section { border: 1px solid #d2dbe8; border-radius: 8px; padding: 10px; background: #f8fbff; }
-    .input-section h3 { margin: 0 0 8px; font-size: 16px; }
-    .input-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 12px; }
-    .input-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
-    .input-grid label.inline-check { flex-direction: row; align-items: center; gap: 8px; }
-    .input-grid label.inline-check input { margin: 0; }
-    .field-hint { font-size: 12px; color: #555; }
-    .ok { color: #0a7f2e; }
-    details summary { cursor: pointer; font-weight: 700; }
-    .parameter-help p { margin: 8px 0; }
-    #fitOut { margin-top: 10px; }
-    .fit-report { background: #f8fbff; border: 1px solid #c7d9f5; border-radius: 8px; padding: 10px 12px; line-height: 1.4; }
-    .fit-report p { margin: 6px 0; }
-    .fit-report ul { margin: 8px 0 0 18px; padding: 0; }
-    .fit-report li { margin: 6px 0; }
-    .fit-warning { color: #8a5a00; }
-    .fit-empty { color: #555; margin: 4px 0; }
-    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 12px; }
-    .toolbar button { white-space: nowrap; }
-    .chart-wrap { overflow-x: auto; }
-    #trendChart { width: 100%; min-width: 780px; height: 300px; border: 1px solid #d2dbe8; border-radius: 8px; background: #fff; }
-    #tableWrap { overflow-x: auto; }
-    .disclaimer { border-left: 4px solid #8a5a00; background: #fff8e8; padding: 8px 10px; border-radius: 6px; }
-    @media (max-width: 640px) {
-      #trendChart { min-width: 620px; }
-    }
-  </style>
 </head>
 <body>
   <h1>Water Temperature Estimation Prototype</h1>
