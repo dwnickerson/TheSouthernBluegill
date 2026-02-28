@@ -31,27 +31,27 @@ body {
   justify-content: space-between;
 }
 
-.logo-lock {
+.model-header .logo-lock {
   text-decoration: none;
 }
 
-.logo-type { display: flex; flex-direction: column; line-height: 1; }
-.logo-type .the,
-.logo-type .assoc {
+.model-header .logo-type { display: flex; flex-direction: column; line-height: 1; }
+.model-header .logo-type .the,
+.model-header .logo-type .assoc {
   font-family: 'Josefin Sans', sans-serif;
   font-size: 0.55rem;
   letter-spacing: 0.26em;
   text-transform: uppercase;
   color: var(--ink-soft);
 }
-.logo-type .name {
+.model-header .logo-type .name {
   font-size: 1.25rem;
   color: var(--ink);
   margin: 0.15rem 0;
 }
 
-nav { display: flex; gap: 1.2rem; }
-nav a {
+.model-header nav { display: flex; gap: 1.2rem; }
+.model-header nav a {
   font-family: 'Josefin Sans', sans-serif;
   font-size: 0.65rem;
   text-transform: uppercase;
@@ -59,7 +59,7 @@ nav a {
   color: var(--ink-soft);
   text-decoration: none;
 }
-nav a:hover { color: var(--ink); }
+.model-header nav a:hover { color: var(--ink); }
 
 .model-page {
   max-width: 1140px;
@@ -140,8 +140,8 @@ input, select, textarea {
 }
 
 .footer-meta img {
-  width: 36px;
-  height: 36px;
+  width: 36px !important;
+  height: 36px !important;
   filter: grayscale(100%);
   opacity: 0.45;
 }
@@ -170,4 +170,22 @@ input, select, textarea {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: #bcb8b0;
+}
+
+@media (max-width: 860px) {
+  .model-header-inner {
+    padding: 0.85rem 1rem;
+  }
+
+  .model-header nav a {
+    display: inline-block;
+  }
+
+  .site-footer {
+    padding: 2rem 0 2.5rem;
+  }
+
+  .footer-links {
+    gap: 1.25rem;
+  }
 }
