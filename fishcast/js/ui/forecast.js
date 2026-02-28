@@ -348,15 +348,42 @@ function getFishPhaseLabel(speciesData, waterTempF) {
 function deriveWaterClarity(weather) {
     const historicalPrecip = weather?.historical?.daily?.precipitation_sum;
     const forecastPrecip = weather?.forecast?.daily?.precipitation_sum;
+    const hourlyTimes = weather?.forecast?.hourly?.time;
+    const hourlyPrecip = weather?.forecast?.hourly?.precipitation;
+    const nowHourIndex = Number.isInteger(weather?.meta?.nowHourIndex)
+        ? weather.meta.nowHourIndex
+        : null;
+    const todayKey = Array.isArray(forecastPrecip) && Array.isArray(weather?.forecast?.daily?.time)
+        ? weather.forecast.daily.time[0]
+        : null;
 
     const recentHistorical = Array.isArray(historicalPrecip)
         ? historicalPrecip.slice(-2)
         : [];
-    const todayForecast = Array.isArray(forecastPrecip)
-        ? [forecastPrecip[0]]
-        : [];
 
-    const precipLast3Days = [...recentHistorical, ...todayForecast]
+    const todayObserved = (() => {
+        if (!Array.isArray(hourlyTimes) || !Array.isArray(hourlyPrecip) || nowHourIndex === null || !todayKey) {
+            return null;
+        }
+
+        const boundedNowIndex = Math.min(nowHourIndex, hourlyTimes.length - 1, hourlyPrecip.length - 1);
+        if (boundedNowIndex < 0) return null;
+
+        let sum = 0;
+        for (let i = 0; i <= boundedNowIndex; i += 1) {
+            const [dayKey] = String(hourlyTimes[i] || '').split('T');
+            if (dayKey !== todayKey) continue;
+            sum += Number(hourlyPrecip[i]) || 0;
+        }
+
+        return sum;
+    })();
+
+    const todayPrecip = Number.isFinite(todayObserved)
+        ? todayObserved
+        : (Array.isArray(forecastPrecip) ? (Number(forecastPrecip[0]) || 0) : 0);
+
+    const precipLast3Days = [...recentHistorical, todayPrecip]
         .map((value) => Number(value) || 0)
         .slice(-3);
 
