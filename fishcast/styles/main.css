@@ -870,6 +870,15 @@ button[type="submit"]:hover,
     padding-bottom: 15px;
 }
 
+
+.share-forecast-btn {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: normal;
+    padding-top: 12px;
+    padding-bottom: 12px;
+}
+
 .day-hourly-trend {
     font-size: 0.8em;
     color: var(--text-secondary);

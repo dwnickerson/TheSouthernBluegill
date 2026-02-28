@@ -818,7 +818,7 @@ export function renderForecast(data) {
 
     html += `
         <div class="action-buttons action-buttons-bottom">
-            <button class="action-btn" onclick="window.shareForecast()" aria-label="Share forecast">Share Forecast</button>
+            <button class="action-btn share-forecast-btn" onclick="window.shareForecast()" aria-label="Share forecast">Share Forecast</button>
         </div>
         ${isWaterTempTraceEnabled() ? `<div class="debug-build-stamp" style="margin-top:8px; font-size:0.85rem; color: var(--text-secondary);">Build ID: ${window.__FISHCAST_BUILD__}</div>` : ''}
     `;
