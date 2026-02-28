@@ -23,7 +23,14 @@
     h1{font-size:clamp(2.2rem,7vw,4rem);font-weight:300;margin:.4rem 0}
     p{font-size:1.1rem;color:var(--ink-mid)}
     .btn{display:inline-block;margin-top:1rem;font:600 .68rem 'Josefin Sans',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--ink);text-decoration:none;border-bottom:1px solid var(--ink)}
-    footer{border-top:1px solid var(--rule);font:.62rem 'Josefin Sans',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft)}
+    .site-footer{border-top:1px solid var(--rule);padding:2.4rem 0 3rem}
+    .footer-inner{max-width:1080px;margin:0 auto;padding:0 1.4rem;display:flex;flex-direction:column;gap:1.8rem}
+    .footer-meta{display:flex;align-items:center;gap:1rem;font:400 .52rem 'Josefin Sans',sans-serif;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft)}
+    .footer-meta img{width:36px;height:36px;filter:grayscale(100%);opacity:.45}
+    .footer-links{display:flex;gap:2rem;flex-wrap:wrap}
+    .footer-links a{font:400 .66rem 'Josefin Sans',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);text-decoration:none}
+    .footer-links a:hover{color:var(--ink)}
+    .footer-copy{font:300 .62rem 'Josefin Sans',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#bcb8b0}
   </style>
 </head>
 <body>
@@ -43,6 +50,20 @@
       <a class="btn" href="/">Return Home</a>
     </section>
   </main>
-  <footer>© The Southern Bluegill Association</footer>
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-meta">
+        <img src="/model/icon-192.png" alt="mark">
+        <span>The Southern Bluegill Association &nbsp;·&nbsp; Est. November 2025</span>
+      </div>
+      <div class="footer-links">
+        <a href="/model/">Water Temp Model</a>
+        <a href="/fishcast/">FishCast</a>
+        <a href="/#about">About</a>
+        <a href="/#roadmap">Roadmap</a>
+      </div>
+      <span class="footer-copy">© 2025–2026</span>
+    </div>
+  </footer>
 </body>
 </html>

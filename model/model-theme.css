@@ -111,3 +111,63 @@ input, select, textarea {
   border-radius: 0;
   border: 1px solid var(--rule);
 }
+
+
+.site-footer {
+  border-top: 1px solid var(--rule);
+  margin-top: 2rem;
+  padding: 2.4rem 0 3rem;
+}
+
+.footer-inner {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.8rem;
+}
+
+.footer-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-family: 'Josefin Sans', sans-serif;
+  font-size: 0.52rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.footer-meta img {
+  width: 36px;
+  height: 36px;
+  filter: grayscale(100%);
+  opacity: 0.45;
+}
+
+.footer-links {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.footer-links a {
+  font-family: 'Josefin Sans', sans-serif;
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+
+.footer-links a:hover { color: var(--ink); }
+
+.footer-copy {
+  font-family: 'Josefin Sans', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 300;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #bcb8b0;
+}
