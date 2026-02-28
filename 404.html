@@ -2,37 +2,47 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Error 404 - The Southern Bluegill Association</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Page Not Found | The Southern Bluegill Association</title>
   <meta name="robots" content="noindex, follow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Josefin+Sans:wght@300;400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles/site-theme.css">
+  <style>
+    :root{--ink:#1a1a1a;--ink-mid:#3a3a3a;--ink-soft:#7a7a7a;--rule:#d8d4cd;--bg:#f8f6f2;--white:#fff}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Cormorant Garamond',Georgia,serif;background:var(--bg);color:var(--ink)}
+    header,main,footer{max-width:1080px;margin:0 auto;padding:1.2rem 1.4rem}
+    header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--rule)}
+    .brand{display:flex;flex-direction:column;line-height:1;text-decoration:none}
+    .brand small{font:400 .52rem 'Josefin Sans',sans-serif;letter-spacing:.26em;text-transform:uppercase;color:var(--ink-soft)}
+    .brand strong{font-size:1.2rem;font-weight:600;color:var(--ink)}
+    nav a{font:400 .65rem 'Josefin Sans',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);text-decoration:none}
+    main{min-height:72vh;display:grid;place-items:center;text-align:center}
+    .panel{background:var(--white);border:1px solid var(--rule);padding:2.5rem;max-width:640px}
+    h1{font-size:clamp(2.2rem,7vw,4rem);font-weight:300;margin:.4rem 0}
+    p{font-size:1.1rem;color:var(--ink-mid)}
+    .btn{display:inline-block;margin-top:1rem;font:600 .68rem 'Josefin Sans',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--ink);text-decoration:none;border-bottom:1px solid var(--ink)}
+    footer{border-top:1px solid var(--rule);font:.62rem 'Josefin Sans',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft)}
+  </style>
 </head>
-<body class="error-template">
-  <div class="container">
-    <header class="header page-container">
-      <a class="logo" href="/">
-        <img src="https://thesouthernbluegill.com/media/website/IMG_7114_sm.jpg" alt="The Southern Bluegill Association" width="1280" height="556">
-      </a>
-    </header>
-
-    <main class="main page page--error">
-      <div class="hero wrapper">
-        <h1>404</h1>
-        <p class="hero__meta">The page you were looking for appears to have been moved, deleted, or does not exist. You could go back to where you were or head straight to our home page.</p>
-        <p><a href="/" class="btn">Go home</a></p>
-      </div>
-    </main>
-
-    <footer class="footer page-container">
-      <a class="logo" href="/">
-        <img src="https://thesouthernbluegill.com/media/website/IMG_7114_sm.jpg" alt="The Southern Bluegill Association" width="1280" height="556">
-      </a>
-      <div class="footer__copyright">Powered by Publii</div>
-    </footer>
-  </div>
+<body>
+  <header>
+    <a class="brand" href="/">
+      <small>The</small>
+      <strong>Southern Bluegill</strong>
+      <small>Association</small>
+    </a>
+    <nav><a href="/">Home</a></nav>
+  </header>
+  <main>
+    <section class="panel">
+      <p style="font-family:'Josefin Sans',sans-serif;letter-spacing:.18em;text-transform:uppercase;font-size:.65rem;color:var(--ink-soft);">Error</p>
+      <h1>404</h1>
+      <p>The page you requested does not exist or has moved.</p>
+      <a class="btn" href="/">Return Home</a>
+    </section>
+  </main>
+  <footer>© The Southern Bluegill Association</footer>
 </body>
 </html>
