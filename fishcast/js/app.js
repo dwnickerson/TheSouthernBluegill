@@ -173,7 +173,10 @@ async function generateForecast(event) {
         const projectedTodayWaterTemp = Number.isFinite(waterTempsEvolution?.[0])
             ? waterTempsEvolution[0]
             : null;
-        const todayWaterTemp = projectedTodayWaterTemp ?? waterTemp;
+        if (!Number.isFinite(projectedTodayWaterTemp)) {
+            throw new Error('Water temperature projection unavailable for current day');
+        }
+        const todayWaterTemp = projectedTodayWaterTemp;
 
         const waterTempView = buildWaterTempView({
             dailySurfaceTemp: todayWaterTemp,
