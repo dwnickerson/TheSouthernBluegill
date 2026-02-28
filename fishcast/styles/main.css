@@ -1100,6 +1100,14 @@ select option {
     font-weight: 600;
 }
 
+[data-theme="sba"] .share-forecast-btn {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: normal;
+    padding-top: 12px;
+    padding-bottom: 12px;
+}
+
 input[type="text"]:-webkit-autofill,
 input[type="text"]:-webkit-autofill:hover,
 input[type="text"]:-webkit-autofill:focus,
