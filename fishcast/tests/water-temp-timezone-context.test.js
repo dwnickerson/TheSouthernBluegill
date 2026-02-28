@@ -53,6 +53,53 @@ test('normalizeWaterTempContext keeps timezone-auto local hourly alignment for n
   assert.equal(context.hourlyNowTimeISOZ, '2026-02-19T07:00');
 });
 
+test('normalizeWaterTempContext respects Date nowOverride values for anchor hour selection', () => {
+  const context = normalizeWaterTempContext({
+    coords: { lat: 34.2576, lon: -88.7034 },
+    waterType: 'pond',
+    timezone: 'America/Chicago',
+    nowOverride: new Date('2026-02-19T14:10:00.000Z'), // 08:10 local (CST)
+    weatherPayload: {
+      historical: { daily: { temperature_2m_mean: [45, 46, 47, 48, 49] } },
+      forecast: {
+        timezone: 'America/Chicago',
+        hourly: {
+          time: [
+            '2026-02-19T06:00',
+            '2026-02-19T07:00',
+            '2026-02-19T08:00',
+            '2026-02-19T09:00'
+          ],
+          temperature_2m: [42, 43, 44, 45],
+          cloud_cover: [88, 85, 82, 80],
+          wind_speed_10m: [4, 4, 5, 5]
+        },
+        current: {
+          temperature_2m: 44,
+          wind_speed_10m: 5,
+          relative_humidity_2m: 80,
+          cloud_cover: 82,
+          weather_code: 3,
+          precipitation: 0
+        },
+        daily: {
+          time: ['2026-02-19'],
+          sunrise: ['2026-02-19T06:35'],
+          sunset: ['2026-02-19T17:40']
+        }
+      },
+      meta: {
+        source: 'FIXTURE',
+        units: { temp: 'F', wind: 'mph', precip: 'in' }
+      }
+    }
+  });
+
+  assert.equal(context.nowHourIndex, 2, '08:10 local should anchor to 08:00 local hour index');
+  assert.equal(context.anchorDateISOZ, '2026-02-19T08:00');
+  assert.equal(context.hourlyNowTimeISOZ, '2026-02-19T08:00');
+});
+
 
 test('buildWaterTempView uses local timezone day key for UTC anchor timestamps', () => {
   const context = normalizeWaterTempContext({
