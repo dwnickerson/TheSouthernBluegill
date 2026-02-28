@@ -488,10 +488,14 @@ button[type="submit"],
     background: var(--gradient-primary);
     color: #fff;
     font-weight: 700;
-    font-size: 1.15rem;
+    font-size: 1rem;
     letter-spacing: 0.02em;
     box-shadow: var(--button-shadow);
     cursor: pointer;
+}
+
+#submitBtn {
+    font-size: 1rem;
 }
 
 button[type="submit"]:hover,
@@ -915,6 +919,11 @@ button[type="submit"]:hover,
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-lg);
+}
+
+#aboutModal .modal-content,
+#settingsModal .modal-content {
+    background: var(--bg-primary);
 }
 
 .modal-header {
