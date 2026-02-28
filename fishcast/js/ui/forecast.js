@@ -3,7 +3,7 @@
 import { SPECIES_DATA } from '../config/species.js';
 import { getWindDirection } from '../utils/math.js';
 import { formatDate, formatDateShort, formatTime } from '../utils/date.js';
-import { getPressureRate } from '../models/fishingScore.js';
+import { calculateWaterClarity, getPressureRate } from '../models/fishingScore.js';
 import { calculateSpeciesAwareDayScore } from '../models/forecastEngine.js';
 import { calculateSolunar } from '../models/solunar.js';
 import { buildWaterTempView, projectWaterTemps } from '../models/waterTemp.js';
@@ -345,6 +345,51 @@ function getFishPhaseLabel(speciesData, waterTempF) {
     return 'Unknown';
 }
 
+function deriveWaterClarity(weather) {
+    const historicalPrecip = weather?.historical?.daily?.precipitation_sum;
+    const forecastPrecip = weather?.forecast?.daily?.precipitation_sum;
+    const hourlyTimes = weather?.forecast?.hourly?.time;
+    const hourlyPrecip = weather?.forecast?.hourly?.precipitation;
+    const nowHourIndex = Number.isInteger(weather?.meta?.nowHourIndex)
+        ? weather.meta.nowHourIndex
+        : null;
+    const todayKey = Array.isArray(forecastPrecip) && Array.isArray(weather?.forecast?.daily?.time)
+        ? weather.forecast.daily.time[0]
+        : null;
+
+    const recentHistorical = Array.isArray(historicalPrecip)
+        ? historicalPrecip.slice(-2)
+        : [];
+
+    const todayObserved = (() => {
+        if (!Array.isArray(hourlyTimes) || !Array.isArray(hourlyPrecip) || nowHourIndex === null || !todayKey) {
+            return null;
+        }
+
+        const boundedNowIndex = Math.min(nowHourIndex, hourlyTimes.length - 1, hourlyPrecip.length - 1);
+        if (boundedNowIndex < 0) return null;
+
+        let sum = 0;
+        for (let i = 0; i <= boundedNowIndex; i += 1) {
+            const [dayKey] = String(hourlyTimes[i] || '').split('T');
+            if (dayKey !== todayKey) continue;
+            sum += Number(hourlyPrecip[i]) || 0;
+        }
+
+        return sum;
+    })();
+
+    const todayPrecip = Number.isFinite(todayObserved)
+        ? todayObserved
+        : (Array.isArray(forecastPrecip) ? (Number(forecastPrecip[0]) || 0) : 0);
+
+    const precipLast3Days = [...recentHistorical, todayPrecip]
+        .map((value) => Number(value) || 0)
+        .slice(-3);
+
+    return calculateWaterClarity(precipLast3Days);
+}
+
 function buildTrendLineSvg(values, {
     width = 680,
     height = 250,
@@ -571,7 +616,11 @@ export function renderForecast(data) {
         now: runNow,
         debug: debugScoring
     });
-    const currentScore = { ...toRating(currentDayScore.score), score: currentDayScore.score, clarity: 'clear' };
+    const currentScore = {
+        ...toRating(currentDayScore.score),
+        score: currentDayScore.score,
+        clarity: deriveWaterClarity(weather)
+    };
     const currentPhaseLabel = getFishPhaseLabel(speciesData, canonicalWaterTemp);
     
     const windUnit = weather?.forecast?.current_units?.wind_speed_10m || weather?.forecast?.hourly_units?.wind_speed_10m || '';
