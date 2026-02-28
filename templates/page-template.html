@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{PAGE_TITLE}} - The Southern Bluegill Association</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Josefin+Sans:wght@300;400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{CSS_PATH}}/site-theme.css" />
+</head>
+<body class="page-shell">
+  <header>
+    <div class="header-inner">
+      <a class="logo-lock" href="/">
+        <span class="logo-type">
+          <span class="the">The Southern</span>
+          <span class="name">Bluegill Association</span>
+          <span class="assoc">Template Header</span>
+        </span>
+      </a>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/fishcast/">FishCast</a>
+        <a href="/fishcastv2/" class="nav-cta">Prototype</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page-container">
+    <h1 class="page-title">{{PAGE_HEADING}}</h1>
+    <p class="page-subtitle">{{PAGE_INTRO}}</p>
+
+    <section>
+      <div class="section-inner">
+        {{PAGE_CONTENT}}
+      </div>
+    </section>
+  </main>
+</body>
+</html>
