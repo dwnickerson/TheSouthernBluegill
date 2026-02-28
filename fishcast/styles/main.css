@@ -1034,13 +1034,13 @@ select option {
 /* Keep text inputs aligned with select colors/behavior on iOS Safari */
 [data-theme="sba"] input[type="text"],
 [data-theme="light"] input[type="text"] {
-    background-color: #ffffff;
+    background-color: #e5e7eb;
     color: #111827;
 }
 
 [data-theme="sba"] input[type="text"]:focus,
 [data-theme="light"] input[type="text"]:focus {
-    background-color: #f3f4f6;
+    background-color: #d1d5db;
     color: #111827;
 }
 
