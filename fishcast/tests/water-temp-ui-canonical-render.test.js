@@ -38,3 +38,11 @@ test('extended forecast excludes today card', () => {
     'extended forecast should skip today (and stale same-day rows) using location-local date'
   );
 });
+
+
+test('water clarity in Water Conditions derives from recent precipitation instead of hardcoded clear', () => {
+  assert.match(source, /import \{ calculateWaterClarity, getPressureRate \} from '\.\.\/models\/fishingScore\.js';/, 'forecast UI should import calculateWaterClarity for live clarity rendering');
+  assert.match(source, /function deriveWaterClarity\(weather\)/, 'forecast UI should derive water clarity from weather payload');
+  assert.match(source, /clarity:\s*deriveWaterClarity\(weather\)/, 'current score clarity should be computed from current weather context');
+  assert.doesNotMatch(source, /clarity:\s*'clear'/, 'water clarity should not be hardcoded to clear');
+});

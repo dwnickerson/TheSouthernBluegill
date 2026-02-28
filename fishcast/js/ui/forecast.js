@@ -3,7 +3,7 @@
 import { SPECIES_DATA } from '../config/species.js';
 import { getWindDirection } from '../utils/math.js';
 import { formatDate, formatDateShort, formatTime } from '../utils/date.js';
-import { getPressureRate } from '../models/fishingScore.js';
+import { calculateWaterClarity, getPressureRate } from '../models/fishingScore.js';
 import { calculateSpeciesAwareDayScore } from '../models/forecastEngine.js';
 import { calculateSolunar } from '../models/solunar.js';
 import { buildWaterTempView, projectWaterTemps } from '../models/waterTemp.js';
@@ -345,6 +345,24 @@ function getFishPhaseLabel(speciesData, waterTempF) {
     return 'Unknown';
 }
 
+function deriveWaterClarity(weather) {
+    const historicalPrecip = weather?.historical?.daily?.precipitation_sum;
+    const forecastPrecip = weather?.forecast?.daily?.precipitation_sum;
+
+    const recentHistorical = Array.isArray(historicalPrecip)
+        ? historicalPrecip.slice(-2)
+        : [];
+    const todayForecast = Array.isArray(forecastPrecip)
+        ? [forecastPrecip[0]]
+        : [];
+
+    const precipLast3Days = [...recentHistorical, ...todayForecast]
+        .map((value) => Number(value) || 0)
+        .slice(-3);
+
+    return calculateWaterClarity(precipLast3Days);
+}
+
 function buildTrendLineSvg(values, {
     width = 680,
     height = 250,
@@ -571,7 +589,11 @@ export function renderForecast(data) {
         now: runNow,
         debug: debugScoring
     });
-    const currentScore = { ...toRating(currentDayScore.score), score: currentDayScore.score, clarity: 'clear' };
+    const currentScore = {
+        ...toRating(currentDayScore.score),
+        score: currentDayScore.score,
+        clarity: deriveWaterClarity(weather)
+    };
     const currentPhaseLabel = getFishPhaseLabel(speciesData, canonicalWaterTemp);
     
     const windUnit = weather?.forecast?.current_units?.wind_speed_10m || weather?.forecast?.hourly_units?.wind_speed_10m || '';
