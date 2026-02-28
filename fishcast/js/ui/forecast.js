@@ -1033,7 +1033,7 @@ window.showDayDetails = function(dayIndex, date) {
         <div class="modal show" id="dayDetailModal" onclick="if(event.target === this) this.classList.remove('show')">
             <div class="modal-content" onclick="event.stopPropagation()">
                 <div class="modal-header">
-                    <span class="modal-close" onclick="document.getElementById('dayDetailModal').classList.remove('show')">×</span>
+                    <button type="button" class="modal-close" aria-label="Close day details" onclick="document.getElementById('dayDetailModal').classList.remove('show')">×</button>
                     ${weatherIcon.icon} ${formatDate(date)}
                 </div>
                 <div style="padding: 20px 0;">
