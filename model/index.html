@@ -3,13 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <link rel="stylesheet" href="/site.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Josefin+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./model-theme.css">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Water Temperature Estimation Prototype</title>
 </head>
 <body>
-  <h1>Water Temperature Estimation Prototype</h1>
-  <p class="muted">Simple model using <strong>past + present + future weather</strong> to estimate pond water temperature with tunable energy-balance controls.</p>
-  <p class="disclaimer"><strong>Prototype disclaimer:</strong> This is an educational planning model, not a safety-critical forecast. Typical field MAE can be around 2–5 °F and can be worse during rapid weather shifts (fronts, heatwaves, unusual inflows). Validate against local observations before making decisions.</p>
+  <header class="model-header">
+    <div class="model-header-inner">
+      <a class="logo-lock" href="/">
+        <span class="logo-type">
+          <span class="the">The</span>
+          <span class="name">Southern Bluegill</span>
+          <span class="assoc">Association</span>
+        </span>
+      </a>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/fishcast/">FishCast</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="model-page">
+    <section class="model-hero">
+      <p class="eyebrow">Tool 01 — Water Science</p>
+      <h1>Water Temperature Estimation Prototype</h1>
+      <p class="muted">Simple model using <strong>past + present + future weather</strong> to estimate pond water temperature with tunable energy-balance controls.</p>
+      <p class="disclaimer"><strong>Prototype disclaimer:</strong> This is an educational planning model, not a safety-critical forecast. Typical field MAE can be around 2–5 °F and can be worse during rapid weather shifts (fronts, heatwaves, unusual inflows). Validate against local observations before making decisions.</p>
+    </section>
 
   <section class="card">
     <h2>Inputs</h2>
@@ -153,6 +177,8 @@
     <button id="exportCsv">Export Data + Calculation Trace (CSV)</button>
     <div id="tableWrap"></div>
   </section>
+
+  </main>
 
   <script type="module" src="./js/app/controller.js"></script>
 </body>
