@@ -818,7 +818,7 @@ export function renderForecast(data) {
 
     html += `
         <div class="action-buttons action-buttons-bottom">
-            <button class="action-btn" onclick="window.shareForecast()" aria-label="Share forecast">Share Forecast</button>
+            <button class="action-btn share-forecast-btn" onclick="window.shareForecast()" aria-label="Share forecast">Share Forecast</button>
         </div>
         ${isWaterTempTraceEnabled() ? `<div class="debug-build-stamp" style="margin-top:8px; font-size:0.85rem; color: var(--text-secondary);">Build ID: ${window.__FISHCAST_BUILD__}</div>` : ''}
     `;
@@ -1033,7 +1033,7 @@ window.showDayDetails = function(dayIndex, date) {
         <div class="modal show" id="dayDetailModal" onclick="if(event.target === this) this.classList.remove('show')">
             <div class="modal-content" onclick="event.stopPropagation()">
                 <div class="modal-header">
-                    <span class="modal-close" onclick="document.getElementById('dayDetailModal').classList.remove('show')">×</span>
+                    <button type="button" class="modal-close" aria-label="Close day details" onclick="document.getElementById('dayDetailModal').classList.remove('show')">×</button>
                     ${weatherIcon.icon} ${formatDate(date)}
                 </div>
                 <div style="padding: 20px 0;">

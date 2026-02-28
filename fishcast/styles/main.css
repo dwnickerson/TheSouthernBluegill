@@ -823,6 +823,12 @@ button[type="submit"]:hover,
     color: #052723;
 }
 
+.modal-action-btn {
+    padding: 9px 14px;
+    border-radius: 10px;
+    font-size: 0.95rem;
+}
+
 .action-buttons-bottom {
     margin-top: 30px;
 }
@@ -864,6 +870,15 @@ button[type="submit"]:hover,
     padding-bottom: 15px;
 }
 
+
+.share-forecast-btn {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: normal;
+    padding-top: 12px;
+    padding-bottom: 12px;
+}
+
 .day-hourly-trend {
     font-size: 0.8em;
     color: var(--text-secondary);
@@ -903,10 +918,38 @@ button[type="submit"]:hover,
 }
 
 .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     font-size: 1.3rem;
     margin-bottom: 14px;
     padding-bottom: 10px;
     border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header > :not(.modal-close) {
+    flex: 1;
+}
+
+.modal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 1.55rem;
+    line-height: 1;
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.modal-close:hover {
+    background: var(--bg-primary);
 }
 
 .notification {

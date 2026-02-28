@@ -37,11 +37,18 @@ export function openAbout() {
                     <h4 style="margin:16px 0 8px;">Important notes</h4>
                     <p style="margin:0 0 10px;">Forecasts are decision support, not certainty. Localized runoff, dam releases, fishing pressure, and micro-habitat conditions can shift outcomes quickly. For safety, always check local advisories and weather alerts before heading out.</p>
 
+
+                    <h4 style="margin:16px 0 8px;">Privacy</h4>
+                    <p style="margin:0 0 10px;">FishCast does not store your personal fishing data on our servers. Settings, saved locations, and notes are kept locally on your device unless you explicitly export or share them.</p>
+
+                    <h4 style="margin:16px 0 8px;">Water temperature estimate coverage</h4>
+                    <p style="margin:0 0 10px;">Estimated water temperatures are modeled for the general area so we can provide useful guidance for everyone. If you need a model tuned for a specific lake, pond, or river, email <a href="mailto:info@thesouthernbluegill.com">info@thesouthernbluegill.com</a> for more information.</p>
+
                     <h4 style="margin:16px 0 8px;">Contact & support</h4>
                     <p style="margin:0;">Questions, bug reports, or feature ideas: <a href="mailto:info@thesouthernbluegill.com">info@thesouthernbluegill.com</a></p>
 
                     <div style="margin-top:20px; text-align:center;">
-                        <button class="action-btn" onclick="window.closeAbout()">Close</button>
+                        <button class="action-btn modal-action-btn" onclick="window.closeAbout()">Close</button>
                     </div>
                 </div>
             </div>
