@@ -7,8 +7,8 @@ export function openAbout() {
         <div class="modal show" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" onclick="if(event.target === this) window.closeAbout()">
             <div class="modal-content" onclick="event.stopPropagation()" style="max-height: 90vh; overflow-y: auto;">
                 <div class="modal-header">
-                    <button type="button" class="modal-close" aria-label="Close about" onclick="window.closeAbout()">×</button>
                     <span id="aboutTitle">About FishCast</span>
+                    <button type="button" class="modal-close" aria-label="Close about" onclick="window.closeAbout()">×</button>
                 </div>
                 <div style="padding:20px; line-height:1.55;">
                     <h3 style="margin-top:0; color:var(--accent);">FishCast Forecast Engine</h3>

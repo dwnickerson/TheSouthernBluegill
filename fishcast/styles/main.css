@@ -1108,6 +1108,13 @@ select option {
     padding-bottom: 12px;
 }
 
+[data-theme="sba"] .modal-action-btn {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: normal;
+    padding: 9px 14px;
+}
+
 input[type="text"]:-webkit-autofill,
 input[type="text"]:-webkit-autofill:hover,
 input[type="text"]:-webkit-autofill:focus,
