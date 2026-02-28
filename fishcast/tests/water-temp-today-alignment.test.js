@@ -13,7 +13,7 @@ test('today water temp prefers projection day-0 to keep handoff consistent with 
 
   assert.match(
     source,
-    /const todayWaterTemp = projectedTodayWaterTemp \?\? waterTemp;/,
-    'app should still fall back to direct estimate when projection is unavailable'
+    /if \(!Number\.isFinite\(projectedTodayWaterTemp\)\) \{\s*throw new Error\('Water temperature projection unavailable for current day'\);\s*\}/,
+    'app should require projection day-0 to be present for current-day display'
   );
 });
