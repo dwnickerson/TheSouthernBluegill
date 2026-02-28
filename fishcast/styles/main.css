@@ -1036,12 +1036,19 @@ select option {
 [data-theme="light"] input[type="text"] {
     background-color: #e5e7eb;
     color: #111827;
+    border: 1px solid #4b5563;
 }
 
 [data-theme="sba"] input[type="text"]:focus,
 [data-theme="light"] input[type="text"]:focus {
     background-color: #d1d5db;
     color: #111827;
+    border-color: #111827;
+}
+
+[data-theme="sba"] button[type="submit"] {
+    font-family: 'Josefin Sans', 'Inter', system-ui, sans-serif;
+    letter-spacing: 0.04em;
 }
 
 input[type="text"]:-webkit-autofill,
