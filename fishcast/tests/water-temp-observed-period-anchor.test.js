@@ -53,15 +53,45 @@ test('same-day observed water temp anchors surface-now while keeping period proj
   const context = buildContext();
   const baseline = buildWaterTempView({ dailySurfaceTemp: 53.4, waterType: 'pond', context });
 
-  storage.setWaterTempObserved(34.2576, -88.7034, 'pond', 55.4, '2026-02-19T18:00:00.000Z');
+  storage.setWaterTempObserved(34.2576, -88.7034, 'pond', 58.4, '2026-02-19T18:00:00.000Z');
   const anchored = buildWaterTempView({ dailySurfaceTemp: 53.4, waterType: 'pond', context });
 
-  assert.ok(Math.abs(anchored.surfaceNow - 55.4) <= 0.3, `surface-now should align to observed reading, got ${anchored.surfaceNow}`);
-  assert.ok(Math.abs(anchored.surfaceNow - baseline.surfaceNow) >= 0.5, `observed anchor should materially adjust surface-now (${anchored.surfaceNow} vs ${baseline.surfaceNow})`);
+  assert.ok(anchored.surfaceNow > baseline.surfaceNow, `warmer observation should nudge surface-now upward (${anchored.surfaceNow} vs ${baseline.surfaceNow})`);
+  assert.ok(anchored.surfaceNow - baseline.surfaceNow >= 0.4, `observed anchor should materially adjust surface-now (${anchored.surfaceNow} vs ${baseline.surfaceNow})`);
 
   assert.ok(Math.abs(anchored.midday - baseline.midday) <= 0.1, 'observed anchor should not rewrite midday projection');
   assert.ok(Math.abs(anchored.sunrise - baseline.sunrise) <= 0.1, 'observed anchor should not rewrite sunrise projection');
   assert.ok(Math.abs(anchored.sunset - baseline.sunset) <= 0.1, 'observed anchor should not rewrite sunset projection');
+
+  storage.clearAll();
+});
+
+
+test('same-day observed anchor decays after several hours instead of hard-locking surface-now', () => {
+  storage.clearAll();
+
+  const context = buildContext('2026-02-19T23:00:00.000Z');
+  const baseline = buildWaterTempView({ dailySurfaceTemp: 53.4, waterType: 'pond', context });
+
+  storage.setWaterTempObserved(34.2576, -88.7034, 'pond', 60.4, '2026-02-19T18:00:00.000Z');
+  const anchored = buildWaterTempView({ dailySurfaceTemp: 53.4, waterType: 'pond', context });
+
+  assert.ok(anchored.surfaceNow > baseline.surfaceNow + 0.1, 'observed reading should still influence surface-now');
+  assert.ok(anchored.surfaceNow < baseline.surfaceNow + 2.2, `older same-day report should be partially decayed, got ${anchored.surfaceNow}`);
+
+  storage.clearAll();
+});
+
+test('stale same-day observed anchor is ignored after long age window', () => {
+  storage.clearAll();
+
+  const context = buildContext('2026-02-19T23:30:00.000Z');
+  const baseline = buildWaterTempView({ dailySurfaceTemp: 53.4, waterType: 'pond', context });
+
+  storage.setWaterTempObserved(34.2576, -88.7034, 'pond', 60.4, '2026-02-19T06:00:00.000Z');
+  const anchored = buildWaterTempView({ dailySurfaceTemp: 53.4, waterType: 'pond', context });
+
+  assert.equal(anchored.surfaceNow, baseline.surfaceNow, 'stale same-day observation should not alter surface-now');
 
   storage.clearAll();
 });
