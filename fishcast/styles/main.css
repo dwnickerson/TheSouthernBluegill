@@ -1047,12 +1047,12 @@ select option {
 }
 
 [data-theme="sba"] button[type="submit"] {
-    font-family: 'Josefin Sans', 'Inter', system-ui, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
     letter-spacing: 0.04em;
 }
 
 [data-theme="sba"] .action-btn {
-    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
     font-size: 1.45rem;
     font-weight: 600;
 }
