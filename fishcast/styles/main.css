@@ -1051,6 +1051,12 @@ select option {
     letter-spacing: 0.04em;
 }
 
+[data-theme="sba"] .action-btn {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 1.45rem;
+    font-weight: 600;
+}
+
 input[type="text"]:-webkit-autofill,
 input[type="text"]:-webkit-autofill:hover,
 input[type="text"]:-webkit-autofill:focus,
