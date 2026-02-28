@@ -373,3 +373,29 @@ test('shortwave radiation boosts midday estimate in shallow pond despite similar
 
   assert.ok(brightMiddayTemp > dimMidday, `higher shortwave should raise midday estimate (${brightMiddayTemp} vs ${dimMidday})`);
 });
+
+
+test('late-winter pond midday estimate stays bounded under warm clear anomaly', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-02-28',
+    temps: [43, 42, 41, 40, 40, 41, 45, 50, 56, 62, 68, 72, 75, 75, 74, 72, 69, 65, 60, 56, 52, 49, 47, 45],
+    clouds: Array(24).fill(6),
+    winds: Array(24).fill(5),
+    shortwave: [
+      0, 0, 0, 0, 0, 30, 120, 260, 430, 610, 760, 860,
+      920, 900, 810, 650, 430, 220, 80, 20, 0, 0, 0, 0
+    ]
+  });
+
+  const midday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 56,
+    waterType: 'pond',
+    hourly,
+    timezone: 'America/Chicago',
+    date: new Date('2026-02-28T19:00:00Z'),
+    period: 'midday',
+    targetHour: 13
+  });
+
+  assert.ok(midday <= 59.8, `late-winter warm anomaly should remain bounded (got ${midday}°F)`);
+});

@@ -153,6 +153,51 @@ function getDiurnalAdjustmentLimit(waterType, { dailyAirRange = 0, cloudBlend = 
     return 1.8;
 }
 
+function getColdSeasonPondDiurnalWarmCap({
+    date,
+    dailySurfaceTemp,
+    targetAir,
+    cloudBlend,
+    windBlend,
+    targetShortwave
+}) {
+    if (!(date instanceof Date) || !Number.isFinite(dailySurfaceTemp)) return null;
+
+    const dayOfYear = getDayOfYear(date);
+    const winterDistance = Math.min(
+        Math.abs(dayOfYear - 15),
+        Math.abs(dayOfYear + 365 - 15),
+        Math.abs(dayOfYear - 365 - 15)
+    );
+    const winterFactor = clamp(1 - (winterDistance / 115), 0, 1);
+    const isColdSeasonWindow = dayOfYear <= 80 || dayOfYear >= 330;
+    if (!isColdSeasonWindow || winterFactor <= 0) return null;
+
+    // Guardrail should only apply to late-winter/early-spring cold-water setups.
+    const coldWaterSignal = clamp((60 - dailySurfaceTemp) / 10, 0, 1);
+    if (coldWaterSignal <= 0) return null;
+
+    const clearSignal = clamp((60 - cloudBlend) / 60, 0, 1);
+    const calmSignal = clamp((9 - windBlend) / 9, 0, 1);
+    const shortwaveSignal = Number.isFinite(targetShortwave)
+        ? clamp((targetShortwave - 260) / 520, 0, 1)
+        : 0;
+    const airWaterSpread = Number.isFinite(targetAir)
+        ? Math.max(0, targetAir - dailySurfaceTemp)
+        : 0;
+    if (airWaterSpread < 16 || !Number.isFinite(targetAir) || targetAir < 68) return null;
+
+    // Base cold-season cap keeps noon spikes from jumping 6°F–8°F above the daily
+    // projection in shallow southern ponds after a single warm/dry air surge.
+    const atmosphericLift = (clearSignal * 0.9) + (calmSignal * 0.75) + (shortwaveSignal * 0.85);
+    const spreadCap = clamp((airWaterSpread * 0.11) + 0.55, 0.9, 3.3);
+    const seasonalCap = 1.6 + (atmosphericLift * 1.25) + (winterFactor * 0.35);
+
+    // As water approaches 60°F or winter influence weakens, gradually release cap.
+    const blendWeight = clamp((winterFactor * 0.65) + (coldWaterSignal * 0.55), 0, 1);
+    return clamp((seasonalCap * blendWeight) + (spreadCap * (1 - blendWeight)), 1.2, 3.9);
+}
+
 function getHourInTimezone(timestamp, timezone = 'UTC') {
     if (typeof timestamp !== 'string') return null;
     const ts = parseHourlyTimestamp(timestamp, timezone);
@@ -1095,6 +1140,15 @@ function buildObservedPeriodAnchorOffset({
     const observedDayKey = getLocalDayKey(observedAt, context.timezone);
     if (observedDayKey !== dayKey) return 0;
 
+    const anchorSource = context.hourlyNowTimeISOZ || context.anchorDateISOZ || null;
+    const anchorTs = Number.isFinite(parseHourlyTimestamp(anchorSource, context.timezone))
+        ? parseHourlyTimestamp(anchorSource, context.timezone)
+        : Date.parse(String(context.anchorDateISOZ || ''));
+    if (!Number.isFinite(anchorTs)) return 0;
+
+    const ageHours = (anchorTs - observedAt.getTime()) / (1000 * 60 * 60);
+    if (!Number.isFinite(ageHours) || ageHours < -0.5 || ageHours > 16) return 0;
+
     const observedHour = getHourInTimezone(observed.timestamp, context.timezone);
     if (!Number.isFinite(observedHour)) return 0;
 
@@ -1111,7 +1165,9 @@ function buildObservedPeriodAnchorOffset({
     if (!Number.isFinite(modeledAtObservedHour)) return 0;
 
     const rawOffset = observed.tempF - modeledAtObservedHour;
-    return clamp(rawOffset, -OBSERVED_TEMP_CALIBRATION_MAX_OFFSET_F, OBSERVED_TEMP_CALIBRATION_MAX_OFFSET_F);
+    const boundedOffset = clamp(rawOffset, -OBSERVED_TEMP_CALIBRATION_MAX_OFFSET_F, OBSERVED_TEMP_CALIBRATION_MAX_OFFSET_F);
+    const recencyWeight = clamp(1 - (Math.max(ageHours, 0) / 8), 0, 1);
+    return boundedOffset * recencyWeight;
 }
 
 export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
@@ -1494,6 +1550,20 @@ export function estimateWaterTempByPeriod({
         targetShortwave
     });
     let totalAdjustment = clamp(solarTerm + airAnomalyTerm + shortwaveTerm, -adjustmentLimit, adjustmentLimit);
+
+    if (waterType === 'pond' && totalAdjustment > 4.5) {
+        const coldSeasonWarmCap = getColdSeasonPondDiurnalWarmCap({
+            date: date instanceof Date ? date : new Date(date),
+            dailySurfaceTemp,
+            targetAir,
+            cloudBlend,
+            windBlend,
+            targetShortwave
+        });
+        if (Number.isFinite(coldSeasonWarmCap)) {
+            totalAdjustment = Math.min(totalAdjustment, coldSeasonWarmCap);
+        }
+    }
 
     if (waterType === 'pond' && period === 'morning') {
         const windyMorning = windMean >= 10;
