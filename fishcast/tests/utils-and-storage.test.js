@@ -14,6 +14,7 @@ const makeLocalStorage = () => {
 };
 
 global.localStorage = makeLocalStorage();
+global.window = { localStorage: global.localStorage };
 
 const { kmhToMph } = await import('../js/utils/math.js');
 const { storage } = await import('../js/services/storage.js');
