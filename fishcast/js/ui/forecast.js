@@ -537,6 +537,29 @@ function renderWeatherRadar(coords) {
         `;
     }
 
+    const radarParams = new URLSearchParams({
+        lat: String(lat),
+        lon: String(lon),
+        detailLat: String(lat),
+        detailLon: String(lon),
+        width: '900',
+        height: '500',
+        zoom: '8',
+        level: 'surface',
+        overlay: 'radar',
+        product: 'radar',
+        menu: 'false',
+        message: 'true',
+        marker: 'false',
+        calendar: 'false',
+        pressure: 'false',
+        type: 'map',
+        location: 'coordinates',
+        detail: 'true',
+        metricWind: 'mph',
+        metricTemp: '°F'
+    });
+
     return `
         <div class="weather-radar-card">
             <h3>Weather radar</h3>
@@ -547,7 +570,7 @@ function renderWeatherRadar(coords) {
                     title="Weather radar for ${coords.name}"
                     loading="lazy"
                     referrerpolicy="no-referrer-when-downgrade"
-                    src="https://embed.windy.com/embed2.html?lat=${encodeURIComponent(coords.lat)}&lon=${encodeURIComponent(coords.lon)}&detailLat=${encodeURIComponent(coords.lat)}&detailLon=${encodeURIComponent(coords.lon)}&width=900&height=500&zoom=8&level=surface&overlay=radar&product=radar&menu=false&message=true&marker=true&calendar=false&pressure=false&type=map&location=coordinates&detail=false&metricWind=mph&metricTemp=%C2%B0F">
+                    src="https://embed.windy.com/embed2.html?${radarParams.toString()}">
                 </iframe>
             </div>
             <small data-radar-status="true" style="color: var(--text-secondary);"></small>
