@@ -555,7 +555,7 @@ function renderWeatherRadar(coords) {
         pressure: 'false',
         type: 'map',
         location: 'coordinates',
-        detail: 'true',
+        detail: 'false',
         metricWind: 'mph',
         metricTemp: '°F'
     });
