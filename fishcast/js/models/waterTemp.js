@@ -228,7 +228,7 @@ function getColdSeasonModerateAirPondCap({
     const baseCap = 1.2 + (airWaterSpread * 0.2);
     const atmosphereBoost = (clearSignal * 0.35) + (calmSignal * 0.3);
     const coldSeasonCap = (baseCap + atmosphereBoost + periodBoost) * (0.7 + (coldWaterSignal * 0.3));
-    return clamp(coldSeasonCap, 1.2, 2.7);
+    return clamp(coldSeasonCap, 1.1, 2.0);
 }
 
 function getHourInTimezone(timestamp, timezone = 'UTC') {
@@ -1584,7 +1584,7 @@ export function estimateWaterTempByPeriod({
     });
     let totalAdjustment = clamp(solarTerm + airAnomalyTerm + shortwaveTerm, -adjustmentLimit, adjustmentLimit);
 
-    if (waterType === 'pond' && totalAdjustment > 4.5) {
+    if (waterType === 'pond' && totalAdjustment > 3.2) {
         const coldSeasonWarmCap = getColdSeasonPondDiurnalWarmCap({
             date: date instanceof Date ? date : new Date(date),
             dailySurfaceTemp,
