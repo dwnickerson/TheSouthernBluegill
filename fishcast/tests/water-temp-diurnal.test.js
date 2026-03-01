@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { estimateWaterTempByPeriod } from '../js/models/waterTemp.js';
+import { buildWaterTempView, estimateWaterTempByPeriod } from '../js/models/waterTemp.js';
 
 function buildHourlyDay({ date = '2026-02-12', temps = [], clouds = [], winds = [], shortwave = [] }) {
   const time = [];
@@ -441,4 +441,44 @@ test('cold-season pond midday warming is capped for mild-air clear mornings', ()
 
   assert.ok(midday <= 59.8, `cold-season mild-air midday should stay bounded near observed reality, got ${midday}°F`);
   assert.ok(midday >= 57.5, `midday should still allow some warming signal, got ${midday}°F`);
+});
+
+
+test('near-term cold-season pond midday rise is rate-limited within ~2 hours of now', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-02-24',
+    temps: [45, 44, 44, 43, 43, 44, 47, 51, 56, 60, 64, 67, 69, 70, 69, 67, 63, 59, 55, 52, 49, 47, 46, 45],
+    clouds: Array(24).fill(10),
+    winds: Array(24).fill(4),
+    shortwave: [
+      0, 0, 0, 0, 0, 20, 90, 210, 390, 560, 730, 850,
+      920, 900, 760, 560, 340, 130, 30, 8, 0, 0, 0, 0
+    ]
+  });
+
+  const context = {
+    timezone: 'America/Chicago',
+    anchorDateISOZ: '2026-02-24T17:30:00.000Z',
+    hourlyNowTimeISOZ: '2026-02-24T17:30:00.000Z',
+    payload: {
+      meta: { timezone: 'America/Chicago', source: 'LIVE' },
+      forecast: {
+        timezone: 'America/Chicago',
+        daily: {
+          time: ['2026-02-24'],
+          sunrise: ['2026-02-24T06:40'],
+          sunset: ['2026-02-24T17:50']
+        },
+        hourly
+      }
+    }
+  };
+
+  const view = buildWaterTempView({
+    dailySurfaceTemp: 57,
+    waterType: 'pond',
+    context
+  });
+
+  assert.ok(view.midday - view.surfaceNow <= 1.2, `midday should not jump unrealistically within ~2h (${view.surfaceNow} -> ${view.midday})`);
 });
