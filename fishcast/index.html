@@ -104,14 +104,59 @@
         New version available! <button id="updateBtn" style="margin-left: 12px; background: white; color: #4caf50; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Update Now</button>
     </div>
 
-    <script type="module" src="js/app.js?v=5.0.0"></script>  <!-- bumped version -->
+    <script>window.__FISHCAST_APP_VERSION__ = '2026.03.01.1';</script>
+    <script type="module" src="js/app.js?v=2026.03.01.1"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
     <!-- Service Worker registration + update handling -->
     <script>
+      const APP_VERSION = window.__FISHCAST_APP_VERSION__ || 'dev';
+
+      async function enforceLatestFishCastVersion() {
+        try {
+          const resp = await fetch(`/fishcast/version.json?t=${Date.now()}`, { cache: 'no-store' });
+          if (!resp.ok) return;
+          const payload = await resp.json();
+          const latestVersion = payload && typeof payload.version === 'string' ? payload.version.trim() : '';
+          if (!latestVersion || latestVersion === APP_VERSION) return;
+
+          const clearTasks = [];
+          if ('caches' in window) {
+            clearTasks.push(
+              caches.keys().then(keys => Promise.all(
+                keys
+                  .filter(key => key.startsWith('fishcast-v'))
+                  .map(key => caches.delete(key))
+              ))
+            );
+          }
+
+          if ('serviceWorker' in navigator) {
+            clearTasks.push(
+              navigator.serviceWorker.getRegistrations().then(registrations => Promise.all(
+                registrations
+                  .filter(registration => registration.scope.includes('/fishcast/'))
+                  .map(registration => registration.unregister())
+              ))
+            );
+          }
+
+          await Promise.allSettled(clearTasks);
+
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.set('app_version', latestVersion);
+          nextUrl.searchParams.set('refresh', String(Date.now()));
+          window.location.replace(nextUrl.toString());
+        } catch (error) {
+          console.warn('Version check skipped:', error);
+        }
+      }
+
+      enforceLatestFishCastVersion();
+
       if ('serviceWorker' in navigator) {
-        const SW_VERSION = '5.0.0';  // Sync this with your SW CACHE_VERSION and asset ?v=
+        const SW_VERSION = APP_VERSION;
 
         window.addEventListener('load', () => {
           navigator.serviceWorker.register(`/fishcast/sw.js?v=${SW_VERSION}`, { scope: '/fishcast/' })
