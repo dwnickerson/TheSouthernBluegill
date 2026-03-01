@@ -198,6 +198,39 @@ function getColdSeasonPondDiurnalWarmCap({
     return clamp((seasonalCap * blendWeight) + (spreadCap * (1 - blendWeight)), 1.2, 3.9);
 }
 
+
+function getColdSeasonModerateAirPondCap({
+    date,
+    dailySurfaceTemp,
+    targetAir,
+    cloudBlend,
+    windBlend,
+    period
+}) {
+    if (!(date instanceof Date) || !Number.isFinite(dailySurfaceTemp) || !Number.isFinite(targetAir)) return null;
+
+    const dayOfYear = getDayOfYear(date);
+    const isColdSeasonWindow = dayOfYear <= 80 || dayOfYear >= 330;
+    if (!isColdSeasonWindow) return null;
+
+    if (dailySurfaceTemp < 55) return null;
+
+    const coldWaterSignal = clamp((61 - dailySurfaceTemp) / 11, 0, 1);
+    if (coldWaterSignal <= 0) return null;
+
+    const airWaterSpread = Math.max(0, targetAir - dailySurfaceTemp);
+    if (airWaterSpread < 3 || airWaterSpread > 9 || targetAir > 66) return null;
+
+    const clearSignal = clamp((55 - cloudBlend) / 55, 0, 1);
+    const calmSignal = clamp((8 - windBlend) / 8, 0, 1);
+    const periodBoost = period === 'afternoon' ? 0.2 : (period === 'midday' ? 0.12 : 0);
+
+    const baseCap = 1.2 + (airWaterSpread * 0.2);
+    const atmosphereBoost = (clearSignal * 0.35) + (calmSignal * 0.3);
+    const coldSeasonCap = (baseCap + atmosphereBoost + periodBoost) * (0.7 + (coldWaterSignal * 0.3));
+    return clamp(coldSeasonCap, 1.2, 2.7);
+}
+
 function getHourInTimezone(timestamp, timezone = 'UTC') {
     if (typeof timestamp !== 'string') return null;
     const ts = parseHourlyTimestamp(timestamp, timezone);
@@ -1562,6 +1595,20 @@ export function estimateWaterTempByPeriod({
         });
         if (Number.isFinite(coldSeasonWarmCap)) {
             totalAdjustment = Math.min(totalAdjustment, coldSeasonWarmCap);
+        }
+    }
+
+    if (waterType === 'pond' && totalAdjustment > 0) {
+        const moderateAirCap = getColdSeasonModerateAirPondCap({
+            date: date instanceof Date ? date : new Date(date),
+            dailySurfaceTemp,
+            targetAir,
+            cloudBlend,
+            windBlend,
+            period
+        });
+        if (Number.isFinite(moderateAirCap)) {
+            totalAdjustment = Math.min(totalAdjustment, moderateAirCap);
         }
     }
 
