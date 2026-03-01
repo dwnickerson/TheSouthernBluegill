@@ -540,6 +540,8 @@ function renderWeatherRadar(coords) {
     const radarParams = new URLSearchParams({
         lat: String(lat),
         lon: String(lon),
+        detailLat: String(lat),
+        detailLon: String(lon),
         width: '900',
         height: '500',
         zoom: '8',
