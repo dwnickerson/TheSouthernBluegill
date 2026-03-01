@@ -275,6 +275,47 @@ function parseHourFromTimestamp(timestamp) {
     return hour + (minutes / 60);
 }
 
+function buildHourlyInterpolant(dayIndices, hourlyTimes, valueAtIndex, resolvedTimezone) {
+    const points = dayIndices
+        .map(({ index }) => ({
+            hour: getHourInTimezone(String(hourlyTimes[index] || ''), resolvedTimezone),
+            value: valueAtIndex(index)
+        }))
+        .filter(({ hour, value }) => Number.isFinite(hour) && Number.isFinite(value))
+        .sort((a, b) => a.hour - b.hour);
+
+    if (!points.length) {
+        return {
+            sample: () => null,
+            mean: null
+        };
+    }
+
+    const mean = average(points.map((point) => point.value));
+
+    return {
+        mean,
+        sample: (targetHour) => {
+            if (!Number.isFinite(targetHour)) return points[0].value;
+            if (targetHour <= points[0].hour) return points[0].value;
+            if (targetHour >= points[points.length - 1].hour) return points[points.length - 1].value;
+
+            for (let i = 1; i < points.length; i++) {
+                const prev = points[i - 1];
+                const next = points[i];
+                if (targetHour <= next.hour) {
+                    const span = next.hour - prev.hour;
+                    if (!Number.isFinite(span) || span <= 0) return next.value;
+                    const t = clamp((targetHour - prev.hour) / span, 0, 1);
+                    return prev.value + ((next.value - prev.value) * t);
+                }
+            }
+
+            return points[points.length - 1].value;
+        }
+    };
+}
+
 function getResolvedDayKey(timeValue, timezone = 'UTC') {
     if (typeof timeValue !== 'string' || !timeValue) return null;
     const parsedTs = parseHourlyTimestamp(timeValue, timezone);
@@ -1284,7 +1325,7 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
         dayKey: anchorDayKey
     });
 
-    const hourIso = context.hourlyNowTimeISOZ || context.anchorDateISOZ;
+    const hourIso = context?.payload?.meta?.nowIso || context.hourlyNowTimeISOZ || context.anchorDateISOZ;
     const nowHour = getHourInTimezone(hourIso, timezone);
     const surfaceNowRaw = Number.isFinite(nowHour)
         ? estimateWaterTempByPeriod({
@@ -1562,14 +1603,32 @@ export function estimateWaterTempByPeriod({
         return Math.round(dailySurfaceTemp * 10) / 10;
     }
 
-    const targetEntry = dayIndices.reduce((best, entry) => {
-        if (!best) return entry;
-        const currentDelta = Math.abs(entry.hour - periodHour);
-        const bestDelta = Math.abs(best.hour - periodHour);
-        return currentDelta < bestDelta ? entry : best;
-    }, null);
-    const targetIndex = targetEntry?.index ?? -1;
-    const targetAir = normalizeAirTempToF(hourlyAir[targetIndex], 'F');
+    const airInterpolant = buildHourlyInterpolant(
+        dayIndices,
+        hourlyTimes,
+        (index) => normalizeAirTempToF(hourlyAir[index], 'F'),
+        resolvedTimezone
+    );
+    const cloudInterpolant = buildHourlyInterpolant(
+        dayIndices,
+        hourlyTimes,
+        (index) => Number(hourlyCloud[index]),
+        resolvedTimezone
+    );
+    const windInterpolant = buildHourlyInterpolant(
+        dayIndices,
+        hourlyTimes,
+        (index) => normalizeLikelyWindMph(hourlyWind[index], 'mph'),
+        resolvedTimezone
+    );
+    const shortwaveInterpolant = buildHourlyInterpolant(
+        dayIndices,
+        hourlyTimes,
+        (index) => Number(hourlyShortwave[index]),
+        resolvedTimezone
+    );
+
+    const targetAir = airInterpolant.sample(periodHour);
     const dailyAirMean = average(airSeries) || targetAir || 0;
     const dailyAirRange = Math.max(...airSeries) - Math.min(...airSeries);
     const cloudMean = average(cloudSeries) || 50;
@@ -1585,10 +1644,12 @@ export function estimateWaterTempByPeriod({
         ? clamp((periodHour - sunriseHour) / daylightHours, 0, 1)
         : clamp((periodHour - 6) / 12, 0, 1);
     const solarPhase = Math.sin(Math.PI * normalizedHour);
-    const targetCloud = Number.isFinite(hourlyCloud[targetIndex]) ? hourlyCloud[targetIndex] : cloudMean;
+    const targetCloud = Number.isFinite(cloudInterpolant.sample(periodHour))
+        ? cloudInterpolant.sample(periodHour)
+        : cloudMean;
     const cloudBlend = (cloudMean * 0.45) + (targetCloud * 0.55);
     const cloudDamping = clamp(1 - ((cloudBlend / 100) * 0.82), 0.12, 1);
-    const targetWind = normalizeLikelyWindMph(hourlyWind[targetIndex], 'mph');
+    const targetWind = windInterpolant.sample(periodHour);
     const windBlend = Number.isFinite(targetWind)
         ? ((windMean * 0.4) + (targetWind * 0.6))
         : windMean;
@@ -1599,9 +1660,12 @@ export function estimateWaterTempByPeriod({
         ? (targetAir - dailyAirMean) * response.airCoupling * windDamping
         : 0;
 
-    const targetShortwave = Number(hourlyShortwave[targetIndex]);
+    const targetShortwave = shortwaveInterpolant.sample(periodHour);
+    const shortwaveMean = Number.isFinite(shortwaveInterpolant.mean)
+        ? shortwaveInterpolant.mean
+        : (average(shortwaveSeries) || 0);
     const shortwaveTerm = shortwaveSeries.length && Number.isFinite(targetShortwave)
-        ? clamp((targetShortwave - (average(shortwaveSeries) || 0)) / 350, -1.2, 1.2) * response.shortwaveCoupling * windDamping
+        ? clamp((targetShortwave - shortwaveMean) / 350, -1.2, 1.2) * response.shortwaveCoupling * windDamping
         : 0;
     const adjustmentLimit = getDiurnalAdjustmentLimit(waterType, {
         dailyAirRange,

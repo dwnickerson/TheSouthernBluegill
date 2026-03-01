@@ -151,3 +151,69 @@ test('buildWaterTempView uses local timezone day key for UTC anchor timestamps',
 
   assert.ok(view.surfaceNow >= 55, `expected local-day evening anchor to remain on warmer prior local day, got ${view.surfaceNow.toFixed(1)}°F`);
 });
+
+
+test('buildWaterTempView remains smooth across sub-hour now updates in cold-season pond context', () => {
+  const basePayload = {
+    historical: { daily: { temperature_2m_mean: [45, 46, 47, 48, 49] } },
+    forecast: {
+      timezone: 'America/Chicago',
+      hourly: {
+        time: [
+          '2026-02-19T06:00',
+          '2026-02-19T07:00',
+          '2026-02-19T08:00',
+          '2026-02-19T09:00',
+          '2026-02-19T10:00',
+          '2026-02-19T11:00',
+          '2026-02-19T12:00',
+          '2026-02-19T13:00'
+        ],
+        temperature_2m: [50, 52, 55, 58, 61, 64, 66, 67],
+        cloud_cover: [80, 75, 68, 60, 50, 45, 42, 40],
+        wind_speed_10m: [5, 5, 6, 6, 7, 7, 8, 8]
+      },
+      current: {
+        temperature_2m: 64,
+        wind_speed_10m: 7,
+        relative_humidity_2m: 58,
+        cloud_cover: 45,
+        weather_code: 2,
+        precipitation: 0
+      },
+      daily: {
+        time: ['2026-02-19'],
+        sunrise: ['2026-02-19T06:35'],
+        sunset: ['2026-02-19T17:40']
+      }
+    },
+    meta: {
+      source: 'FIXTURE',
+      units: { temp: 'F', wind: 'mph', precip: 'in' }
+    }
+  };
+
+  const contextEarly = normalizeWaterTempContext({
+    coords: { lat: 34.2576, lon: -88.7034 },
+    waterType: 'pond',
+    timezone: 'America/Chicago',
+    nowOverride: '2026-02-19T16:00:00.000Z', // 10:00 local
+    weatherPayload: basePayload
+  });
+
+  const contextLate = normalizeWaterTempContext({
+    coords: { lat: 34.2576, lon: -88.7034 },
+    waterType: 'pond',
+    timezone: 'America/Chicago',
+    nowOverride: '2026-02-19T16:30:00.000Z', // 10:30 local
+    weatherPayload: basePayload
+  });
+
+  const early = buildWaterTempView({ dailySurfaceTemp: 57.0, waterType: 'pond', context: contextEarly });
+  const late = buildWaterTempView({ dailySurfaceTemp: 57.0, waterType: 'pond', context: contextLate });
+
+  assert.ok(
+    Math.abs(late.surfaceNow - early.surfaceNow) <= 1.2,
+    `expected <=1.2°F movement across 30 minutes, got early=${early.surfaceNow} late=${late.surfaceNow}`
+  );
+});
