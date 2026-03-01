@@ -216,4 +216,12 @@ test('buildWaterTempView remains smooth across sub-hour now updates in cold-seas
     Math.abs(late.surfaceNow - early.surfaceNow) <= 1.2,
     `expected <=1.2°F movement across 30 minutes, got early=${early.surfaceNow} late=${late.surfaceNow}`
   );
+  assert.ok(
+    early.surfaceNow <= early.midday,
+    `expected pre-midday surfaceNow <= midday, got surfaceNow=${early.surfaceNow} midday=${early.midday}`
+  );
+  assert.ok(
+    late.surfaceNow <= late.midday,
+    `expected pre-midday surfaceNow <= midday, got surfaceNow=${late.surfaceNow} midday=${late.midday}`
+  );
 });

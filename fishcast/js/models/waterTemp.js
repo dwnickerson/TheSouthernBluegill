@@ -1347,7 +1347,7 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
     const sunriseAdjusted = clamp(sunrise, 32, 95);
     let middayAdjusted = clamp(midday, 32, 95);
     const sunsetAdjusted = clamp(sunset, 32, 95);
-    const surfaceNow = clamp(surfaceNowRaw + observedPeriodOffset, 32, 95);
+    let surfaceNow = clamp(surfaceNowRaw + observedPeriodOffset, 32, 95);
 
     if (waterType === 'pond' && Number.isFinite(nowHour)) {
         const middayHour = getPeriodTargetHour('midday', { sunriseTime, sunsetTime });
@@ -1358,6 +1358,13 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
                 const cappedMidday = surfaceNow + (warmRateCap * hoursUntilMidday);
                 middayAdjusted = Math.min(middayAdjusted, clamp(cappedMidday, 32, 95));
             }
+        }
+
+        // Guardrail: before local midday, present-day surface readings should not outrun
+        // the modeled midday anchor. This prevents implausible pre-noon spikes when the
+        // intraday interpolation and observed offset briefly amplify the near-term value.
+        if (hoursUntilMidday > 0 && Number.isFinite(middayAdjusted)) {
+            surfaceNow = Math.min(surfaceNow, middayAdjusted);
         }
     }
 
