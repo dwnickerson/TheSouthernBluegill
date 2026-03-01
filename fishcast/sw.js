@@ -1,6 +1,9 @@
 // FishCast Service Worker - Fixed for reliable updates (v5+)
 
-const CACHE_VERSION = '5';  // CHANGE THIS NUMBER on every deploy (e.g. '6', '5.1')
+// Version is sourced from sw.js?v=... at registration time so deploys only bump one value.
+const SW_URL = (typeof self !== 'undefined' && self.location && self.location.href) ? self.location.href : '';
+const SW_QUERY_VERSION = SW_URL ? new URL(SW_URL).searchParams.get('v') : null;
+const CACHE_VERSION = SW_QUERY_VERSION || 'dev';
 const CACHE_NAME = `fishcast-v${CACHE_VERSION}`;
 
 const APP_PATH = '/fishcast/';
