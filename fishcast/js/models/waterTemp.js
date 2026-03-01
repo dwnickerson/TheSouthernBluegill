@@ -1360,10 +1360,22 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
             }
         }
 
-        // Guardrail: before local midday, present-day surface readings should not outrun
-        // the modeled midday anchor. This prevents implausible pre-noon spikes when the
-        // intraday interpolation and observed offset briefly amplify the near-term value.
+        // Guardrail: before local midday, keep pond surface warming along a plausible
+        // sunrise→midday trajectory instead of allowing large intraday overshoots.
+        // This still allows modest observed/forcing-driven lift, but blocks abrupt
+        // pre-noon jumps that outrun both expected ramp-up and midday anchor.
         if (hoursUntilMidday > 0 && Number.isFinite(middayAdjusted)) {
+            const sunriseHour = parseHourFromTimestamp(sunriseTime);
+            if (Number.isFinite(sunriseHour) && middayHour > sunriseHour) {
+                const progressToMidday = clamp((nowHour - sunriseHour) / (middayHour - sunriseHour), 0, 1);
+                const trajectoryTemp = sunriseAdjusted + ((middayAdjusted - sunriseAdjusted) * progressToMidday);
+                const warmRateCap = getNearTermPondWarmRateCap({ date: anchorDate, dailySurfaceTemp });
+                const hourlyAllowance = Number.isFinite(warmRateCap)
+                    ? (warmRateCap * 0.9)
+                    : 0.55;
+                const trajectoryCap = clamp(trajectoryTemp + hourlyAllowance, 32, 95);
+                surfaceNow = Math.min(surfaceNow, trajectoryCap);
+            }
             surfaceNow = Math.min(surfaceNow, middayAdjusted);
         }
     }
