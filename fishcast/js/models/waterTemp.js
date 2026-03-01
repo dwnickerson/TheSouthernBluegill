@@ -219,7 +219,7 @@ function getColdSeasonModerateAirPondCap({
     if (coldWaterSignal <= 0) return null;
 
     const airWaterSpread = Math.max(0, targetAir - dailySurfaceTemp);
-    if (airWaterSpread < 3 || airWaterSpread > 9 || targetAir > 66) return null;
+    if (airWaterSpread < 3 || airWaterSpread > 9 || targetAir > 64) return null;
 
     const clearSignal = clamp((55 - cloudBlend) / 55, 0, 1);
     const calmSignal = clamp((8 - windBlend) / 8, 0, 1);
@@ -228,7 +228,23 @@ function getColdSeasonModerateAirPondCap({
     const baseCap = 1.2 + (airWaterSpread * 0.2);
     const atmosphereBoost = (clearSignal * 0.35) + (calmSignal * 0.3);
     const coldSeasonCap = (baseCap + atmosphereBoost + periodBoost) * (0.7 + (coldWaterSignal * 0.3));
-    return clamp(coldSeasonCap, 1.2, 2.7);
+    return clamp(coldSeasonCap, 1.1, 2.0);
+}
+
+
+function getNearTermPondWarmRateCap({ date, dailySurfaceTemp }) {
+    if (!(date instanceof Date) || !Number.isFinite(dailySurfaceTemp)) return null;
+
+    const dayOfYear = getDayOfYear(date);
+    const isColdSeasonWindow = dayOfYear <= 80 || dayOfYear >= 330;
+    if (!isColdSeasonWindow) return null;
+
+    const coldWaterSignal = clamp((61 - dailySurfaceTemp) / 11, 0, 1);
+    if (coldWaterSignal <= 0) return null;
+
+    // Keep near-term cold-season pond warming physically plausible when users are
+    // comparing "surface now" to the next period card inside a short (<2h) window.
+    return 0.65 + (coldWaterSignal * 0.2);
 }
 
 function getHourInTimezone(timestamp, timezone = 'UTC') {
@@ -1286,10 +1302,23 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
     // Keep sunrise/midday/sunset tied to the projection model so today's profile
     // remains continuous with yesterday's extended day+1 card. Observed reports
     // can still nudge the "surface now" value without rewriting period anchors.
+    const anchorDate = new Date(context.anchorDateISOZ);
     const sunriseAdjusted = clamp(sunrise, 32, 95);
-    const middayAdjusted = clamp(midday, 32, 95);
+    let middayAdjusted = clamp(midday, 32, 95);
     const sunsetAdjusted = clamp(sunset, 32, 95);
     const surfaceNow = clamp(surfaceNowRaw + observedPeriodOffset, 32, 95);
+
+    if (waterType === 'pond' && Number.isFinite(nowHour)) {
+        const middayHour = getPeriodTargetHour('midday', { sunriseTime, sunsetTime });
+        const hoursUntilMidday = middayHour - nowHour;
+        if (hoursUntilMidday > 0 && hoursUntilMidday <= 2.25 && Number.isFinite(middayAdjusted)) {
+            const warmRateCap = getNearTermPondWarmRateCap({ date: anchorDate, dailySurfaceTemp });
+            if (Number.isFinite(warmRateCap)) {
+                const cappedMidday = surfaceNow + (warmRateCap * hoursUntilMidday);
+                middayAdjusted = Math.min(middayAdjusted, clamp(cappedMidday, 32, 95));
+            }
+        }
+    }
 
     const depthFor = (temp, whenDate) => ({
         temp2ft: estimateTempByDepth(temp, waterType, 2, whenDate).toFixed(1),
@@ -1297,8 +1326,6 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
         temp10ft: estimateTempByDepth(temp, waterType, 10, whenDate).toFixed(1),
         temp20ft: estimateTempByDepth(temp, waterType, 20, whenDate).toFixed(1)
     });
-    const anchorDate = new Date(context.anchorDateISOZ);
-
     return {
         surfaceNow: Number(surfaceNow.toFixed(1)),
         sunrise: Number(sunriseAdjusted.toFixed(1)),
@@ -1584,7 +1611,7 @@ export function estimateWaterTempByPeriod({
     });
     let totalAdjustment = clamp(solarTerm + airAnomalyTerm + shortwaveTerm, -adjustmentLimit, adjustmentLimit);
 
-    if (waterType === 'pond' && totalAdjustment > 4.5) {
+    if (waterType === 'pond' && totalAdjustment > 3.2) {
         const coldSeasonWarmCap = getColdSeasonPondDiurnalWarmCap({
             date: date instanceof Date ? date : new Date(date),
             dailySurfaceTemp,
