@@ -47,8 +47,6 @@ function init() {
     // Initialize species memory feature
     initSpeciesMemory();
    
-    // Register service worker
-   // registerServiceWorker(); //isbaled to stop issues
    
     debugLog('FishCast ready');
 }
@@ -287,15 +285,6 @@ function setupEventListeners() {
     });
 }
 
-
-// Service worker registration
-function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/fishcast/sw.js?v=4.0.0')
-            .then(() => debugLog('Service Worker registered'))
-            .catch(err => debugLog('Service Worker registration failed:', err));
-    }
-}
 
 // Make functions available globally for onclick handlers
 window.openSettings = openSettings;
