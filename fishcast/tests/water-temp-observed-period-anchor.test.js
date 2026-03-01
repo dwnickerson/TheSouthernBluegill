@@ -5,7 +5,7 @@ import { buildWaterTempView } from '../js/models/waterTemp.js';
 import { normalizeWaterTempContext } from '../js/models/waterPayloadNormalize.js';
 import { storage } from '../js/services/storage.js';
 
-function buildContext(nowOverride = '2026-02-19T18:00:00.000Z') {
+function buildContext(nowOverride = '2026-02-19T19:00:00.000Z') {
   return normalizeWaterTempContext({
     coords: { lat: 34.2576, lon: -88.7034 },
     waterType: 'pond',

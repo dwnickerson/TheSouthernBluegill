@@ -216,4 +216,20 @@ test('buildWaterTempView remains smooth across sub-hour now updates in cold-seas
     Math.abs(late.surfaceNow - early.surfaceNow) <= 1.2,
     `expected <=1.2°F movement across 30 minutes, got early=${early.surfaceNow} late=${late.surfaceNow}`
   );
+  assert.ok(
+    early.surfaceNow <= early.midday,
+    `expected pre-midday surfaceNow <= midday, got surfaceNow=${early.surfaceNow} midday=${early.midday}`
+  );
+  assert.ok(
+    late.surfaceNow <= late.midday,
+    `expected pre-midday surfaceNow <= midday, got surfaceNow=${late.surfaceNow} midday=${late.midday}`
+  );
+  const sunriseHour = (6 + (35 / 60));
+  const middayHour = sunriseHour + (((17 + (40 / 60)) - sunriseHour) / 2);
+  const lateProgress = Math.max(0, Math.min(1, ((10.5 - sunriseHour) / (middayHour - sunriseHour))));
+  const lateTrajectory = early.sunrise + ((late.midday - early.sunrise) * lateProgress);
+  assert.ok(
+    late.surfaceNow <= (lateTrajectory + 1.0),
+    `expected pre-midday surfaceNow to stay near sunrise→midday trajectory, got surfaceNow=${late.surfaceNow} trajectory=${lateTrajectory.toFixed(2)}`
+  );
 });

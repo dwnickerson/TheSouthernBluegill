@@ -1347,7 +1347,7 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
     const sunriseAdjusted = clamp(sunrise, 32, 95);
     let middayAdjusted = clamp(midday, 32, 95);
     const sunsetAdjusted = clamp(sunset, 32, 95);
-    const surfaceNow = clamp(surfaceNowRaw + observedPeriodOffset, 32, 95);
+    let surfaceNow = clamp(surfaceNowRaw + observedPeriodOffset, 32, 95);
 
     if (waterType === 'pond' && Number.isFinite(nowHour)) {
         const middayHour = getPeriodTargetHour('midday', { sunriseTime, sunsetTime });
@@ -1358,6 +1358,25 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
                 const cappedMidday = surfaceNow + (warmRateCap * hoursUntilMidday);
                 middayAdjusted = Math.min(middayAdjusted, clamp(cappedMidday, 32, 95));
             }
+        }
+
+        // Guardrail: before local midday, keep pond surface warming along a plausible
+        // sunrise→midday trajectory instead of allowing large intraday overshoots.
+        // This still allows modest observed/forcing-driven lift, but blocks abrupt
+        // pre-noon jumps that outrun both expected ramp-up and midday anchor.
+        if (hoursUntilMidday > 0 && Number.isFinite(middayAdjusted)) {
+            const sunriseHour = parseHourFromTimestamp(sunriseTime);
+            if (Number.isFinite(sunriseHour) && middayHour > sunriseHour) {
+                const progressToMidday = clamp((nowHour - sunriseHour) / (middayHour - sunriseHour), 0, 1);
+                const trajectoryTemp = sunriseAdjusted + ((middayAdjusted - sunriseAdjusted) * progressToMidday);
+                const warmRateCap = getNearTermPondWarmRateCap({ date: anchorDate, dailySurfaceTemp });
+                const hourlyAllowance = Number.isFinite(warmRateCap)
+                    ? (warmRateCap * 0.9)
+                    : 0.55;
+                const trajectoryCap = clamp(trajectoryTemp + hourlyAllowance, 32, 95);
+                surfaceNow = Math.min(surfaceNow, trajectoryCap);
+            }
+            surfaceNow = Math.min(surfaceNow, middayAdjusted);
         }
     }
 
