@@ -32,6 +32,38 @@
   npm run test:smoke
   ```
 
+
+## Water-temperature observed-report tests (what they do)
+
+These tests verify behavior when a user/operator submits a measured water temperature ("observed" reading):
+
+- `fishcast/tests/water-temp-observed-period-anchor.test.js`
+  - Ensures a same-day observed reading can nudge `surfaceNow`.
+  - Ensures that nudge decays with report age.
+  - Ensures stale same-day readings are ignored.
+  - Ensures observed calibration does **not** rewrite projection anchors (`sunrise`, `midday`, `sunset`).
+
+- `fishcast/tests/water-temp-observed-period-consistency.test.js`
+  - Ensures observed calibration applies only to `surfaceNow` in canonical view-model output.
+  - Confirms period anchors remain projection-driven for day-profile continuity.
+
+### Run just observed-report tests
+
+```bash
+node --test fishcast/tests/water-temp-observed-period-anchor.test.js fishcast/tests/water-temp-observed-period-consistency.test.js
+```
+
+### Run observed + diurnal + today alignment checks
+
+```bash
+node --test fishcast/tests/water-temp-observed-period-anchor.test.js fishcast/tests/water-temp-observed-period-consistency.test.js fishcast/tests/water-temp-diurnal.test.js fishcast/tests/water-temp-today-alignment.test.js
+```
+
+### Expected output
+
+- Passing runs show `ok` for each subtest and `# fail 0` at the end.
+- Any `not ok` means a model contract changed and should be reviewed before shipping.
+
 ## How to read results
 
 - `ok` means the specific behavior is verified.

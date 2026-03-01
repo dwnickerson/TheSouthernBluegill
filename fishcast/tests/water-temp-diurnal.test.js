@@ -399,3 +399,24 @@ test('late-winter pond midday estimate stays bounded under warm clear anomaly', 
 
   assert.ok(midday <= 59.8, `late-winter warm anomaly should remain bounded (got ${midday}°F)`);
 });
+
+test('cold-season pond midday warming is capped for mild-air clear mornings', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-02-21',
+    temps: [46, 45, 45, 44, 44, 45, 48, 52, 56, 60, 62, 63, 63, 62, 61, 59, 57, 55, 53, 51, 49, 48, 47, 46],
+    clouds: Array(24).fill(12),
+    winds: Array(24).fill(4)
+  });
+
+  const midday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 57,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-02-21T16:00:00Z'),
+    period: 'midday'
+  });
+
+  assert.ok(midday <= 59.8, `cold-season mild-air midday should stay bounded near observed reality, got ${midday}°F`);
+  assert.ok(midday >= 57.5, `midday should still allow some warming signal, got ${midday}°F`);
+});
