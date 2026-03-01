@@ -83,7 +83,7 @@ export function saveSettings() {
 }
 
 export function exportAllData() {
-    const data = { exportDate: new Date().toISOString(), version: '3.3.7', userStats: getUserStats(), settings: { theme: storage.getTheme() } };
+    const data = { exportDate: new Date().toISOString(), version: '1.0.0.3', userStats: getUserStats(), settings: { theme: storage.getTheme() } };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

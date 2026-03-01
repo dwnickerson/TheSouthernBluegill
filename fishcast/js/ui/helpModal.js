@@ -3,6 +3,7 @@ import { storage } from '../services/storage.js';
 import { renderFavorites } from './favorites.js';
 
 export function openAbout() {
+    const appVersion = window.__FISHCAST_APP_VERSION__ || '1.0.0.3';
     document.body.insertAdjacentHTML('beforeend', `
         <div class="modal show" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" onclick="if(event.target === this) window.closeAbout()">
             <div class="modal-content" onclick="event.stopPropagation()" style="max-height: 90vh; overflow-y: auto;">
@@ -46,6 +47,9 @@ export function openAbout() {
 
                     <h4 style="margin:16px 0 8px;">Contact & support</h4>
                     <p style="margin:0;">Questions, bug reports, or feature ideas: <a href="mailto:info@thesouthernbluegill.com">info@thesouthernbluegill.com</a></p>
+
+                    <h4 style="margin:16px 0 8px;">App version</h4>
+                    <p style="margin:0 0 10px;"><code>${appVersion}</code></p>
 
                     <div style="margin-top:20px; text-align:center;">
                         <button class="action-btn modal-action-btn" onclick="window.closeAbout()">Close</button>
