@@ -373,6 +373,24 @@ function getPeriodTargetHour(period, { sunriseTime, sunsetTime } = {}) {
     return 12;
 }
 
+function resolveDiurnalPeriodForHour(targetHour, { sunriseTime, sunsetTime } = {}) {
+    if (!Number.isFinite(targetHour)) return 'midday';
+
+    const sunriseHour = parseHourFromTimestamp(sunriseTime);
+    const sunsetHour = parseHourFromTimestamp(sunsetTime);
+    const middayHour = getPeriodTargetHour('midday', { sunriseTime, sunsetTime });
+
+    if (Number.isFinite(sunriseHour) && targetHour <= sunriseHour + 0.25) {
+        return 'morning';
+    }
+
+    if (Number.isFinite(sunsetHour) && targetHour >= sunsetHour - 0.25) {
+        return 'afternoon';
+    }
+
+    return targetHour <= middayHour ? 'midday' : 'afternoon';
+}
+
 function normalizeAirTempToF(value, tempUnit = 'F') {
     if (!Number.isFinite(value)) return null;
     if (value > 140 || value < -90) return null;
@@ -1275,7 +1293,7 @@ function buildObservedPeriodAnchorOffset({
         dailySurfaceTemp,
         waterType,
         context,
-        period: 'midday',
+        period: resolveDiurnalPeriodForHour(observedHour, { sunriseTime, sunsetTime }),
         sunriseTime,
         sunsetTime,
         dayKey,
@@ -1356,12 +1374,13 @@ export function buildWaterTempView({ dailySurfaceTemp, waterType, context }) {
 
     const hourIso = context?.payload?.meta?.nowIso || context.hourlyNowTimeISOZ || context.anchorDateISOZ;
     const nowHour = getHourInTimezone(hourIso, timezone);
+    const nowPeriod = resolveDiurnalPeriodForHour(nowHour, { sunriseTime, sunsetTime });
     const surfaceNowRaw = Number.isFinite(nowHour)
         ? estimateWaterTempByPeriod({
             dailySurfaceTemp,
             waterType,
             context,
-            period: 'midday',
+            period: nowPeriod,
             sunriseTime,
             sunsetTime,
             dayKey: anchorDayKey,
