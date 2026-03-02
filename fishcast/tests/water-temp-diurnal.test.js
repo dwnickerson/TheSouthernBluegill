@@ -169,6 +169,109 @@ test('sunrise and sunset timestamps anchor morning and afternoon period estimate
   );
 });
 
+
+
+test('pond late-afternoon heat retention can keep sunset near/above midday on clear warm days', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-06-28',
+    temps: [68, 67, 66, 65, 65, 66, 69, 73, 78, 83, 87, 90, 92, 93, 94, 94, 93, 91, 88, 84, 80, 76, 73, 71],
+    clouds: Array(24).fill(12),
+    winds: [4, 4, 4, 4, 4, 4, 5, 5, 5, 4, 4, 4, 4, 4, 5, 5, 4, 4, 3, 3, 3, 3, 3, 3],
+    shortwave: [0, 0, 0, 0, 0, 20, 80, 180, 340, 520, 680, 760, 820, 830, 780, 650, 500, 340, 180, 80, 20, 0, 0, 0]
+  });
+
+  const midday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 86,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-06-28T14:00:00Z'),
+    period: 'midday',
+    sunriseTime: '2026-06-28T05:52',
+    sunsetTime: '2026-06-28T20:15'
+  });
+
+  const sunset = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 86,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-06-28T19:00:00Z'),
+    period: 'afternoon',
+    sunriseTime: '2026-06-28T05:52',
+    sunsetTime: '2026-06-28T20:15'
+  });
+
+  assert.ok(
+    sunset >= midday - 0.9,
+    `sunset should stay close to/above midday for heat-retaining pond setup (${sunset} vs ${midday})`
+  );
+});
+
+
+test('lake late-afternoon estimate avoids abrupt drop below midday under clear calm warm forcing', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-07-03',
+    temps: [70, 69, 68, 67, 67, 68, 71, 75, 80, 84, 88, 91, 93, 94, 95, 95, 94, 92, 89, 85, 82, 78, 75, 73],
+    clouds: Array(24).fill(15),
+    winds: Array(24).fill(4),
+    shortwave: [0, 0, 0, 0, 0, 25, 90, 210, 380, 560, 710, 790, 840, 845, 800, 670, 520, 360, 190, 90, 25, 0, 0, 0]
+  });
+
+  const midday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 84,
+    waterType: 'lake',
+    hourly,
+    timezone: 'UTC',
+    period: 'midday',
+    sunriseTime: '2026-07-03T05:55',
+    sunsetTime: '2026-07-03T20:22'
+  });
+
+  const sunset = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 84,
+    waterType: 'lake',
+    hourly,
+    timezone: 'UTC',
+    period: 'afternoon',
+    sunriseTime: '2026-07-03T05:55',
+    sunsetTime: '2026-07-03T20:22'
+  });
+
+  assert.ok(sunset >= midday - 1.5, `lake sunset should not crash too far below midday (${sunset} vs ${midday})`);
+});
+
+test('reservoir late-afternoon estimate preserves gradual cooling versus midday on warm clear days', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-07-03',
+    temps: [70, 69, 68, 67, 67, 68, 71, 75, 80, 84, 88, 91, 93, 94, 95, 95, 94, 92, 89, 85, 82, 78, 75, 73],
+    clouds: Array(24).fill(15),
+    winds: Array(24).fill(4),
+    shortwave: [0, 0, 0, 0, 0, 25, 90, 210, 380, 560, 710, 790, 840, 845, 800, 670, 520, 360, 190, 90, 25, 0, 0, 0]
+  });
+
+  const midday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 81,
+    waterType: 'reservoir',
+    hourly,
+    timezone: 'UTC',
+    period: 'midday',
+    sunriseTime: '2026-07-03T05:55',
+    sunsetTime: '2026-07-03T20:22'
+  });
+
+  const sunset = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 81,
+    waterType: 'reservoir',
+    hourly,
+    timezone: 'UTC',
+    period: 'afternoon',
+    sunriseTime: '2026-07-03T05:55',
+    sunsetTime: '2026-07-03T20:22'
+  });
+
+  assert.ok(sunset >= midday - 1.8, `reservoir sunset should cool gradually from midday (${sunset} vs ${midday})`);
+});
 test('midday period anchors to solar midpoint between sunrise and sunset', () => {
   const hourly = buildHourlyDay({
     date: '2026-06-20',
