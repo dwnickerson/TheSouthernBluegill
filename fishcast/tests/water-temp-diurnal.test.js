@@ -584,6 +584,51 @@ test('cold-season pond midday warming is capped for mild-air clear mornings', ()
   assert.ok(midday >= 57.5, `midday should still allow some warming signal, got ${midday}°F`);
 });
 
+test('cold-season cloudy Tupelo pond midday stays near observed lag while sunset recovers', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-03-01',
+    temps: [
+      55, 54, 54, 53, 53, 54, 55, 56, 57, 58, 59, 60,
+      61, 61, 61, 60, 60, 59, 58, 58, 57, 56, 56, 55
+    ],
+    clouds: [
+      88, 88, 88, 87, 87, 86, 85, 84, 84, 85, 86, 87,
+      86, 84, 82, 80, 78, 76, 75, 76, 78, 82, 86, 88
+    ],
+    winds: [
+      5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7,
+      7, 7, 7, 7, 6, 6, 6, 6, 6, 5, 5, 5
+    ],
+    shortwave: [
+      0, 0, 0, 0, 0, 15, 35, 65, 95, 130, 165, 185,
+      195, 185, 160, 130, 90, 45, 15, 5, 0, 0, 0, 0
+    ]
+  });
+
+  const midday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 57,
+    waterType: 'pond',
+    hourly,
+    timezone: 'America/Chicago',
+    date: new Date('2026-03-01T18:00:00Z'),
+    period: 'midday',
+    targetHour: 12
+  });
+
+  const sunset = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 57,
+    waterType: 'pond',
+    hourly,
+    timezone: 'America/Chicago',
+    date: new Date('2026-03-01T23:30:00Z'),
+    period: 'afternoon',
+    targetHour: 17.5
+  });
+
+  assert.ok(midday <= 57.4, `cloudy cold-season midday should stay near observed 57°F, got ${midday}°F`);
+  assert.ok(sunset >= midday - 0.3, `sunset should hold near midday rather than collapsing (${midday}°F -> ${sunset}°F)`);
+});
+
 
 test('near-term cold-season pond midday rise is rate-limited within ~2 hours of now', () => {
   const hourly = buildHourlyDay({
