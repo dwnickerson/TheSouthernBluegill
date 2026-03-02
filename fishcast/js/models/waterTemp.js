@@ -284,6 +284,40 @@ function getColdSeasonMiddayCloudSuppression({
     return (1.9 * cloudSignal + 0.65 * windSignal) * coldWaterSignal * moderateSpreadSignal;
 }
 
+function getColdSeasonMiddayLagSuppression({
+    date,
+    dailySurfaceTemp,
+    targetAir,
+    cloudBlend,
+    windBlend,
+    targetShortwave,
+    period
+}) {
+    if (period !== 'midday') return 0;
+    if (!(date instanceof Date) || !Number.isFinite(dailySurfaceTemp) || !Number.isFinite(targetAir)) return 0;
+
+    const dayOfYear = getDayOfYear(date);
+    const isColdSeasonWindow = dayOfYear <= 80 || dayOfYear >= 330;
+    if (!isColdSeasonWindow) return 0;
+
+    const coldWaterSignal = clamp((61 - dailySurfaceTemp) / 9, 0, 1);
+    if (coldWaterSignal <= 0) return 0;
+
+    const cloudSignal = clamp((cloudBlend - 62) / 28, 0, 1);
+    if (cloudSignal <= 0) return 0;
+    const windSignal = clamp((windBlend - 5) / 6, 0, 1);
+    const shortwaveSignal = Number.isFinite(targetShortwave)
+        ? clamp((280 - targetShortwave) / 240, 0, 1)
+        : 0;
+    const warmAirSignal = clamp((targetAir - dailySurfaceTemp - 2) / 8, 0, 1);
+    if (warmAirSignal <= 0) return 0;
+
+    const lagSignal = clamp((cloudSignal * 0.65) + (shortwaveSignal * 0.2) + (windSignal * 0.15), 0, 1);
+    if (lagSignal <= 0) return 0;
+
+    return lagSignal * warmAirSignal * coldWaterSignal * 2.15;
+}
+
 function getColdSeasonAfternoonCarryAllowance({
     date,
     dailySurfaceTemp,
@@ -1846,6 +1880,19 @@ export function estimateWaterTempByPeriod({
         });
         if (coldSeasonMiddaySuppression > 0) {
             totalAdjustment -= coldSeasonMiddaySuppression;
+        }
+
+        const coldSeasonMiddayLagSuppression = getColdSeasonMiddayLagSuppression({
+            date: date instanceof Date ? date : new Date(date),
+            dailySurfaceTemp,
+            targetAir,
+            cloudBlend,
+            windBlend,
+            targetShortwave,
+            period
+        });
+        if (coldSeasonMiddayLagSuppression > 0) {
+            totalAdjustment -= coldSeasonMiddayLagSuppression;
         }
     }
 
