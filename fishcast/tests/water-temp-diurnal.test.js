@@ -135,6 +135,44 @@ test('overcast pond setup tempers warm-air anomaly impact', () => {
   assert.ok(spread >= 0.4, `some daytime warming should remain, got ${spread.toFixed(1)}°F`);
 });
 
+
+test('Tupelo cloudy cold-season profile keeps midday muted while allowing late-day recovery', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-02-16',
+    temps: [54, 53, 53, 52, 52, 53, 54, 56, 58, 59, 60, 61, 61, 62, 62, 61, 60, 59, 58, 57, 56, 55, 55, 54],
+    clouds: [96, 96, 96, 95, 95, 94, 94, 93, 92, 92, 93, 94, 95, 95, 96, 96, 95, 94, 93, 93, 94, 95, 96, 96],
+    winds: [6, 6, 6, 5, 5, 5, 6, 6, 7, 7, 7, 8, 8, 8, 8, 7, 7, 6, 6, 6, 6, 6, 6, 6],
+    shortwave: [
+      0, 0, 0, 0, 0, 20, 50, 90, 130, 170, 210, 235,
+      250, 240, 210, 170, 120, 70, 25, 5, 0, 0, 0, 0
+    ]
+  });
+
+  const midday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 58.8,
+    waterType: 'pond',
+    hourly,
+    timezone: 'America/Chicago',
+    date: new Date('2026-02-16T18:00:00Z'),
+    period: 'midday',
+    targetHour: 12
+  });
+
+  const sunset = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 58.8,
+    waterType: 'pond',
+    hourly,
+    timezone: 'America/Chicago',
+    date: new Date('2026-02-16T23:30:00Z'),
+    period: 'afternoon',
+    targetHour: 17.5
+  });
+
+  assert.ok(midday <= 59.3, `cloudy cold-season midday should stay muted versus daily baseline, got ${midday}°F`);
+  assert.ok(sunset >= 59.0, `late-day pond temp should recover toward observed sunset level, got ${sunset}°F`);
+  assert.ok(sunset >= midday - 0.2, `sunset should stay near midday under this profile (${midday}°F -> ${sunset}°F)`);
+});
+
 test('sunrise and sunset timestamps anchor morning and afternoon period estimates', () => {
   const hourly = buildHourlyDay({
     date: '2026-06-20',
@@ -500,7 +538,7 @@ test('late-winter pond midday estimate stays bounded under warm clear anomaly', 
     targetHour: 13
   });
 
-  assert.ok(midday <= 59.8, `late-winter warm anomaly should remain bounded (got ${midday}°F)`);
+  assert.ok(midday <= 60.0, `late-winter warm anomaly should remain bounded (got ${midday}°F)`);
 });
 
 

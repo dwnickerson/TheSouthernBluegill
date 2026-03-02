@@ -203,7 +203,7 @@ function getColdSeasonPondDiurnalWarmCap({
     if (!isColdSeasonWindow || winterFactor <= 0) return null;
 
     // Guardrail should only apply to late-winter/early-spring cold-water setups.
-    const coldWaterSignal = clamp((60 - dailySurfaceTemp) / 10, 0, 1);
+    const coldWaterSignal = clamp((62 - dailySurfaceTemp) / 8, 0, 1);
     if (coldWaterSignal <= 0) return null;
 
     const clearSignal = clamp((60 - cloudBlend) / 60, 0, 1);
@@ -252,12 +252,60 @@ function getColdSeasonModerateAirPondCap({
 
     const clearSignal = clamp((55 - cloudBlend) / 55, 0, 1);
     const calmSignal = clamp((8 - windBlend) / 8, 0, 1);
-    const periodBoost = period === 'afternoon' ? 0.2 : (period === 'midday' ? 0.12 : 0);
+    const periodBoost = period === 'afternoon' ? 0.28 : (period === 'midday' ? 0 : 0);
 
     const baseCap = 1.2 + (airWaterSpread * 0.2);
     const atmosphereBoost = (clearSignal * 0.35) + (calmSignal * 0.3);
     const coldSeasonCap = (baseCap + atmosphereBoost + periodBoost) * (0.7 + (coldWaterSignal * 0.3));
     return clamp(coldSeasonCap, 1.1, 2.0);
+}
+
+function getColdSeasonMiddayCloudSuppression({
+    date,
+    dailySurfaceTemp,
+    targetAir,
+    cloudBlend,
+    windBlend,
+    period
+}) {
+    if (period !== 'midday') return 0;
+    if (!(date instanceof Date) || !Number.isFinite(dailySurfaceTemp) || !Number.isFinite(targetAir)) return 0;
+
+    const dayOfYear = getDayOfYear(date);
+    const isColdSeasonWindow = dayOfYear <= 80 || dayOfYear >= 330;
+    if (!isColdSeasonWindow) return 0;
+
+    const coldWaterSignal = clamp((62 - dailySurfaceTemp) / 8, 0, 1);
+    const cloudSignal = clamp((cloudBlend - 58) / 30, 0, 1);
+    const windSignal = clamp((windBlend - 6) / 6, 0, 1);
+    const moderateSpreadSignal = clamp((9 - Math.abs((targetAir - dailySurfaceTemp) - 4.5)) / 9, 0, 1);
+
+    if (coldWaterSignal <= 0 || cloudSignal <= 0 || moderateSpreadSignal <= 0) return 0;
+    return (1.9 * cloudSignal + 0.65 * windSignal) * coldWaterSignal * moderateSpreadSignal;
+}
+
+function getColdSeasonAfternoonCarryAllowance({
+    date,
+    dailySurfaceTemp,
+    cloudBlend,
+    windBlend,
+    targetAir
+}) {
+    if (!(date instanceof Date) || !Number.isFinite(dailySurfaceTemp)) return null;
+    const dayOfYear = getDayOfYear(date);
+    const isColdSeasonWindow = dayOfYear <= 80 || dayOfYear >= 330;
+    if (!isColdSeasonWindow) return null;
+
+    const coldWaterSignal = clamp((62 - dailySurfaceTemp) / 8, 0, 1);
+    if (coldWaterSignal <= 0) return null;
+
+    const cloudSignal = clamp((cloudBlend - 50) / 50, 0, 1);
+    const windSignal = clamp((windBlend - 5) / 7, 0, 1);
+    const warmSignal = Number.isFinite(targetAir)
+        ? clamp((targetAir - dailySurfaceTemp) / 9, 0, 1)
+        : 0;
+    const retentionSignal = clamp((cloudSignal * 0.55) + (windSignal * 0.3) + (warmSignal * 0.15), 0, 1);
+    return 0.65 - (retentionSignal * 0.45);
 }
 
 
@@ -1787,6 +1835,18 @@ export function estimateWaterTempByPeriod({
         if (Number.isFinite(moderateAirCap)) {
             totalAdjustment = Math.min(totalAdjustment, moderateAirCap);
         }
+
+        const coldSeasonMiddaySuppression = getColdSeasonMiddayCloudSuppression({
+            date: date instanceof Date ? date : new Date(date),
+            dailySurfaceTemp,
+            targetAir,
+            cloudBlend,
+            windBlend,
+            period
+        });
+        if (coldSeasonMiddaySuppression > 0) {
+            totalAdjustment -= coldSeasonMiddaySuppression;
+        }
     }
 
     if (waterType === 'pond' && period === 'morning') {
@@ -1825,6 +1885,17 @@ export function estimateWaterTempByPeriod({
                 const allowanceSpan = afternoonRetention.maxCoolingAllowance - afternoonRetention.minCoolingAllowance;
                 const coolingAllowance = afternoonRetention.maxCoolingAllowance - (holdSignal * allowanceSpan);
                 modeledPeriodTemp = Math.max(modeledPeriodTemp, middayComparable - coolingAllowance);
+            }
+
+            const coldSeasonCarryAllowance = getColdSeasonAfternoonCarryAllowance({
+                date: date instanceof Date ? date : new Date(date),
+                dailySurfaceTemp,
+                cloudBlend,
+                windBlend,
+                targetAir
+            });
+            if (Number.isFinite(coldSeasonCarryAllowance)) {
+                modeledPeriodTemp = Math.max(modeledPeriodTemp, middayComparable - coldSeasonCarryAllowance);
             }
         }
     }
