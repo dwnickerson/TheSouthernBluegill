@@ -134,6 +134,35 @@ function getDiurnalResponseByWaterType(waterType) {
     };
 }
 
+
+function getAfternoonRetentionProfile(waterType) {
+    if (waterType === 'pond') {
+        return {
+            signalThreshold: 0.35,
+            maxCoolingAllowance: 1.1,
+            minCoolingAllowance: 0.4,
+            retentionBoostScale: 1.35
+        };
+    }
+    if (waterType === 'lake') {
+        return {
+            signalThreshold: 0.4,
+            maxCoolingAllowance: 1.5,
+            minCoolingAllowance: 0.7,
+            retentionBoostScale: 0.55
+        };
+    }
+    if (waterType === 'reservoir') {
+        return {
+            signalThreshold: 0.45,
+            maxCoolingAllowance: 1.8,
+            minCoolingAllowance: 0.9,
+            retentionBoostScale: 0.35
+        };
+    }
+    return null;
+}
+
 function getDiurnalAdjustmentLimit(waterType, { dailyAirRange = 0, cloudBlend = 50, windBlend = 0, targetShortwave = null } = {}) {
     if (waterType === 'pond') {
         const rangeSignal = clamp((dailyAirRange - 14) / 14, 0, 1);
@@ -1700,13 +1729,16 @@ export function estimateWaterTempByPeriod({
     });
     let totalAdjustment = clamp(solarTerm + airAnomalyTerm + shortwaveTerm, -adjustmentLimit, adjustmentLimit);
 
-    if (waterType === 'pond' && period === 'afternoon') {
+    const afternoonRetention = period === 'afternoon'
+        ? getAfternoonRetentionProfile(waterType)
+        : null;
+    if (afternoonRetention) {
         const lateDaySignal = clamp((normalizedHour - 0.72) / 0.28, 0, 1);
         const warmAirSignal = Number.isFinite(targetAir)
             ? clamp((targetAir - dailySurfaceTemp) / 12, 0, 1)
             : 0;
         const clearCalmSignal = clamp((1 - (cloudBlend / 100)) * 0.62 + clamp((7 - windBlend) / 7, 0, 1) * 0.38, 0, 1);
-        const retentionBoost = lateDaySignal * warmAirSignal * clearCalmSignal * 1.35;
+        const retentionBoost = lateDaySignal * warmAirSignal * clearCalmSignal * afternoonRetention.retentionBoostScale;
         totalAdjustment = Math.min(totalAdjustment + retentionBoost, adjustmentLimit);
     }
 
@@ -1747,7 +1779,7 @@ export function estimateWaterTempByPeriod({
 
     let modeledPeriodTemp = clamp(dailySurfaceTemp + totalAdjustment, 32, 95);
 
-    if (waterType === 'pond' && period === 'afternoon' && Number.isFinite(sunriseHour) && Number.isFinite(sunsetHour) && sunsetHour > sunriseHour) {
+    if (afternoonRetention && Number.isFinite(sunriseHour) && Number.isFinite(sunsetHour) && sunsetHour > sunriseHour) {
         const middayHour = getPeriodTargetHour('midday', { sunriseTime, sunsetTime });
         const middayComparable = estimateWaterTempByPeriod({
             dailySurfaceTemp,
@@ -1770,8 +1802,9 @@ export function estimateWaterTempByPeriod({
                 ? clamp((targetAir - dailySurfaceTemp) / 10, 0, 1)
                 : 0;
             const holdSignal = (clearSignal * 0.45) + (calmSignal * 0.35) + (warmSignal * 0.2);
-            if (holdSignal > 0.35) {
-                const coolingAllowance = 1.1 - (holdSignal * 0.7);
+            if (holdSignal > afternoonRetention.signalThreshold) {
+                const allowanceSpan = afternoonRetention.maxCoolingAllowance - afternoonRetention.minCoolingAllowance;
+                const coolingAllowance = afternoonRetention.maxCoolingAllowance - (holdSignal * allowanceSpan);
                 modeledPeriodTemp = Math.max(modeledPeriodTemp, middayComparable - coolingAllowance);
             }
         }
