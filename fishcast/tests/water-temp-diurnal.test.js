@@ -169,6 +169,44 @@ test('sunrise and sunset timestamps anchor morning and afternoon period estimate
   );
 });
 
+
+
+test('pond late-afternoon heat retention can keep sunset near/above midday on clear warm days', () => {
+  const hourly = buildHourlyDay({
+    date: '2026-06-28',
+    temps: [68, 67, 66, 65, 65, 66, 69, 73, 78, 83, 87, 90, 92, 93, 94, 94, 93, 91, 88, 84, 80, 76, 73, 71],
+    clouds: Array(24).fill(12),
+    winds: [4, 4, 4, 4, 4, 4, 5, 5, 5, 4, 4, 4, 4, 4, 5, 5, 4, 4, 3, 3, 3, 3, 3, 3],
+    shortwave: [0, 0, 0, 0, 0, 20, 80, 180, 340, 520, 680, 760, 820, 830, 780, 650, 500, 340, 180, 80, 20, 0, 0, 0]
+  });
+
+  const midday = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 86,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-06-28T14:00:00Z'),
+    period: 'midday',
+    sunriseTime: '2026-06-28T05:52',
+    sunsetTime: '2026-06-28T20:15'
+  });
+
+  const sunset = estimateWaterTempByPeriod({
+    dailySurfaceTemp: 86,
+    waterType: 'pond',
+    hourly,
+    timezone: 'UTC',
+    date: new Date('2026-06-28T19:00:00Z'),
+    period: 'afternoon',
+    sunriseTime: '2026-06-28T05:52',
+    sunsetTime: '2026-06-28T20:15'
+  });
+
+  assert.ok(
+    sunset >= midday - 0.9,
+    `sunset should stay close to/above midday for heat-retaining pond setup (${sunset} vs ${midday})`
+  );
+});
 test('midday period anchors to solar midpoint between sunrise and sunset', () => {
   const hourly = buildHourlyDay({
     date: '2026-06-20',

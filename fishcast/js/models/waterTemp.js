@@ -1662,7 +1662,13 @@ export function estimateWaterTempByPeriod({
     const normalizedHour = Number.isFinite(sunriseHour)
         ? clamp((periodHour - sunriseHour) / daylightHours, 0, 1)
         : clamp((periodHour - 6) / 12, 0, 1);
-    const solarPhase = Math.sin(Math.PI * normalizedHour);
+    const solarPhaseBase = Math.sin(Math.PI * normalizedHour);
+    // Shallow ponds usually lag peak insolation, so late-afternoon surface warmth
+    // can stay near (or slightly above) midday even as incoming shortwave fades.
+    // Shift only the afternoon solar term to avoid depressing sunrise/midday anchors.
+    const solarPhase = (waterType === 'pond' && period === 'afternoon')
+        ? Math.max(solarPhaseBase, Math.sin(Math.PI * clamp(normalizedHour - 0.16, 0, 1)) * 0.86)
+        : solarPhaseBase;
     const targetCloud = Number.isFinite(cloudInterpolant.sample(periodHour))
         ? cloudInterpolant.sample(periodHour)
         : cloudMean;
@@ -1693,6 +1699,16 @@ export function estimateWaterTempByPeriod({
         targetShortwave
     });
     let totalAdjustment = clamp(solarTerm + airAnomalyTerm + shortwaveTerm, -adjustmentLimit, adjustmentLimit);
+
+    if (waterType === 'pond' && period === 'afternoon') {
+        const lateDaySignal = clamp((normalizedHour - 0.72) / 0.28, 0, 1);
+        const warmAirSignal = Number.isFinite(targetAir)
+            ? clamp((targetAir - dailySurfaceTemp) / 12, 0, 1)
+            : 0;
+        const clearCalmSignal = clamp((1 - (cloudBlend / 100)) * 0.62 + clamp((7 - windBlend) / 7, 0, 1) * 0.38, 0, 1);
+        const retentionBoost = lateDaySignal * warmAirSignal * clearCalmSignal * 1.35;
+        totalAdjustment = Math.min(totalAdjustment + retentionBoost, adjustmentLimit);
+    }
 
     if (waterType === 'pond' && totalAdjustment > 3.2) {
         const coldSeasonWarmCap = getColdSeasonPondDiurnalWarmCap({
@@ -1729,7 +1745,39 @@ export function estimateWaterTempByPeriod({
         totalAdjustment = Math.max(totalAdjustment, strongCoolingFloor);
     }
 
-    return Math.round(clamp(dailySurfaceTemp + totalAdjustment, 32, 95) * 10) / 10;
+    let modeledPeriodTemp = clamp(dailySurfaceTemp + totalAdjustment, 32, 95);
+
+    if (waterType === 'pond' && period === 'afternoon' && Number.isFinite(sunriseHour) && Number.isFinite(sunsetHour) && sunsetHour > sunriseHour) {
+        const middayHour = getPeriodTargetHour('midday', { sunriseTime, sunsetTime });
+        const middayComparable = estimateWaterTempByPeriod({
+            dailySurfaceTemp,
+            waterType,
+            hourly,
+            timezone,
+            date,
+            period: 'midday',
+            sunriseTime,
+            sunsetTime,
+            context,
+            dayKey,
+            targetHour: middayHour
+        });
+
+        if (Number.isFinite(middayComparable)) {
+            const clearSignal = clamp((55 - cloudBlend) / 55, 0, 1);
+            const calmSignal = clamp((8 - windBlend) / 8, 0, 1);
+            const warmSignal = Number.isFinite(targetAir)
+                ? clamp((targetAir - dailySurfaceTemp) / 10, 0, 1)
+                : 0;
+            const holdSignal = (clearSignal * 0.45) + (calmSignal * 0.35) + (warmSignal * 0.2);
+            if (holdSignal > 0.35) {
+                const coolingAllowance = 1.1 - (holdSignal * 0.7);
+                modeledPeriodTemp = Math.max(modeledPeriodTemp, middayComparable - coolingAllowance);
+            }
+        }
+    }
+
+    return Math.round(modeledPeriodTemp * 10) / 10;
 }
 
 
